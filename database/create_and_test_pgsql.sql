@@ -64,12 +64,11 @@ begin;
 
 -- set search_path=public;
 \i init/initialize_jazzhands_example.sql
--- various test records that need to be generified and moved over
-
-\i ../../omniscient/insert_records.sql
-\i ../../omniscient/insert_devices.sql
-\i ../../omniscient/insert_records_later.sql
-\i ../../omniscient/test_netblock_collection.sql
+-- example insertions with some real life looking test data
+\i tests/init/insert_records.sql
+\i tests/init/insert_devices.sql
+\i tests/init/insert_records_later.sql
+\i tests/init/test_netblock_collection.sql
 
 \i tests/pgsql/location_regression_test.sql
 \i tests/pgsql/location_regression_test-RETIRE.sql

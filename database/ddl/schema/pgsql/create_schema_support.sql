@@ -520,20 +520,30 @@ DECLARE
 	_r		RECORD;
 	_tally	integer;
 BEGIN
-	FOR _r in SELECT * from __regrants FOR UPDATE
-	LOOP
-		IF beverbose THEN
-			RAISE NOTICE 'Regrant Executing: %', _r.regrant;
-		END IF;
-		EXECUTE _r.regrant; 
-		DELETE from __regrants where id = _r.id;
-	END LOOP;
+	 SELECT  count(*)
+      INTO  _tally
+      FROM  pg_catalog.pg_class
+     WHERE  relname = '__regrants'
+       AND  relpersistence = 't';
 
-	SELECT count(*) INTO _tally from __regrants;
 	IF _tally > 0 THEN
-		RAISE EXCEPTION 'Grant extractions were run while replaying grants - %.', _tally;
+	    FOR _r in SELECT * from __regrants FOR UPDATE
+	    LOOP
+		    IF beverbose THEN
+			    RAISE NOTICE 'Regrant Executing: %', _r.regrant;
+		    END IF;
+		    EXECUTE _r.regrant; 
+		    DELETE from __regrants where id = _r.id;
+	    END LOOP;
+    
+	    SELECT count(*) INTO _tally from __regrants;
+	    IF _tally > 0 THEN
+		    RAISE EXCEPTION 'Grant extractions were run while replaying grants - %.', _tally;
+	    ELSE
+		    DROP TABLE __regrants;
+	    END IF;
 	ELSE
-		DROP TABLE __regrants;
+		RAISE NOTICE '**** WARNING: replay_saved_grants did NOT have anything to regrant!';
 	END IF;
 
 END;
@@ -744,31 +754,41 @@ DECLARE
 	_r		RECORD;
 	_tally	integer;
 BEGIN
-	FOR _r in SELECT * from __recreate ORDER BY id DESC FOR UPDATE
-	LOOP
-		IF beverbose THEN
-			RAISE NOTICE 'Regrant: %.%', _r.schema, _r.object;
-		END IF;
-		EXECUTE _r.ddl; 
-		IF _r.owner is not NULL THEN
-			IF _r.type = 'view' THEN
-				EXECUTE 'ALTER VIEW ' || _r.schema || '.' || _r.object ||
-					' OWNER TO ' || _r.owner || ';';
-			ELSIF _r.type = 'function' THEN
-				EXECUTE 'ALTER FUNCTION ' || _r.schema || '.' || _r.object ||
-					'(' || _r.idargs || ') OWNER TO ' || _r.owner || ';';
-			ELSE
-				RAISE EXCEPTION 'Unable to restore grant for %', _r;
-			END IF;
-		END IF;
-		DELETE from __recreate where id = _r.id;
-	END LOOP;
+	SELECT	count(*)
+	  INTO	_tally
+	  FROM	pg_catalog.pg_class
+	 WHERE	relname = '__recreate'
+	   AND	relpersistence = 't';
 
-	SELECT count(*) INTO _tally from __recreate;
 	IF _tally > 0 THEN
-		RAISE EXCEPTION '% objects still exist for recreating after a complete loop', _tally;
+		FOR _r in SELECT * from __recreate ORDER BY id DESC FOR UPDATE
+		LOOP
+			IF beverbose THEN
+				RAISE NOTICE 'Regrant: %.%', _r.schema, _r.object;
+			END IF;
+			EXECUTE _r.ddl; 
+			IF _r.owner is not NULL THEN
+				IF _r.type = 'view' THEN
+					EXECUTE 'ALTER VIEW ' || _r.schema || '.' || _r.object ||
+						' OWNER TO ' || _r.owner || ';';
+				ELSIF _r.type = 'function' THEN
+					EXECUTE 'ALTER FUNCTION ' || _r.schema || '.' || _r.object ||
+						'(' || _r.idargs || ') OWNER TO ' || _r.owner || ';';
+				ELSE
+					RAISE EXCEPTION 'Unable to restore grant for %', _r;
+				END IF;
+			END IF;
+			DELETE from __recreate where id = _r.id;
+		END LOOP;
+
+		SELECT count(*) INTO _tally from __recreate;
+		IF _tally > 0 THEN
+			RAISE EXCEPTION '% objects still exist for recreating after a complete loop', _tally;
+		ELSE
+			DROP TABLE __recreate;
+		END IF;
 	ELSE
-		DROP TABLE __recreate;
+		RAISE NOTICE '**** WARNING: replay_object_recreates did NOT have anything to regrant!';
 	END IF;
 
 END;

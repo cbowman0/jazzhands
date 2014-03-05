@@ -1,0 +1,174 @@
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('198.18.9.0'), 25, 'Y', 'N',
+	'Allocated', 'default', 'Omniscient Technologies VA Routable Block', 'Y');
+
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION, 
+	 PARENT_NETBLOCK_ID, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('198.18.9.0'), 26, 'Y', 'N',
+	'Allocated', 'default', 'Omniscient Technologies Server Block', 
+	(select netblock_id from netblock where
+		ip_address = net_manip.inet_ptodb('198.18.9.0', 25)
+		and netmask_bits = 25), 'N'
+);
+
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('172.28.64.0'), 20, 'Y', 'N',
+	'Allocated', 'default', 'Czech Public Network', 'Y');
+
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION,
+	 PARENT_NETBLOCK_ID, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('172.28.64.0', 24), 24, 'Y', 'N',
+	'Allocated', 'default', 'Omniscient Čerčany CZ',
+	(select netblock_id from netblock where
+		ip_address = net_manip.inet_ptodb('172.28.64.0', 20)
+		and netmask_bits = 20), 'Y'
+);
+
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION,
+	 PARENT_NETBLOCK_ID, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('172.28.64.0', 26), 26, 'Y', 'N',
+	'Allocated', 'default', 'Server Network',
+	(select netblock_id from netblock where
+		ip_address = net_manip.inet_ptodb('172.28.64.0', 24)
+		and netmask_bits = 24), 'Y'
+);
+
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION,
+	 PARENT_NETBLOCK_ID, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('172.28.64.64', 26), 26, 'Y', 'N',
+	'Allocated', 'default', 'Desktop Network',
+	(select netblock_id from netblock where
+		ip_address = net_manip.inet_ptodb('172.28.64.0', 24)
+		and netmask_bits = 24), 'Y'
+);
+
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION,
+	 PARENT_NETBLOCK_ID, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('172.28.64.128', 27), 27, 'Y', 'N',
+	'Allocated', 'default', 'Wireless Network',
+	(select netblock_id from netblock where
+		ip_address = net_manip.inet_ptodb('172.28.64.0', 24)
+		and netmask_bits = 24), 'Y'
+);
+
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION,
+	 PARENT_NETBLOCK_ID, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('172.28.64.224', 27), 27, 'Y', 'N',
+	'Allocated', 'default', 'Infrastructure',
+	(select netblock_id from netblock where
+		ip_address = net_manip.inet_ptodb('172.28.64.0', 24)
+		and netmask_bits = 24), 'Y'
+);
+
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION,
+	 PARENT_NETBLOCK_ID, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('172.28.65.0', 24), 24, 'Y', 'N',
+	'Allocated', 'default', 'Omniscient Purcellville, VA',
+	(select netblock_id from netblock where
+		ip_address = net_manip.inet_ptodb('172.28.64.0', 20)
+		and netmask_bits = 20), 'Y'
+);
+
+INSERT INTO Kerberos_Realm (Realm_Name) VALUES ('OMNISCIENT.COM');
+INSERT INTO Kerberos_Realm (Realm_Name) VALUES ('SUCKSLESS.NET');
+
+
+insert into site_netblock (site_code, netblock_id)
+        values ('CORP0', 
+	(select netblock_id from netblock where ip_address =
+		net_manip.inet_ptodb('172.28.65.0', 24) and netmask_bits = 24)
+	);
+insert into site_netblock (site_code, netblock_id)
+        values ('CORP0', 
+	(select netblock_id from netblock where ip_address =
+		net_manip.inet_ptodb('198.18.9.0', 25) 
+		and netmask_bits = 25)
+	);
+
+
+insert into site_netblock (site_code, netblock_id)
+        values ('CZ0', 
+	(select netblock_id from netblock where ip_address =
+		net_manip.inet_ptodb('172.28.64.0', 24) 
+		and netmask_bits = 24)
+	);
+
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('192.18.244.128'), 25, 'Y', 'N',
+	'Allocated', 'default', 'Old VA Public Block', 'Y');
+
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('192.19.49.16'), 30, 'Y', 'N',
+	'Allocated', 'default', 'Omniscient VA Level 3 /30', 'Y');
+
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('192.19.49.20'), 30, 'Y', 'N',
+	'Allocated', 'default', 'Omniscient VA Level 3 LAN /30', 'Y');
+
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('198.18.165.0'), 24, 'Y', 'N',
+	'Allocated', 'default', '', 'Y');
+
+-- rfc3849
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('2001:db8:2100::25C'), 126, 'N', 'N',
+	'Allocated', 'default', 'IPv6 WAN Omniscient VA', 'Y');
+
+
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('2001:db8:2209::'), 48, 'N', 'N',
+	'Allocated', 'default', 'IPv6 LAN Omniscient VA', 'Y');
+
+
+insert into netblock
+	(IP_ADDRESS, NETMASK_BITS,IS_IPV4_ADDRESS,IS_SINGLE_ADDRESS,
+	 NETBLOCK_STATUS, NETBLOCK_TYPE, DESCRIPTION, CAN_SUBNET)
+values
+	(net_manip.inet_ptodb('2001:db8:2012::'), 48, 'N', 'N',
+	'Allocated', 'default', 'IPv6 Legacy LAN Omniscient VA', 'Y');
+
