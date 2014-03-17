@@ -1,9 +1,8 @@
 %define name    jazzhands-stab
 %define prefix	/var/www/stab
-%define version 0.56.6
 %define release 0
 Name:   	jazzhands-stab
-Version:        0.56.6
+Version:        0.57.1
 Release:        0%{?dist}
 Summary:        JazzHands STAB Web Front End
 Group:  	System Environment/Libraries
@@ -177,6 +176,9 @@ rm -rf %{buildroot}
 %{_mandir}/man3/*
 
 %changelog
+* Mon Mar 17 2014 Todd Kover <kovert@omniscient.com> 0.57.1 
+- when adding a new ip address for a loopback to a network interface, use the
+  single address
 * Mon Jan 13 2014 Todd Kover <kovert@omniscient.com> 0.56.6-1
 - on retiring device delete from network purpose & device collection
 - fix site code updates on device tab
