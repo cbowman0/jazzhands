@@ -145,6 +145,30 @@ ALTER TABLE layer3_network ADD CONSTRAINT pk_layer3_network PRIMARY KEY (layer3_
 ALTER TABLE layer3_network ADD CONSTRAINT ak_layer3_network_netblock_id UNIQUE(netblock_id);
 
 
+CREATE TABLE mlag_peers (
+	mlag_peers_id			SERIAL,
+	device1_id				integer NOT NULL,
+	device2_id				integer NOT NULL,
+	DATA_INS_USER			VARCHAR(255) NULL,
+	DATA_INS_DATE			TIMESTAMP WITH TIME ZONE NULL,
+	DATA_UPD_USER			VARCHAR(255) NULL,
+	DATA_UPD_DATE			TIMESTAMP WITH TIME ZONE NULL 
+);
+
+ALTER TABLE layer3_network ADD CONSTRAINT pk_mlag_peers PRIMARY KEY (mlag_peers_id);
+ALTER TABLE layer3_network ADD CONSTRAINT ak_mlag_peers_dev1_id UNIQUE(device1_id);
+ALTER TABLE layer3_network ADD CONSTRAINT ak_mlag_peers_dev2_id UNIQUE(device2_id);
+
+---
+--- Table changes
+---
+
+ALTER TABLE physical_port ADD COLUMN logical_port_id integer NULL;
+
+---
+--- Foreign keys
+---
+
 ALTER TABLE encapsulation_domain ADD CONSTRAINT fk_encaps_domain_encaps_type 
 	FOREIGN KEY (encapsulation_type) REFERENCES 
 		val_encapsulation_type (encapsulation_type);
@@ -192,3 +216,13 @@ ALTER TABLE layer3_network ADD CONSTRAINT fk_l3_network_dg_netblock_id
 
 ALTER TABLE layer3_network ADD CONSTRAINT fk_l3_network_rp_netblock_id
 	FOREIGN KEY (rendezvous_point_netblock_id) REFERENCES netblock(netblock_id);
+
+ALTER TABLE mlag_peers ADD CONSTRAINT fk_mlag_peers_dev1_id
+	FOREIGN KEY (device1_id) REFERENCES device (device_id);
+
+ALTER TABLE mlag_peers ADD CONSTRAINT fk_mlag_peers_dev2_id
+	FOREIGN KEY (device2_id) REFERENCES device (device_id);
+
+ALTER TABLE physical_port ADD CONSTRAINT fk_phys_port_logl_port_id
+	FOREIGN KEY (logical_port_id) REFERENCES logical_port (logical_port_id);
+
