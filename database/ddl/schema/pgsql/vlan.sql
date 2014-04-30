@@ -164,6 +164,9 @@ ALTER TABLE layer3_network ADD CONSTRAINT ak_mlag_peers_dev2_id UNIQUE(device2_i
 ---
 
 ALTER TABLE physical_port ADD COLUMN logical_port_id integer NULL;
+ALTER TABLE network_interface DROP COLUMN physical_port_id integer NULL;
+ALTER TABLE network_interface ADD COLUMN logical_port_id integer NULL;
+
 
 ---
 --- Foreign keys
@@ -224,5 +227,8 @@ ALTER TABLE mlag_peers ADD CONSTRAINT fk_mlag_peers_dev2_id
 	FOREIGN KEY (device2_id) REFERENCES device (device_id);
 
 ALTER TABLE physical_port ADD CONSTRAINT fk_phys_port_logl_port_id
+	FOREIGN KEY (logical_port_id) REFERENCES logical_port (logical_port_id);
+
+ALTER TABLE network_interface ADD CONSTRAINT fk_net_iface_logl_port_id
 	FOREIGN KEY (logical_port_id) REFERENCES logical_port (logical_port_id);
 
