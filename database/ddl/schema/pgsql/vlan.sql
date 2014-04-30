@@ -1,16 +1,6 @@
 DROP TABLE IF EXISTS encapsulation_netblock CASCADE;
 DROP TABLE IF EXISTS layer2_encapsulation CASCADE;
 DROP TABLE IF EXISTS encapsulation CASCADE;
-DROP TABLE IF EXISTS val_encapsulation_type CASCADE;
-
-CREATE TABLE val_encapsulation_type (
-	encapsulation_type		VARCHAR(50) NOT NULL,
-	description				text NULL,
-	DATA_INS_USER			VARCHAR(255) NULL,
-	DATA_INS_DATE			TIMESTAMP WITH TIME ZONE NULL,
-	DATA_UPD_USER			VARCHAR(255) NULL,
-	DATA_UPD_DATE			TIMESTAMP WITH TIME ZONE NULL 
-);
 
 ALTER TABLE val_encapsulation_type ADD CONSTRAINT pk_encapsulation_type PRIMARY KEY (encapsulation_type);
 
