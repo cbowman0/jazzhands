@@ -109,6 +109,7 @@ ALTER TABLE layer2_connection ADD CONSTRAINT pk_layer2_connection PRIMARY KEY (l
 CREATE TABLE layer2_connection_layer2_network (
 	layer2_connection_id	integer NOT NULL,
 	layer2_network_id		integer NOT NULL,
+	encapsulation_type		integer NOT NULL,
 	encapsulation_mode		integer NOT NULL,
 	DATA_INS_USER			VARCHAR(255) NULL,
 	DATA_INS_DATE			TIMESTAMP WITH TIME ZONE NULL,
@@ -135,8 +136,8 @@ ALTER TABLE layer3_network ADD CONSTRAINT pk_layer3_network PRIMARY KEY (layer3_
 ALTER TABLE layer3_network ADD CONSTRAINT ak_layer3_network_netblock_id UNIQUE(netblock_id);
 
 
-CREATE TABLE mlag_peers (
-	mlag_peers_id			SERIAL,
+CREATE TABLE mlag_peering (
+	mlag_peering_id			SERIAL,
 	device1_id				integer NOT NULL,
 	device2_id				integer NOT NULL,
 	DATA_INS_USER			VARCHAR(255) NULL,
@@ -145,9 +146,9 @@ CREATE TABLE mlag_peers (
 	DATA_UPD_DATE			TIMESTAMP WITH TIME ZONE NULL 
 );
 
-ALTER TABLE layer3_network ADD CONSTRAINT pk_mlag_peers PRIMARY KEY (mlag_peers_id);
-ALTER TABLE layer3_network ADD CONSTRAINT ak_mlag_peers_dev1_id UNIQUE(device1_id);
-ALTER TABLE layer3_network ADD CONSTRAINT ak_mlag_peers_dev2_id UNIQUE(device2_id);
+ALTER TABLE layer3_network ADD CONSTRAINT pk_mlag_peering PRIMARY KEY (mlag_peering_id);
+ALTER TABLE layer3_network ADD CONSTRAINT ak_mlag_peering_dev1_id UNIQUE(device1_id);
+ALTER TABLE layer3_network ADD CONSTRAINT ak_mlag_peering_dev2_id UNIQUE(device2_id);
 
 ---
 --- Table changes
@@ -198,6 +199,14 @@ ALTER TABLE layer2_connection ADD CONSTRAINT fk_l2_connection_p2_id
 ALTER TABLE layer2_connection_layer2_network ADD CONSTRAINT fk_l2_conn_l2_netwk_l2_netwk_id
 	FOREIGN KEY (layer2_network_id) REFERENCES layer2_network(layer2_network_id);
 
+ALTER TABLE layer2_connection_layer2_network ADD CONSTRAINT fk_l2_conn_l2_netwk_l2_netwk_id_et
+	FOREIGN KEY (layer2_network_id, encapsulation_type) REFERENCES 
+		layer2_network(layer2_network_id, encapsulation_type);
+
+ALTER TABLE layer2_connection_layer2_network ADD CONSTRAINT fk_l2_conn_l2_netwk_encaps_mode
+	FOREIGN KEY (encapsulation_mode, encapsulation_type) REFERENCES 
+		val_encapsulation_mode(encapsulation_mode, encapsulation_type);
+
 ALTER TABLE layer3_network ADD CONSTRAINT fk_l3_network_netblock_id
 	FOREIGN KEY (netblock_id) REFERENCES netblock(netblock_id);
 
@@ -210,10 +219,10 @@ ALTER TABLE layer3_network ADD CONSTRAINT fk_l3_network_dg_netblock_id
 ALTER TABLE layer3_network ADD CONSTRAINT fk_l3_network_rp_netblock_id
 	FOREIGN KEY (rendezvous_point_netblock_id) REFERENCES netblock(netblock_id);
 
-ALTER TABLE mlag_peers ADD CONSTRAINT fk_mlag_peers_dev1_id
+ALTER TABLE mlag_peering ADD CONSTRAINT fk_mlag_peering_dev1_id
 	FOREIGN KEY (device1_id) REFERENCES device (device_id);
 
-ALTER TABLE mlag_peers ADD CONSTRAINT fk_mlag_peers_dev2_id
+ALTER TABLE mlag_peering ADD CONSTRAINT fk_mlag_peering_dev2_id
 	FOREIGN KEY (device2_id) REFERENCES device (device_id);
 
 ALTER TABLE physical_port ADD CONSTRAINT fk_phys_port_logl_port_id
