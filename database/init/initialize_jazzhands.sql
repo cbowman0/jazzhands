@@ -945,12 +945,17 @@ insert into val_ip_group_protocol
 insert into val_ip_group_protocol
 	(ip_group_protocol) values ('bgp');
 
-insert into val_layer2_encapsulation_type
-	(layer2_encapsulation_type) values ('trunk');
-insert into val_layer2_encapsulation_type
-	(layer2_encapsulation_type) values ('access');
-insert into val_layer2_encapsulation_type
-	(layer2_encapsulation_type) values ('native');
+insert into val_encapsulation_type
+	(encapsulation_type) values ('802.1q');
+insert into val_encapsulation_type
+	(encapsulation_type) values ('MPLS');
+
+insert into val_encapsulation_mode
+	(encapsulation_mode, encapsulation_type) values ('trunk', '802.1q');
+insert into val_encapsulation_mode
+	(encapsulation_mode, encapsulation_type) values ('access', '802.1q');
+insert into val_encapsulation_mode
+	(encapsulation_mode, encapsulation_type) values ('native', '802.1q');
 
 -- add port speed, port mediumm port protocaol (look at dropped things from
 --	interface type above)
