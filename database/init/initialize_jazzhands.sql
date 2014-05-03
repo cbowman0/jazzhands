@@ -83,8 +83,18 @@ INSERT INTO VAL_Image_Type(Image_Type) VALUES ('png');
 INSERT INTO VAL_Image_Type(Image_Type) VALUES ('tiff');
 INSERT INTO VAL_Image_Type(Image_Type) VALUES ('pnm');
 
-INSERT INTO VAL_Account_Collection_Type (Account_Collection_Type, Description)
-	VALUES ('per-user', 'Account_Collection that contain a single user for assigning individual users to objects that only accept Account_Collection assignments');
+insert into val_account_collection_type 
+	(account_collection_type, 
+	description,
+	max_members_permitted, can_have_hierarchy
+	) 
+values 
+	('per-user', 
+	 'Account_Collection that contain a single user for assigning individual users to objects that only accept Account_Collection assignments',
+	1, 'N'
+	);
+
+
 INSERT INTO VAL_Account_Collection_Type (Account_Collection_Type, Description)
 	VALUES ('systems', 'Account_Collection that can be assigned to system-type objects to control access to system and network resources');
 INSERT INTO VAL_Account_Collection_Type (Account_Collection_Type, Description)
@@ -1016,9 +1026,13 @@ insert into val_port_protocol_speed (port_protocol, port_speed)
 	values ('Ethernet', '100G');
 
 insert into val_device_collection_type 
-	(device_collection_type, can_have_account_collection) 
+	(device_collection_type, can_have_account_collection,
+	max_members_permitted, can_have_hierarchy
+	) 
 values 
-	('per-device', 'N');
+	('per-device', 'N',
+	1, 'N'
+	);
 
 --- stab stuff
 insert into val_property_type (property_type, description, is_multivalue)
