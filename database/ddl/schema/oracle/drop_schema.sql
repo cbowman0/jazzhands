@@ -4038,6 +4038,14 @@ ADD CONSTRAINT  AK_UNIX_GROUP_UNIX_GID UNIQUE (UNIX_GID)  NOT DEFERRABLE  INITIA
  * Table: VAL_ACCOUNT_COLLECTION_TYPE
  ***********************************************/
 
+COMMENT ON COLUMN VAL_ACCOUNT_COLLECTION_TYPE.MAX_NUM_MEMBERS IS 'Maximum number of members in a given collection of this type
+';
+
+COMMENT ON COLUMN VAL_ACCOUNT_COLLECTION_TYPE.CAN_HAVE_HIERARCHY IS 'Indicates if the collections can have other collections to make it hierarchical.';
+
+COMMENT ON COLUMN VAL_ACCOUNT_COLLECTION_TYPE.MAX_NUM_COLLECTIONS IS 'Maximum number of collections a given member can be a part of of this type.
+';
+
 ALTER TABLE VAL_ACCOUNT_COLLECTION_TYPE
 	ADD CONSTRAINT  PK_VAL_ACCOUNT_COLLECTION_TYPE PRIMARY KEY (ACCOUNT_COLLECTION_TYPE)  NOT DEFERRABLE  INITIALLY IMMEDIATE   USING INDEX   ENABLE  VALIDATE;
 
@@ -4146,6 +4154,14 @@ ALTER TABLE VAL_DEVICE_AUTO_MGMT_PROTOCOL
 /***********************************************
  * Table: VAL_DEVICE_COLLECTION_TYPE
  ***********************************************/
+
+COMMENT ON COLUMN VAL_DEVICE_COLLECTION_TYPE.MAX_NUM_MEMBERS IS 'Maximum number of members in a given collection of this type
+';
+
+COMMENT ON COLUMN VAL_DEVICE_COLLECTION_TYPE.CAN_HAVE_HIERARCHY IS 'Indicates if the collections can have other collections to make it hierarchical.';
+
+COMMENT ON COLUMN VAL_DEVICE_COLLECTION_TYPE.MAX_NUM_COLLECTIONS IS 'Maximum number of collections a given member can be a part of of this type.
+';
 
 ALTER TABLE VAL_DEVICE_COLLECTION_TYPE
 	ADD CONSTRAINT  PK_VAL_DEVICE_COLLECTION_TYPE PRIMARY KEY (DEVICE_COLLECTION_TYPE)  NOT DEFERRABLE  INITIALLY IMMEDIATE   USING INDEX   ENABLE  VALIDATE;
@@ -4276,6 +4292,14 @@ ALTER TABLE VAL_LOGICAL_PORT_TYPE
 /***********************************************
  * Table: VAL_NETBLOCK_COLLECTION_TYPE
  ***********************************************/
+
+COMMENT ON COLUMN VAL_NETBLOCK_COLLECTION_TYPE.MAX_NUM_MEMBERS IS 'Maximum number of members in a given collection of this type
+';
+
+COMMENT ON COLUMN VAL_NETBLOCK_COLLECTION_TYPE.CAN_HAVE_HIERARCHY IS 'Indicates if the collections can have other collections to make it hierarchical.';
+
+COMMENT ON COLUMN VAL_NETBLOCK_COLLECTION_TYPE.MAX_NUM_COLLECTIONS IS 'Maximum number of collections a given member can be a part of of this type.
+';
 
 ALTER TABLE VAL_NETBLOCK_COLLECTION_TYPE
 	ADD CONSTRAINT  PK_VAL_NETBLOCK_COLLECTION_TYP PRIMARY KEY (NETBLOCK_COLLECTION_TYPE)  NOT DEFERRABLE  INITIALLY IMMEDIATE   USING INDEX   ENABLE  VALIDATE;
@@ -4582,6 +4606,12 @@ ALTER TABLE VAL_SYMBOLIC_TRACK_NAME
  ***********************************************/
 
 COMMENT ON TABLE VAL_TOKEN_COLLECTION_TYPE IS 'Assign purposes to arbitrary groupings';
+
+COMMENT ON COLUMN VAL_TOKEN_COLLECTION_TYPE.MAX_NUM_MEMBERS IS 'Maximum number of members in a given collection of this type';
+
+COMMENT ON COLUMN VAL_TOKEN_COLLECTION_TYPE.CAN_HAVE_HIERARCHY IS 'Indicates if the collections can have other collections to make it hierarchical.';
+
+COMMENT ON COLUMN VAL_TOKEN_COLLECTION_TYPE.MAX_NUM_COLLECTIONS IS 'Maximum number of collections a given member can be a part of of this type.';
 
 ALTER TABLE VAL_TOKEN_COLLECTION_TYPE
 	ADD CONSTRAINT  PK_VAL_TOKEN_COLLECTION_TYPE PRIMARY KEY (TOKEN_COLLECTION_TYPE)  NOT DEFERRABLE  INITIALLY IMMEDIATE   USING INDEX   ENABLE  VALIDATE;
