@@ -86,7 +86,7 @@ INSERT INTO VAL_Image_Type(Image_Type) VALUES ('pnm');
 insert into val_account_collection_type 
 	(account_collection_type, 
 	description,
-	max_members_permitted, can_have_hierarchy
+	max_num_members, can_have_hierarchy
 	) 
 values 
 	('per-user', 
@@ -1027,7 +1027,7 @@ insert into val_port_protocol_speed (port_protocol, port_speed)
 
 insert into val_device_collection_type 
 	(device_collection_type, can_have_account_collection,
-	max_members_permitted, can_have_hierarchy
+	max_num_members, can_have_hierarchy
 	) 
 values 
 	('per-device', 'N',
