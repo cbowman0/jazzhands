@@ -226,21 +226,16 @@ INSERT INTO VAL_APP_KEY_VALUES (APP_KEY, APP_VALUE)
 INSERT INTO VAL_APP_KEY_VALUES (APP_KEY, APP_VALUE)
 	VALUES ('DBType', 'tds');
 
-INSERT INTO VAL_Device_Collection_Type (Device_Collection_Type,
-		Can_Have_Account_Collection)
-	VALUES ('mclass', 'Y');
-INSERT INTO VAL_Device_Collection_Type (Device_Collection_Type,
-		Can_Have_Account_Collection)
-	VALUES ('adhoc', 'N');
-INSERT INTO VAL_Device_Collection_Type (Device_Collection_Type,
-		Can_Have_Account_Collection)
-	VALUES ('appgroup', 'N');
-INSERT INTO VAL_Device_Collection_Type (Device_Collection_Type,
-		Can_Have_Account_Collection)
-	VALUES ('applicense', 'N');
-INSERT INTO VAL_Device_Collection_Type (Device_Collection_Type,
-		Can_Have_Account_Collection)
-	VALUES ('undefined', 'N');
+INSERT INTO VAL_Device_Collection_Type (Device_Collection_Type)
+	VALUES ('mclass');
+INSERT INTO VAL_Device_Collection_Type (Device_Collection_Type)
+	VALUES ('adhoc');
+INSERT INTO VAL_Device_Collection_Type (Device_Collection_Type)
+	VALUES ('appgroup');
+INSERT INTO VAL_Device_Collection_Type (Device_Collection_Type)
+	VALUES ('applicense');
+INSERT INTO VAL_Device_Collection_Type (Device_Collection_Type)
+	VALUES ('undefined');
 
 INSERT INTO VAL_Password_Type (PASSWORD_TYPE)
 	VALUES ('star');
@@ -1026,11 +1021,11 @@ insert into val_port_protocol_speed (port_protocol, port_speed)
 	values ('Ethernet', '100G');
 
 insert into val_device_collection_type 
-	(device_collection_type, can_have_account_collection,
+	(device_collection_type,
 	max_num_members, can_have_hierarchy
 	) 
 values 
-	('per-device', 'N',
+	('per-device', 
 	1, 'N'
 	);
 
