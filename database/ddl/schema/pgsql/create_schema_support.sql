@@ -619,6 +619,41 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 --
+-- Saves relations dependant on an object for reply.
+--
+CREATE OR REPLACE FUNCTION schema_support.save_dependant_rels_for_replay(
+	schema varchar,
+	object varchar,
+	dropit boolean DEFAULT true
+) RETURNS VOID AS $$
+DECLARE
+	_r		RECORD;
+	_cmd	TEXT;
+	_ddl	TEXT;
+BEGIN
+	-- save any triggers on the view
+	FOR _r in SELECT distinct n.nspname, dependee.relname, dependee.relkind
+		FROM pg_depend
+		JOIN pg_rewrite ON pg_depend.objid = pg_rewrite.oid
+		JOIN pg_class as dependee ON pg_rewrite.ev_class = dependee.oid
+		JOIN pg_class as dependent ON pg_depend.refobjid = dependent.oid
+		JOIN pg_namespace n on n.oid = dependee.relnamespace
+		JOIN pg_namespace sn on sn.oid = dependent.relnamespace
+		JOIN pg_attribute ON pg_depend.refobjid = pg_attribute.attrelid
+   			AND pg_depend.refobjsubid = pg_attribute.attnum
+		WHERE dependent.relname = object
+  		AND sn.nspname = schema
+	LOOP
+		schema_support.save_view_for_replay(_r.nspname, _r.relname);
+		IF dropit  THEN
+			_cmd = 'DROP VIEW ' || _r.nspname || '.' || _r.relname || ';';
+			EXECUTE _cmd;
+		END IF;
+	END LOOP;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+--
 -- given schema.object, save all triggers for replay 
 --
 CREATE OR REPLACE FUNCTION schema_support.save_trigger_for_replay(
