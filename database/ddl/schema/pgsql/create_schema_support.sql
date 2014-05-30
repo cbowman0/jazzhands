@@ -268,7 +268,7 @@ BEGIN
 	|| ' FOR EACH ROW EXECUTE PROCEDURE'
 	|| ' schema_support.trigger_ins_upd_generic_func()';
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 -------------------------------------------------------------------------------
 
@@ -289,7 +289,7 @@ BEGIN
 	END LOOP;
     END;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 -------------------------------------------------------------------------------
 
@@ -328,7 +328,7 @@ BEGIN
 	END IF;
 	RETURN true;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 --
 -- Revokes superuser if its set on the current user
@@ -343,7 +343,7 @@ BEGIN
 		END IF;
 		RETURN true;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 --
 -- Sets up temporary tables for replaying grants if it does not exist
@@ -365,7 +365,7 @@ BEGIN
 		CREATE TEMPORARY TABLE IF NOT EXISTS __regrants (id SERIAL, schema text, object text, newname text, regrant text);
 	END IF;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 --
 -- Collect grants for relations and saves them for future replay (if objects
@@ -435,7 +435,7 @@ BEGIN
 		END LOOP;
 	END LOOP;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 --
 -- Collect grants for functions and saves them for future replay (if objects
@@ -493,7 +493,7 @@ BEGIN
 		END LOOP;
 	END LOOP;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 --
 -- save grants for object regardless of if its a relation or function.
@@ -507,7 +507,7 @@ BEGIN
 	PERFORM schema_support.save_grants_for_replay_relations(schema, object, newname);
 	PERFORM schema_support.save_grants_for_replay_functions(schema, object, newname);
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 --
 -- replay saved grants, drop temporary tables
@@ -547,7 +547,7 @@ BEGIN
 	END IF;
 
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 --
 -- Sets up temporary tables for replaying grants if it does not exist
@@ -569,7 +569,7 @@ BEGIN
 		CREATE TEMPORARY TABLE IF NOT EXISTS __recreate (id SERIAL, schema text, object text, owner text, type text, ddl text, idargs text);
 	END IF;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 --
 -- Saves view definition for replay later.  This is to allow for dropping
@@ -616,12 +616,12 @@ BEGIN
 		END IF;
 	END LOOP;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 --
 -- Saves relations dependant on an object for reply.
 --
-CREATE OR REPLACE FUNCTION schema_support.save_dependant_rels_for_replay(
+CREATE OR REPLACE FUNCTION schema_support.save_dependant_objects_for_replay(
 	schema varchar,
 	object varchar,
 	dropit boolean DEFAULT true
@@ -631,8 +631,24 @@ DECLARE
 	_cmd	TEXT;
 	_ddl	TEXT;
 BEGIN
+	RAISE NOTICE 'processing %.%', schema, object;
+	-- process stored procedures
+	FOR _r in SELECT  distinct np.nspname::text, dependent.proname::text
+		FROM   pg_depend dep
+			INNER join pg_type dependee on dependee.oid = dep.refobjid
+			INNER join pg_namespace n on n.oid = dependee.typnamespace
+			INNER join pg_proc dependent on dependent.oid = dep.objid
+			INNER join pg_namespace np on np.oid = dependent.pronamespace
+			WHERE   dependee.typname = object
+			  AND	  n.nspname = schema
+	LOOP
+		RAISE NOTICE '1 dealing with  %.%', _r.nspname, _r.proname;
+		PERFORM schema_support.save_dependant_objects_for_replay(_r.nspname, _r.proname, dropit);
+		PERFORM schema_support.save_function_for_replay(_r.nspname, _r.proname, dropit);
+	END LOOP;
+
 	-- save any triggers on the view
-	FOR _r in SELECT distinct n.nspname, dependee.relname, dependee.relkind
+	FOR _r in SELECT distinct n.nspname::text, dependee.relname::text, dependee.relkind
 		FROM pg_depend
 		JOIN pg_rewrite ON pg_depend.objid = pg_rewrite.oid
 		JOIN pg_class as dependee ON pg_rewrite.ev_class = dependee.oid
@@ -644,14 +660,17 @@ BEGIN
 		WHERE dependent.relname = object
   		AND sn.nspname = schema
 	LOOP
-		PERFORM schema_support.save_view_for_replay(_r.nspname, _r.relname);
-		IF dropit  THEN
-			_cmd = 'DROP VIEW ' || _r.nspname || '.' || _r.relname || ';';
-			EXECUTE _cmd;
+		IF _r.relkind = 'v' THEN
+			RAISE NOTICE '2 dealing with  %.%', _r.nspname, _r.relname;
+			PERFORM * FROM save_dependant_objects_for_replay(_r.nspname, _r.relname, dropit);
+			PERFORM schema_support.save_view_for_replay(_r.nspname, _r.relname, dropit);
 		END IF;
 	END LOOP;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ 
+SET search_path=schema_support
+LANGUAGE plpgsql 
+SECURITY INVOKER;
 
 --
 -- given schema.object, save all triggers for replay 
@@ -686,7 +705,7 @@ BEGIN
 		END IF;
 	END LOOP;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 
 --
@@ -734,7 +753,7 @@ BEGIN
 		END IF;
 	END LOOP;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 --
 -- Saves view definition for replay later.  This is to allow for dropping
@@ -779,7 +798,7 @@ BEGIN
 	END LOOP;
 
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 CREATE OR REPLACE FUNCTION schema_support.replay_object_recreates(
 	beverbose	boolean DEFAULT false
@@ -827,7 +846,7 @@ BEGIN
 	END IF;
 
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 -- Notable queries..
 -- select schema_support.save_grants_for_replay('jazzhands', 'physical_port');
