@@ -644,7 +644,7 @@ BEGIN
 		WHERE dependent.relname = object
   		AND sn.nspname = schema
 	LOOP
-		schema_support.save_view_for_replay(_r.nspname, _r.relname);
+		PERFORM schema_support.save_view_for_replay(_r.nspname, _r.relname);
 		IF dropit  THEN
 			_cmd = 'DROP VIEW ' || _r.nspname || '.' || _r.relname || ';';
 			EXECUTE _cmd;
