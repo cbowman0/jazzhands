@@ -654,6 +654,18 @@ BEGIN
 			END IF;
 	END IF;
 
+	IF v_prop.Permit_Account_Realm_Id = 'REQUIRED' THEN
+			IF NEW.Account_Realm_Id IS NULL THEN
+				RAISE 'Account_Realm_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_Account_Realm_Id = 'PROHIBITED' THEN
+			IF NEW.Account_Realm_Id IS NOT NULL THEN
+				RAISE 'Account_Realm_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
 	IF v_prop.Permit_account_collection_Id = 'REQUIRED' THEN
 			IF NEW.account_collection_Id IS NULL THEN
 				RAISE 'account_collection_Id is required.'
