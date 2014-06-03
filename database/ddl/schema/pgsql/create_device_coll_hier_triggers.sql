@@ -33,7 +33,7 @@ BEGIN
 		(select device_collection_type from device_collection
 			where device_collection_id = NEW.parent_device_collection_id);
 
-	IF NEW.can_have_hierarchy = 'N' THEN
+	IF dct.can_have_hierarchy = 'N' THEN
 		RAISE EXCEPTION 'Device Collections of type % may not be hierarcical',
 			dct.device_collection_type
 			USING ERRCODE= 'unique_violation';
@@ -74,7 +74,8 @@ BEGIN
 		  from device_collection_device
 		  where device_collection_id = NEW.device_collection_id;
 		IF tally > dct.MAX_NUM_MEMBERS THEN
-			RAISE EXCEPTION 'Too many members';
+			RAISE EXCEPTION 'Too many members'
+				USING ERRCODE = 'unique_violation';
 		END IF;
 	END IF;
 
@@ -87,7 +88,8 @@ BEGIN
 		  and	device_collection_type = dct.device_collection_type;
 		IF tally > dct.MAX_NUM_COLLECTIONS THEN
 			RAISE EXCEPTION 'Device may not be a member of more than % collections of type %',
-				dct.MAX_NUM_COLLECTIONS, dct.device_collection_type;
+				dct.MAX_NUM_COLLECTIONS, dct.device_collection_type
+				USING ERRCODE = 'unique_violation';
 		END IF;
 	END IF;
 
@@ -104,9 +106,3 @@ CREATE CONSTRAINT TRIGGER trigger_device_collection_member_enforce
 		DEFERRABLE INITIALLY IMMEDIATE
         FOR EACH ROW
         EXECUTE PROCEDURE device_collection_member_enforce();
-
-/*
-DO $$
-RAISE EXCEPTION 'Need to write tests cases and expand to other collections';
-$$
-*/

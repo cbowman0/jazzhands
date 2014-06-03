@@ -76,6 +76,7 @@ begin;
 \i tests/pgsql/property_regression_test.sql
 \i tests/pgsql/device_ticket_regression.sql
 \i tests/pgsql/device_power_regression.sql
+\i tests/pgsql/device_coll_hier_regression.sql
 
 rollback;
 -- RAISE EXCEPTION 'need to put transactions back in testing';
