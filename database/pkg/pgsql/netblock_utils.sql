@@ -24,8 +24,34 @@
  * $Id$
  */
 
-DROP SCHEMA IF EXISTS netblock_utils CASCADE;
-CREATE SCHEMA netblock_utils AUTHORIZATION jazzhands;
+ --
+-- Name: id_tag(); Type: FUNCTION; Schema: netblock_utils; Owner: jazzhands
+--
+
+-- Create schema if it does not exist, do nothing otherwise.
+DO $$
+DECLARE
+        _tal INTEGER;
+BEGIN
+        select count(*)
+        from pg_catalog.pg_namespace
+        into _tal
+        where nspname = 'netblock_utils';
+        IF _tal = 0 THEN
+                DROP SCHEMA IF EXISTS netblock_utils;
+                CREATE SCHEMA netblock_utils AUTHORIZATION jazzhands;
+        END IF;
+END;
+$$;
+
+
+CREATE FUNCTION netblock_utils.id_tag() RETURNS character varying
+	LANGUAGE plpgsql
+	AS $_$
+BEGIN
+	RETURN('<-- $Id -->');
+END;
+$_$;
 
 CREATE OR REPLACE FUNCTION netblock_utils.find_best_parent_id(
 	in_IpAddress jazzhands.netblock.ip_address%type,
