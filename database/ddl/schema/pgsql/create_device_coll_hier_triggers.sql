@@ -105,6 +105,8 @@ CREATE CONSTRAINT TRIGGER trigger_device_collection_member_enforce
         FOR EACH ROW
         EXECUTE PROCEDURE device_collection_member_enforce();
 
+/*
 DO $$
 RAISE EXCEPTION 'Need to write tests cases and expand to other collections';
 $$
+*/
