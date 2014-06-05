@@ -79,6 +79,7 @@ begin;
 \i tests/pgsql/device_coll_hier_regression.sql
 \i tests/pgsql/account_coll_hier_regression.sql
 \i tests/pgsql/netblock_coll_hier_regression.sql
+\i tests/pgsql/token_coll_hier_regression.sql
 
 rollback;
 -- RAISE EXCEPTION 'need to put transactions back in testing';
