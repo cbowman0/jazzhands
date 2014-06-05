@@ -35,11 +35,17 @@ DECLARE
 BEGIN
 	RAISE NOTICE 'TokenCollHier: Cleanup Records from Previous Tests';
 
+	delete from token_collection_token where token_collection_id
+		IN (select token_collection_id FROM
+		token_collection where token_collection_type like
+		'JHTEST%');
+
 	delete from token_collection where token_collection_type like
 		'JHTEST%';
 	delete from val_token_collection_type where 
 		token_collection_type like
 		'JHTEST%';
+	delete from token where token_type like 'JHTEST%';
 
 	RAISE NOTICE '++ Inserting testing data';
 	INSERT INTO val_token_collection_Type (
@@ -148,6 +154,16 @@ BEGIN
 	END;
 
 	RAISE NOTICE 'Cleaning up...';
+	delete from token_collection_token where token_collection_id
+		IN (select token_collection_id FROM
+		token_collection where token_collection_type like
+		'JHTEST%');
+	delete from token_collection where token_collection_type like
+		'JHTEST%';
+	delete from val_token_collection_type where 
+		token_collection_type like
+		'JHTEST%';
+	delete from token where token_type like 'JHTEST%';
 	RAISE NOTICE 'TokenCollHier: DONE';
 	RETURN true;
 END;

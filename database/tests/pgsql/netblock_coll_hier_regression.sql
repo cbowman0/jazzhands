@@ -33,13 +33,18 @@ DECLARE
 	_nb1			netblock%ROWTYPE;
 	_nb2			netblock%ROWTYPE;
 BEGIN
-	RAISE NOTICE 'AcctCollHier: Cleanup Records from Previous Tests';
+	RAISE NOTICE 'Netblock CollHier: Cleanup Records from Previous Tests';
 
+	delete from netblock_collection_netblock where netblock_collection_id
+		IN (select netblock_collection_id FROM
+		netblock_collection where netblock_collection_type like
+		'JHTEST%');
 	delete from netblock_collection where netblock_collection_type like
 		'JHTEST%';
 	delete from val_netblock_collection_type where 
 		netblock_collection_type like
 		'JHTEST%';
+	delete from netblock where description like 'JHTEST%';
 
 	RAISE NOTICE '++ Inserting testing data';
 	INSERT INTO val_netblock_collection_Type (
@@ -153,7 +158,18 @@ BEGIN
 	END;
 
 	RAISE NOTICE 'Cleaning up...';
-	RAISE NOTICE 'AcctCollHier: DONE';
+
+	delete from netblock_collection_netblock where netblock_collection_id
+		IN (select netblock_collection_id FROM
+		netblock_collection where netblock_collection_type like
+		'JHTEST%');
+	delete from netblock_collection where netblock_collection_type like
+		'JHTEST%';
+	delete from val_netblock_collection_type where 
+		netblock_collection_type like
+		'JHTEST%';
+	delete from netblock where description like 'JHTEST%';
+	RAISE NOTICE 'Netblock CollHier: DONE';
 	RETURN true;
 END;
 $$ LANGUAGE plpgsql;

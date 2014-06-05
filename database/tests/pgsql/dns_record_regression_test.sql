@@ -420,6 +420,22 @@ BEGIN
 		RAISE NOTICE '... It did not';
 	END;
 
+	RAISE NOTICE 'Cleaning Up....';
+	delete from dns_record where dns_name like 'JHTEST%' 
+		or dns_value like 'JHTEST%';
+	delete from netblock where description like 'JHTEST%' 
+		and is_single_address = 'Y';
+	delete from netblock where description like 'JHTEST%';
+	delete from dns_change_record;
+	delete from dns_domain where soa_name = 'jhtest.example.com';
+
+	RAISE NOTICE 'skip tests of dns_rec_before because it is going away';
+	RAISE NOTICE 'skip tests of update_dns_zone because it is going away';
+
+	RAISE NOTICE '++ Beginning tests of dns_record_update_nontime...';
+	DELETE from dns_change_record;
+
+
 	RETURN true;
 END;
 $$ LANGUAGE plpgsql;
