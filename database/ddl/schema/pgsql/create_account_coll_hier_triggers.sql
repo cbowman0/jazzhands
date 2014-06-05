@@ -24,18 +24,18 @@
 CREATE OR REPLACE FUNCTION account_collection_hier_enforce()
 RETURNS TRIGGER AS $$
 DECLARE
-	dct	val_account_collection_type%ROWTYPE;
+	act	val_account_collection_type%ROWTYPE;
 BEGIN
 	SELECT *
-	INTO	dct
+	INTO	act
 	FROM	val_account_collection_type
 	WHERE	account_collection_type =
 		(select account_collection_type from account_collection
 			where account_collection_id = NEW.account_collection_id);
 
-	IF dct.can_have_hierarchy = 'N' THEN
+	IF act.can_have_hierarchy = 'N' THEN
 		RAISE EXCEPTION 'Device Collections of type % may not be hierarcical',
-			dct.account_collection_type
+			act.account_collection_type
 			USING ERRCODE= 'unique_violation';
 	END IF;
 	RETURN NEW;
@@ -58,37 +58,37 @@ CREATE CONSTRAINT TRIGGER trigger_account_collection_hier_enforce
 CREATE OR REPLACE FUNCTION account_collection_member_enforce()
 RETURNS TRIGGER AS $$
 DECLARE
-	dct	val_account_collection_type%ROWTYPE;
+	act	val_account_collection_type%ROWTYPE;
 	tally integer;
 BEGIN
 	SELECT *
-	INTO	dct
+	INTO	act
 	FROM	val_account_collection_type
 	WHERE	account_collection_type =
 		(select account_collection_type from account_collection
 			where account_collection_id = NEW.account_collection_id);
 
-	IF dct.MAX_NUM_MEMBERS IS NOT NULL THEN
+	IF act.MAX_NUM_MEMBERS IS NOT NULL THEN
 		select count(*)
 		  into tally
 		  from account_collection_account
 		  where account_collection_id = NEW.account_collection_id;
-		IF tally > dct.MAX_NUM_MEMBERS THEN
+		IF tally > act.MAX_NUM_MEMBERS THEN
 			RAISE EXCEPTION 'Too many members'
 				USING ERRCODE = 'unique_violation';
 		END IF;
 	END IF;
 
-	IF dct.MAX_NUM_COLLECTIONS IS NOT NULL THEN
+	IF act.MAX_NUM_COLLECTIONS IS NOT NULL THEN
 		select count(*)
 		  into tally
 		  from account_collection_account
 		  		inner join account_collection using (account_collection_id)
 		  where account_id = NEW.account_id
-		  and	account_collection_type = dct.account_collection_type;
-		IF tally > dct.MAX_NUM_COLLECTIONS THEN
+		  and	account_collection_type = act.account_collection_type;
+		IF tally > act.MAX_NUM_COLLECTIONS THEN
 			RAISE EXCEPTION 'Device may not be a member of more than % collections of type %',
-				dct.MAX_NUM_COLLECTIONS, dct.account_collection_type
+				act.MAX_NUM_COLLECTIONS, act.account_collection_type
 				USING ERRCODE = 'unique_violation';
 		END IF;
 	END IF;

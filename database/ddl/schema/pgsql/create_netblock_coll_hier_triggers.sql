@@ -24,18 +24,18 @@
 CREATE OR REPLACE FUNCTION netblock_collection_hier_enforce()
 RETURNS TRIGGER AS $$
 DECLARE
-	dct	val_netblock_collection_type%ROWTYPE;
+	nct	val_netblock_collection_type%ROWTYPE;
 BEGIN
 	SELECT *
-	INTO	dct
+	INTO	nct
 	FROM	val_netblock_collection_type
 	WHERE	netblock_collection_type =
 		(select netblock_collection_type from netblock_collection
 			where netblock_collection_id = NEW.netblock_collection_id);
 
-	IF dct.can_have_hierarchy = 'N' THEN
+	IF nct.can_have_hierarchy = 'N' THEN
 		RAISE EXCEPTION 'Device Collections of type % may not be hierarcical',
-			dct.netblock_collection_type
+			nct.netblock_collection_type
 			USING ERRCODE= 'unique_violation';
 	END IF;
 	RETURN NEW;
@@ -58,37 +58,37 @@ CREATE CONSTRAINT TRIGGER trigger_netblock_collection_hier_enforce
 CREATE OR REPLACE FUNCTION netblock_collection_member_enforce()
 RETURNS TRIGGER AS $$
 DECLARE
-	dct	val_netblock_collection_type%ROWTYPE;
+	nct	val_netblock_collection_type%ROWTYPE;
 	tally integer;
 BEGIN
 	SELECT *
-	INTO	dct
+	INTO	nct
 	FROM	val_netblock_collection_type
 	WHERE	netblock_collection_type =
 		(select netblock_collection_type from netblock_collection
 			where netblock_collection_id = NEW.netblock_collection_id);
 
-	IF dct.MAX_NUM_MEMBERS IS NOT NULL THEN
+	IF nct.MAX_NUM_MEMBERS IS NOT NULL THEN
 		select count(*)
 		  into tally
 		  from netblock_collection_netblock
 		  where netblock_collection_id = NEW.netblock_collection_id;
-		IF tally > dct.MAX_NUM_MEMBERS THEN
+		IF tally > nct.MAX_NUM_MEMBERS THEN
 			RAISE EXCEPTION 'Too many members'
 				USING ERRCODE = 'unique_violation';
 		END IF;
 	END IF;
 
-	IF dct.MAX_NUM_COLLECTIONS IS NOT NULL THEN
+	IF nct.MAX_NUM_COLLECTIONS IS NOT NULL THEN
 		select count(*)
 		  into tally
 		  from netblock_collection_netblock
 		  		inner join netblock_collection using (netblock_collection_id)
 		  where netblock_id = NEW.netblock_id
-		  and	netblock_collection_type = dct.netblock_collection_type;
-		IF tally > dct.MAX_NUM_COLLECTIONS THEN
+		  and	netblock_collection_type = nct.netblock_collection_type;
+		IF tally > nct.MAX_NUM_COLLECTIONS THEN
 			RAISE EXCEPTION 'Device may not be a member of more than % collections of type %',
-				dct.MAX_NUM_COLLECTIONS, dct.netblock_collection_type
+				nct.MAX_NUM_COLLECTIONS, nct.netblock_collection_type
 				USING ERRCODE = 'unique_violation';
 		END IF;
 	END IF;
