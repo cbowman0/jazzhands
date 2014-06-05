@@ -331,12 +331,14 @@ BEGIN
 				(Site_Code = NEW.Site_Code)) AND
 			((Account_Id IS NULL AND NEW.Account_Id IS NULL) OR
 				(Account_Id = NEW.Account_Id)) AND
+			((Account_Realm_Id IS NULL AND NEW.Account_Realm_Id IS NULL) OR
+				(Account_Realm_Id = NEW.Account_Realm_Id)) AND
 			((account_collection_Id IS NULL AND NEW.account_collection_Id IS NULL) OR
 				(account_collection_Id = NEW.account_collection_Id)) AND
 			((netblock_collection_Id IS NULL AND NEW.netblock_collection_Id IS NULL) OR
 				(netblock_collection_Id = NEW.netblock_collection_Id)) AND
 			((person_id IS NULL AND NEW.Person_id IS NULL) OR
-				(Account_Id = NEW.person_id))
+				(Person_Id = NEW.person_id))
 			;
 			
 		IF FOUND THEN
@@ -372,6 +374,8 @@ BEGIN
 				(Person_Id = NEW.Person_Id)) AND
 			((Account_Id IS NULL AND NEW.Account_Id IS NULL) OR
 				(Account_Id = NEW.Account_Id)) AND
+			((Account_Realm_id IS NULL AND NEW.Account_Realm_id IS NULL) OR
+				(Account_Realm_id = NEW.Account_Realm_id)) AND
 			((account_collection_Id IS NULL AND NEW.account_collection_Id IS NULL) OR
 				(account_collection_Id = NEW.account_collection_Id)) AND
 			((netblock_collection_Id IS NULL AND NEW.netblock_collection_Id IS NULL) OR
