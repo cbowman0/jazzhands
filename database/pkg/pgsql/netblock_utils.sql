@@ -56,7 +56,7 @@ $_$;
 
 CREATE OR REPLACE FUNCTION netblock_utils.find_best_parent_id(
 	in_IpAddress jazzhands.netblock.ip_address%type,
-	in_Netmask_Bits jazzhands.netblock.netmask_bits%type DEFAULT NULL,
+	in_Netmask_Bits integer DEFAULT NULL,
 	in_netblock_type jazzhands.netblock.netblock_type%type DEFAULT 'default',
 	in_ip_universe_id jazzhands.ip_universe.ip_universe_id%type DEFAULT 0,
 	in_is_single_address jazzhands.netblock.is_single_address%type DEFAULT 'N',
@@ -90,7 +90,7 @@ BEGIN
 			)
 			and (in_netblock_id IS NULL OR
 				netblock_id != in_netblock_id)
-		order by netmask_bits desc
+		order by masklen(ip_address) desc
 	) subq LIMIT 1;
 
 	IF par_nbid IS NULL AND in_is_single_address = 'Y' AND in_fuzzy_can_subnet THEN
@@ -115,7 +115,7 @@ BEGIN
 						where is_single_address = 'N'
 						and parent_netblock_id is not null
 				)
-			order by netmask_bits desc
+			order by masklen(ip_address) desc
 		) subq LIMIT 1;
 
 		IF can_fix_can_subnet AND par_nbd IS NOT NULL THEN
@@ -141,7 +141,7 @@ BEGIN
 
 	RETURN netblock_utils.find_best_parent_id(
 		nbrec.ip_address,
-		nbrec.netmask_bits,
+		masklen(nbrec.ip_address),
 		nbrec.netblock_type,
 		nbrec.ip_universe_id,
 		nbrec.is_single_address,
