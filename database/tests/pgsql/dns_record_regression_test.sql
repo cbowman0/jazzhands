@@ -84,50 +84,50 @@ BEGIN
 	END IF;
 	DELETE from dns_change_record;
 
-	INSERT INTO NETBLOCK (ip_address, netmask_bits, netblock_type,
-			is_ipv4_address, is_single_address, can_subnet, netblock_status,
+	INSERT INTO NETBLOCK (ip_address, netblock_type,
+			is_single_address, can_subnet, netblock_status,
 			description
 	) VALUES (
-		'172.31.30.0/24', 24, 'default',
-			'Y', 'N', 'N', 'Allocated',
+		'172.31.30.0/24', 'default',
+			'N', 'N', 'Allocated',
 			'JHTEST _blkid'
 	) RETURNING netblock_id INTO _blkid;
 
-	INSERT INTO NETBLOCK (ip_address, netmask_bits, netblock_type,
-			is_ipv4_address, is_single_address, can_subnet, netblock_status,
+	INSERT INTO NETBLOCK (ip_address, netblock_type,
+			is_single_address, can_subnet, netblock_status,
 			description
 	) VALUES (
-		'172.31.30.1/24', 24, 'default',
-			'Y', 'Y', 'N', 'Allocated',
+		'172.31.30.1/24', 'default',
+			'Y', 'N', 'Allocated',
 			'JHTEST _ip1id'
 	) RETURNING netblock_id INTO _ip1id;
 
-	INSERT INTO NETBLOCK (ip_address, netmask_bits, netblock_type,
-			is_ipv4_address, is_single_address, can_subnet, netblock_status,
+	INSERT INTO NETBLOCK (ip_address, netblock_type,
+			is_single_address, can_subnet, netblock_status,
 			description
 	) VALUES (
-		'172.31.30.2/24', 24, 'default',
-			'Y', 'Y', 'N', 'Allocated',
+		'172.31.30.2/24', 'default',
+			'Y', 'N', 'Allocated',
 			'JHTEST _ip2id'
 	) RETURNING netblock_id INTO _ip2id;
 
 	-- Insert IPv6 block
-	INSERT INTO NETBLOCK (ip_address, netmask_bits, netblock_type,
-			is_ipv4_address, is_single_address, can_subnet, netblock_status,
+	INSERT INTO NETBLOCK (ip_address, netblock_type,
+			is_single_address, can_subnet, netblock_status,
 			description
 	) VALUES (
-		'fc00::/64', 64, 'default',
-			'N', 'N', 'N', 'Allocated',
+		'fc00::/64', 'default',
+			'N', 'N', 'Allocated',
 			'JHTEST _ip6id1'
 	) RETURNING netblock_id INTO _ip6id1;
 
 	-- Insert IPv6 block
-	INSERT INTO NETBLOCK (ip_address, netmask_bits, netblock_type,
-			is_ipv4_address, is_single_address, can_subnet, netblock_status,
+	INSERT INTO NETBLOCK (ip_address, netblock_type,
+			is_single_address, can_subnet, netblock_status,
 			description
 	) VALUES (
-		'fc00::/64', 64, 'default',
-			'N', 'Y', 'N', 'Allocated',
+		'fc00::/64', 'default',
+			'Y', 'N', 'Allocated',
 			'JHTEST _ip6id1'
 	) RETURNING netblock_id INTO _ip6id1;
 

@@ -28,33 +28,35 @@ select	device_id, 'bge0', 'network'
   from	device where device_name = 'guinness.omniscient.com';
 
 insert into netblock
-	(ip_address, netmask_bits, is_ipv4_address, is_single_address,
-	 can_subnet, parent_netblock_id, netblock_status,
-	 netblock_type)
-	select net_manip.inet_ptodb('198.18.9.5',26), netmask_bits, 'Y', 'Y',
-	 'N', netblock_id, 'Allocated',
-	 'default'
-	from netblock where ip_address = net_manip.inet_ptodb('198.18.9.0', 26)
-		and is_single_address = 'N' and is_ipv4_address = 'Y';
+	(ip_address, is_single_address,
+		can_subnet, parent_netblock_id, netblock_status,
+		netblock_type)
+	select '198.18.9.5/26', 'Y',
+	 	'N', netblock_id, 'Allocated',
+	 	'default'
+	from netblock where ip_address = '198.18.9.0/26'
+		and is_single_address = 'N'
+;
 
 insert into network_interface
 	(device_id, network_interface_name, physical_port_id, 
-	network_interface_type,
-	 is_interface_up, mac_addr, 
-	 should_monitor, provides_nat, should_manage, 
-	 provides_dhcp,
-	 netblock_id
+		network_interface_type,
+		is_interface_up, mac_addr, 
+		should_monitor, provides_nat, should_manage, 
+		provides_dhcp,
+		netblock_id
 	)
 	select device_id, 'bge0', physical_port_id, 'broadcast',
-	'Y', 'aa:bb:cc:dd:ee:ff',
-	'Y', 'N', 'Y',
-	'N', 
-	(select netblock_id from netblock where
-		ip_address = net_manip.inet_ptodb('198.18.9.5', 26))
-	from physical_port where port_name = 'bge0'
+		'Y', 'aa:bb:cc:dd:ee:ff',
+		'Y', 'N', 'Y',
+		'N', 
+		(select netblock_id from netblock where
+			ip_address = '198.18.9.5/26')
+	from physical_port 
+	where port_name = 'bge0'
 	and device_id in (select device_id from device
-		where device_name = 'guinness.omniscient.com');
-	;
+		where device_name = 'guinness.omniscient.com')
+;
 
 insert into dns_record
 	(dns_name, dns_domain_id, dns_class, dns_type, netblock_id)
