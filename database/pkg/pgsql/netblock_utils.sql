@@ -61,7 +61,8 @@ CREATE OR REPLACE FUNCTION netblock_utils.find_best_parent_id(
 	in_ip_universe_id jazzhands.ip_universe.ip_universe_id%type DEFAULT 0,
 	in_is_single_address jazzhands.netblock.is_single_address%type DEFAULT 'N',
 	in_netblock_id jazzhands.netblock.netblock_id%type DEFAULT NULL,
-	in_fuzzy_can_subnet boolean DEFAULT false
+	in_fuzzy_can_subnet boolean DEFAULT false,
+	can_fix_can_subnet boolean DEFAULT false
 ) RETURNS jazzhands.netblock.netblock_id%type AS $$
 DECLARE
 	par_nbid	jazzhands.netblock.netblock_id%type;
@@ -117,7 +118,7 @@ BEGIN
 			order by netmask_bits desc
 		) subq LIMIT 1;
 
-		IF par_nbid IS NOT NULL THEN
+		IF can_fix_can_subnet AND par_nbd IS NOT NULL THEN
 			UPDATE netblock SET can_subnet = 'N' where netblock_id = par_nbid;
 		END IF;
 	END IF;
