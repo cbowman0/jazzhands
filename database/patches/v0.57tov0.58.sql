@@ -18,6 +18,7 @@ Invoked:
 
 \set ON_ERROR_STOP
 -- Changed function
+
 SELECT schema_support.save_grants_for_replay('schema_support', 'begin_maintenance');
 -- Dropped in case type changes.
 DROP FUNCTION IF EXISTS schema_support.begin_maintenance ( shouldbesuper boolean );
@@ -634,6 +635,9 @@ CREATE SEQUENCE layer3_network_layer3_network_id_seq;
 CREATE SEQUENCE layer2_network_layer2_network_id_seq;
 CREATE SEQUENCE asset_asset_id_seq;
 
+SELECT schema_support.save_constraint_for_replay('jazzhands', 'device');
+SELECT schema_support.save_constraint_for_replay('jazzhands', 'network_interface');
+SELECT schema_support.save_constraint_for_replay('jazzhands', 'dns_domain');
 
 --------------------------------------------------------------------
 -- DEALING WITH TABLE val_account_collection_type [4203720]
@@ -3041,7 +3045,7 @@ ALTER TABLE device
 
 -- PRIMARY AND ALTERNATE KEYS
 ALTER TABLE device ADD CONSTRAINT ak_device_chassis_location_id UNIQUE (chassis_location_id);
-ALTER TABLE device ADD CONSTRAINT ak_device_rack_location_id UNIQUE (rack_location_id);
+-- ALTER TABLE device ADD CONSTRAINT ak_device_rack_location_id UNIQUE (rack_location_id);
 ALTER TABLE device ADD CONSTRAINT pk_device PRIMARY KEY (device_id);
 
 -- Table/Column Comments
@@ -7830,8 +7834,17 @@ UPDATE __regrants SET
 WHERE schema = 'netblock_utils' 
 AND object = 'find_best_parent_id';
 
+-- AN specific
+UPDATE __recreate SET
+	ddl = replace(ddl, 'ON d.location_id =', 'ON d.rack_location_id =')
+WHERE
+	schema = 'cloudapi' and object = 'network_device';
 
+UPDATE __recreate SET
+	ddl = replace(ddl, 'ON d.location_id =', 'ON d.rack_location_id =')
+WHERE
+	schema = 'cloudapi' and object = 'server';
 
 -- Clean Up
-SELECT schema_support.replay_saved_grants();
 SELECT schema_support.replay_object_recreates();
+SELECT schema_support.replay_saved_grants();
