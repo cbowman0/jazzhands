@@ -643,6 +643,7 @@ BEGIN
 			  AND	  n.nspname = schema
 	LOOP
 		RAISE NOTICE '1 dealing with  %.%', _r.nspname, _r.proname;
+		PERFORM schema_support.save_constraint_for_replay(_r.nspname, _r.proname, dropit);
 		PERFORM schema_support.save_dependant_objects_for_replay(_r.nspname, _r.proname, dropit);
 		PERFORM schema_support.save_function_for_replay(_r.nspname, _r.proname, dropit);
 	END LOOP;

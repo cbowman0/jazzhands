@@ -17,6 +17,8 @@ Invoked:
 */
 
 \set ON_ERROR_STOP
+SELECT schema_support.begin_maintenance();
+
 -- Changed function
 
 SELECT schema_support.save_grants_for_replay('schema_support', 'begin_maintenance');
@@ -601,6 +603,7 @@ BEGIN
 			  AND	  n.nspname = schema
 	LOOP
 		RAISE NOTICE '1 dealing with  %.%', _r.nspname, _r.proname;
+		PERFORM schema_support.save_constraint_for_replay(_r.nspname, _r.proname, dropit);
 		PERFORM schema_support.save_dependant_objects_for_replay(_r.nspname, _r.proname, dropit);
 		PERFORM schema_support.save_function_for_replay(_r.nspname, _r.proname, dropit);
 	END LOOP;
@@ -635,9 +638,11 @@ CREATE SEQUENCE layer3_network_layer3_network_id_seq;
 CREATE SEQUENCE layer2_network_layer2_network_id_seq;
 CREATE SEQUENCE asset_asset_id_seq;
 
+-- These should not be necessary here
 SELECT schema_support.save_constraint_for_replay('jazzhands', 'device');
 SELECT schema_support.save_constraint_for_replay('jazzhands', 'network_interface');
 SELECT schema_support.save_constraint_for_replay('jazzhands', 'dns_domain');
+
 
 --------------------------------------------------------------------
 -- DEALING WITH TABLE val_account_collection_type [4203720]
@@ -7845,6 +7850,13 @@ UPDATE __recreate SET
 WHERE
 	schema = 'cloudapi' and object = 'server';
 
+DROP VIEW IF EXISTS location;
+DROP FUNCTION IF EXISTS del_location_transition();
+DROP FUNCTION IF EXISTS upd_location_transition();
+DROP FUNCTION IF EXISTS ins_location_transition();
+
 -- Clean Up
 SELECT schema_support.replay_object_recreates();
 SELECT schema_support.replay_saved_grants();
+
+SELECT schema_support.end_maintenance();
