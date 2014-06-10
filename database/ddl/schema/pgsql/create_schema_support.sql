@@ -849,14 +849,69 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY INVOKER;
 
--- Notable queries..
--- select schema_support.save_grants_for_replay('jazzhands', 'physical_port');
--- select schema_support.save_grants_for_replay('port_support', 
--- 'do_l1_connection_update');
--- SELECT  schema_support.replay_saved_grants();
--- SELECT schema_support.save_view_for_replay('jazzhands', 
---	'v_l1_all_physical_ports');
+/**************************************************************
+ *  FUNCTIONS
+
+schema_support.begin_maintenance
+
+	- ensures you are running in a transaction
+	- ensures you are a superuser (based on argument)
+
+schema_support.end_maintenance
+	- revokes superuser from running user (based on argument)
+
+
+These will save an object for replay, including presering grants
+automatically:
+
+SELECT schema_support.save_function_for_replayjazzhands', 'fncname');
+	- saves all function of a given name
+
+SELECT schema_support.save_view_for_replay('jazzhands',  'mytableorview');
+	- saves a view includling triggers on the view, for replay
+
+SELECT schema_support.save_constraint_for_replay('jazzhands', 'table');
+	- saves constraints pointing to an object for replay
+
+SELECT schema_support.save_trigger_for_replay('jazzhands', 'relation');
+	- save triggers poinging to an object for replay
+
+SELECT schema_support.save_dependant_objects_for_replay(schema, object)
+
+This will take an option (relation[table/view] or procedure) and figure
+out what depends on it, and save the ddl to recreate tehm.
+
+NOTE:  This does not always handle constraints well. (bug, needs to be fixed)
+Right now you may also need to call schema_support.save_constraint_for_replay.
+
+NOTE:  All of the aforementioned tables take an optional boolean argument
+at the end.  That argument defaults to true and indicates whether or not
+the object shouldbe dropped after saveing grants and other info
+
+==== GRANTS ===
+
+This will save grants for later relay on a relation (view, table) or proc:
+
+select schema_support.save_grants_for_replay('jazzhands', 'physical_port');
+select schema_support.save_grants_for_replay('port_support', 
+	'do_l1_connection_update');
+
+NOTE:  It saves the grants of stored procedures based on the arguments
+passed in, so if you change those, you need to update the definitions in 
+__regrants (or __recreates)  before replying them.
+
+NOTE:  These procedures end up losing who did the grants originally
+
+THESE:
+
+	SELECT schema_support.replay_object_recreates();
+	SELECT schema_support.replay_saved_grants();
+
+will replay object creations and grants on them respectively.  They should
+be called in that order at the end of a maintenance script
 
 -------------------------------------------------------------------------------
 -- select schema_support.rebuild_stamp_triggers();
 -- SELECT schema_support.build_audit_tables();
+
+**************************************************************/
