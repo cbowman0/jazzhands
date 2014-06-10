@@ -809,41 +809,41 @@ DROP TABLE IF EXISTS audit.val_account_collection_type_v57;
 -- DONE DEALING WITH TABLE val_account_collection_type [4210611]
 --------------------------------------------------------------------
 --------------------------------------------------------------------
--- DEALING WITH TABLE val_property [4204204]
+-- DEALING WITH TABLE val_property [4369091]
 -- Save grants for later reapplication
 SELECT schema_support.save_grants_for_replay('jazzhands', 'val_property', 'val_property');
 
 -- FOREIGN KEYS FROM
-ALTER TABLE property DROP CONSTRAINT IF EXISTS fk_property_nmtyp;
 ALTER TABLE val_property_value DROP CONSTRAINT IF EXISTS fk_valproval_namtyp;
+ALTER TABLE property DROP CONSTRAINT IF EXISTS fk_property_nmtyp;
 
 -- FOREIGN KEYS TO
-ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS fk_val_prop_nblk_coll_type;
 ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS fk_valprop_proptyp;
 ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS fk_valprop_pv_actyp_rst;
+ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS fk_val_prop_nblk_coll_type;
 ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS fk_valprop_propdttyp;
 ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS pk_val_property;
 -- INDEXES
 DROP INDEX IF EXISTS "jazzhands"."xif3val_property";
 DROP INDEX IF EXISTS "jazzhands"."xif2val_property";
-DROP INDEX IF EXISTS "jazzhands"."xif4val_property";
 DROP INDEX IF EXISTS "jazzhands"."xif1val_property";
+DROP INDEX IF EXISTS "jazzhands"."xif4val_property";
 -- CHECK CONSTRAINTS, etc
-ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_pucls_id;
-ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_cmp_id;
-ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_prodstate;
-ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS check_prp_prmt_606225804;
-ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_pdevcol_id;
-ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS check_prp_prmt_2139007167;
-ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_sitec;
-ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_ismulti;
-ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_pacct_id;
-ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS check_prp_prmt_354296970;
-ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_pdnsdomid;
 ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_osid;
+ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_pdnsdomid;
+ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_prodstate;
+ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_pacct_id;
+ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS check_prp_prmt_2139007167;
+ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_pdevcol_id;
+ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_cmp_id;
+ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS check_prp_prmt_606225804;
+ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS check_prp_prmt_354296970;
+ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_sitec;
+ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_pucls_id;
+ALTER TABLE jazzhands.val_property DROP CONSTRAINT IF EXISTS ckc_val_prop_ismulti;
 -- TRIGGERS, etc
-DROP TRIGGER IF EXISTS trig_userlog_val_property ON jazzhands.val_property;
 DROP TRIGGER IF EXISTS trigger_audit_val_property ON jazzhands.val_property;
+DROP TRIGGER IF EXISTS trig_userlog_val_property ON jazzhands.val_property;
 SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'val_property');
 ---- BEGIN audit.val_property TEARDOWN
 
@@ -876,6 +876,8 @@ CREATE TABLE val_property
 	permit_company_id	character(10) NOT NULL,
 	permit_device_collection_id	character(10) NOT NULL,
 	permit_dns_domain_id	character(10) NOT NULL,
+	permit_layer2_network_id	character(10) NOT NULL,
+	permit_layer3_network_id	character(10) NOT NULL,
 	permit_netblock_collection_id	character(10) NOT NULL,
 	permit_operating_system_id	character(10) NOT NULL,
 	permit_person_id	character(10) NOT NULL,
@@ -905,6 +907,12 @@ ALTER TABLE val_property
 	SET DEFAULT 'PROHIBITED'::bpchar;
 ALTER TABLE val_property
 	ALTER permit_dns_domain_id
+	SET DEFAULT 'PROHIBITED'::bpchar;
+ALTER TABLE val_property
+	ALTER permit_layer2_network_id
+	SET DEFAULT 'PROHIBITED'::bpchar;
+ALTER TABLE val_property
+	ALTER permit_layer3_network_id
 	SET DEFAULT 'PROHIBITED'::bpchar;
 ALTER TABLE val_property
 	ALTER permit_netblock_collection_id
@@ -938,6 +946,8 @@ INSERT INTO val_property (
 	permit_company_id,
 	permit_device_collection_id,
 	permit_dns_domain_id,
+	permit_layer2_network_id,		-- new column (permit_layer2_network_id)
+	permit_layer3_network_id,		-- new column (permit_layer3_network_id)
 	permit_netblock_collection_id,
 	permit_operating_system_id,
 	permit_person_id,
@@ -962,6 +972,8 @@ INSERT INTO val_property (
 	permit_company_id,
 	permit_device_collection_id,
 	permit_dns_domain_id,
+	'PROHIBITED'::bpchar,		-- new column (permit_layer2_network_id)
+	'PROHIBITED'::bpchar,		-- new column (permit_layer3_network_id)
 	permit_netblock_collection_id,
 	permit_operating_system_id,
 	permit_person_id,
@@ -988,6 +1000,8 @@ INSERT INTO audit.val_property (
 	permit_company_id,
 	permit_device_collection_id,
 	permit_dns_domain_id,
+	permit_layer2_network_id,		-- new column (permit_layer2_network_id)
+	permit_layer3_network_id,		-- new column (permit_layer3_network_id)
 	permit_netblock_collection_id,
 	permit_operating_system_id,
 	permit_person_id,
@@ -1016,6 +1030,8 @@ INSERT INTO audit.val_property (
 	permit_company_id,
 	permit_device_collection_id,
 	permit_dns_domain_id,
+	NULL,		-- new column (permit_layer2_network_id)
+	NULL,		-- new column (permit_layer3_network_id)
 	permit_netblock_collection_id,
 	permit_operating_system_id,
 	permit_person_id,
@@ -1051,6 +1067,12 @@ ALTER TABLE val_property
 	ALTER permit_dns_domain_id
 	SET DEFAULT 'PROHIBITED'::bpchar;
 ALTER TABLE val_property
+	ALTER permit_layer2_network_id
+	SET DEFAULT 'PROHIBITED'::bpchar;
+ALTER TABLE val_property
+	ALTER permit_layer3_network_id
+	SET DEFAULT 'PROHIBITED'::bpchar;
+ALTER TABLE val_property
 	ALTER permit_netblock_collection_id
 	SET DEFAULT 'PROHIBITED'::bpchar;
 ALTER TABLE val_property
@@ -1084,74 +1106,80 @@ COMMENT ON COLUMN val_property.permit_company_id IS 'defines how company id shou
 COMMENT ON COLUMN val_property.permit_device_collection_id IS 'defines how company id should be used in the property for this (name,type)';
 COMMENT ON COLUMN val_property.permit_dns_domain_id IS 'defines how company id should be used in the property for this (name,type)';
 -- INDEXES
-CREATE INDEX xif2val_property ON val_property USING btree (property_type);
+CREATE INDEX xif1val_property ON val_property USING btree (property_data_type);
 CREATE INDEX xif4val_property ON val_property USING btree (prop_val_nblk_coll_type_rstrct);
 CREATE INDEX xif3val_property ON val_property USING btree (prop_val_acct_coll_type_rstrct);
-CREATE INDEX xif1val_property ON val_property USING btree (property_data_type);
+CREATE INDEX xif2val_property ON val_property USING btree (property_type);
 
 -- CHECK CONSTRAINTS
-ALTER TABLE val_property ADD CONSTRAINT ckc_val_prop_prodstate
-	CHECK (permit_service_env_collection = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
-ALTER TABLE val_property ADD CONSTRAINT ckc_val_prop_pucls_id
-	CHECK (permit_account_collection_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
-ALTER TABLE val_property ADD CONSTRAINT ckc_val_prop_cmp_id
-	CHECK (permit_company_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+ALTER TABLE val_property ADD CONSTRAINT ckc_val_prop_pdevcol_id
+	CHECK (permit_device_collection_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
 ALTER TABLE val_property ADD CONSTRAINT check_prp_prmt_2016888554
 	CHECK (permit_account_realm_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
-ALTER TABLE val_property ADD CONSTRAINT ckc_val_prop_osid
-	CHECK (permit_operating_system_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
-ALTER TABLE val_property ADD CONSTRAINT ckc_val_prop_pdnsdomid
-	CHECK (permit_dns_domain_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+ALTER TABLE val_property ADD CONSTRAINT check_prp_prmt_2139007167
+	CHECK (permit_property_rank = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
 ALTER TABLE val_property ADD CONSTRAINT ckc_val_prop_pacct_id
 	CHECK (permit_account_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
 ALTER TABLE val_property ADD CONSTRAINT check_prp_prmt_354296970
 	CHECK (permit_netblock_collection_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
-ALTER TABLE val_property ADD CONSTRAINT check_prp_prmt_2139007167
-	CHECK (permit_property_rank = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+ALTER TABLE val_property ADD CONSTRAINT check_prp_prmt_606225804
+	CHECK (permit_person_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+ALTER TABLE val_property ADD CONSTRAINT ckc_val_prop_cmp_id
+	CHECK (permit_company_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+ALTER TABLE val_property ADD CONSTRAINT ckc_val_prop_pdnsdomid
+	CHECK (permit_dns_domain_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+ALTER TABLE val_property ADD CONSTRAINT ckc_val_prop_osid
+	CHECK (permit_operating_system_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+ALTER TABLE val_property ADD CONSTRAINT ckc_val_prop_prodstate
+	CHECK (permit_service_env_collection = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+ALTER TABLE val_property ADD CONSTRAINT check_prp_prmt_1279736503
+	CHECK (permit_layer2_network_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+ALTER TABLE val_property ADD CONSTRAINT check_prp_prmt_1279736247
+	CHECK (permit_layer3_network_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+ALTER TABLE val_property ADD CONSTRAINT ckc_val_prop_pucls_id
+	CHECK (permit_account_collection_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
 ALTER TABLE val_property ADD CONSTRAINT ckc_val_prop_sitec
 	CHECK (permit_site_code = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
 ALTER TABLE val_property ADD CONSTRAINT ckc_val_prop_ismulti
 	CHECK (is_multivalue = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
-ALTER TABLE val_property ADD CONSTRAINT check_prp_prmt_606225804
-	CHECK (permit_person_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
-ALTER TABLE val_property ADD CONSTRAINT ckc_val_prop_pdevcol_id
-	CHECK (permit_device_collection_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
 
 -- FOREIGN KEYS FROM
--- consider FK val_property and property
-ALTER TABLE property
-	ADD CONSTRAINT fk_property_nmtyp
-	FOREIGN KEY (property_name, property_type) REFERENCES val_property(property_name, property_type);
 -- consider FK val_property and val_property_value
 ALTER TABLE val_property_value
 	ADD CONSTRAINT fk_valproval_namtyp
 	FOREIGN KEY (property_name, property_type) REFERENCES val_property(property_name, property_type);
+-- consider FK val_property and property
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_nmtyp
+	FOREIGN KEY (property_name, property_type) REFERENCES val_property(property_name, property_type);
 
 -- FOREIGN KEYS TO
--- consider FK val_property and val_netblock_collection_type
-ALTER TABLE val_property
-	ADD CONSTRAINT fk_val_prop_nblk_coll_type
-	FOREIGN KEY (prop_val_nblk_coll_type_rstrct) REFERENCES val_netblock_collection_type(netblock_collection_type);
--- consider FK val_property and val_property_type
-ALTER TABLE val_property
-	ADD CONSTRAINT fk_valprop_proptyp
-	FOREIGN KEY (property_type) REFERENCES val_property_type(property_type);
 -- consider FK val_property and val_account_collection_type
 ALTER TABLE val_property
 	ADD CONSTRAINT fk_valprop_pv_actyp_rst
 	FOREIGN KEY (prop_val_acct_coll_type_rstrct) REFERENCES val_account_collection_type(account_collection_type);
+-- consider FK val_property and val_property_type
+ALTER TABLE val_property
+	ADD CONSTRAINT fk_valprop_proptyp
+	FOREIGN KEY (property_type) REFERENCES val_property_type(property_type);
 -- consider FK val_property and val_property_data_type
 ALTER TABLE val_property
 	ADD CONSTRAINT fk_valprop_propdttyp
 	FOREIGN KEY (property_data_type) REFERENCES val_property_data_type(property_data_type);
+-- consider FK val_property and val_netblock_collection_type
+ALTER TABLE val_property
+	ADD CONSTRAINT fk_val_prop_nblk_coll_type
+	FOREIGN KEY (prop_val_nblk_coll_type_rstrct) REFERENCES val_netblock_collection_type(netblock_collection_type);
 
 -- TRIGGERS
 SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'val_property');
 SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'val_property');
 DROP TABLE IF EXISTS val_property_v57;
 DROP TABLE IF EXISTS audit.val_property_v57;
--- DONE DEALING WITH TABLE val_property [4211117]
+-- DONE DEALING WITH TABLE val_property [4353294]
 --------------------------------------------------------------------
+
+
 --------------------------------------------------------------------
 -- DEALING WITH TABLE encapsulation [4202874]
 
@@ -1739,60 +1767,61 @@ DROP TABLE IF EXISTS val_netblock_collection_type_v57;
 DROP TABLE IF EXISTS audit.val_netblock_collection_type_v57;
 -- DONE DEALING WITH TABLE val_netblock_collection_type [4210887]
 --------------------------------------------------------------------
+
 --------------------------------------------------------------------
--- DEALING WITH TABLE property [4203375]
+-- DEALING WITH TABLE property [4368262]
 -- Save grants for later reapplication
 SELECT schema_support.save_grants_for_replay('jazzhands', 'property', 'property');
 
 -- FOREIGN KEYS FROM
 
 -- FOREIGN KEYS TO
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_pval_tokcolid;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_pval_compid;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_compid;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_dnsdomid;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_acct_col;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_pval_swpkgid;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_pval_dnsdomid;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_pval_acct_colid;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_acctid;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_nmtyp;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_site_code;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_nblk_coll_id;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_person_id;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_val_prsnid;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_pv_nblkcol_id;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_osid;
-ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_devcolid;
 ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_prop_svc_env_coll_id;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_dnsdomid;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_devcolid;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_compid;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_nmtyp;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_pval_compid;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_nblk_coll_id;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_pval_acct_colid;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_osid;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_pval_dnsdomid;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_pval_tokcolid;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_acct_col;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_acctid;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_pval_swpkgid;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_pv_nblkcol_id;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_val_prsnid;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_site_code;
 ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_pval_pwdtyp;
+ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS fk_property_person_id;
 ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS pk_property;
 -- INDEXES
-DROP INDEX IF EXISTS "jazzhands"."xif21property";
-DROP INDEX IF EXISTS "jazzhands"."xifprop_compid";
 DROP INDEX IF EXISTS "jazzhands"."xifprop_acctcol_id";
-DROP INDEX IF EXISTS "jazzhands"."xif19property";
-DROP INDEX IF EXISTS "jazzhands"."xifprop_site_code";
 DROP INDEX IF EXISTS "jazzhands"."xifprop_pval_dnsdomid";
-DROP INDEX IF EXISTS "jazzhands"."xifprop_pval_compid";
-DROP INDEX IF EXISTS "jazzhands"."xifprop_devcolid";
-DROP INDEX IF EXISTS "jazzhands"."xifprop_dnsdomid";
-DROP INDEX IF EXISTS "jazzhands"."xif20property";
-DROP INDEX IF EXISTS "jazzhands"."xifprop_nmtyp";
-DROP INDEX IF EXISTS "jazzhands"."xifprop_account_id";
-DROP INDEX IF EXISTS "jazzhands"."xif17property";
-DROP INDEX IF EXISTS "jazzhands"."xifprop_pval_acct_colid";
-DROP INDEX IF EXISTS "jazzhands"."xifprop_pval_swpkgid";
-DROP INDEX IF EXISTS "jazzhands"."xifprop_pval_tokcolid";
 DROP INDEX IF EXISTS "jazzhands"."xifprop_osid";
+DROP INDEX IF EXISTS "jazzhands"."xifprop_dnsdomid";
+DROP INDEX IF EXISTS "jazzhands"."xifprop_pval_acct_colid";
+DROP INDEX IF EXISTS "jazzhands"."xifprop_nmtyp";
+DROP INDEX IF EXISTS "jazzhands"."xifprop_compid";
+DROP INDEX IF EXISTS "jazzhands"."xifprop_account_id";
 DROP INDEX IF EXISTS "jazzhands"."xifprop_pval_pwdtyp";
+DROP INDEX IF EXISTS "jazzhands"."xifprop_pval_swpkgid";
+DROP INDEX IF EXISTS "jazzhands"."xif21property";
+DROP INDEX IF EXISTS "jazzhands"."xif17property";
+DROP INDEX IF EXISTS "jazzhands"."xifprop_devcolid";
+DROP INDEX IF EXISTS "jazzhands"."xifprop_site_code";
+DROP INDEX IF EXISTS "jazzhands"."xifprop_pval_compid";
+DROP INDEX IF EXISTS "jazzhands"."xif19property";
+DROP INDEX IF EXISTS "jazzhands"."xif20property";
 DROP INDEX IF EXISTS "jazzhands"."xif18property";
+DROP INDEX IF EXISTS "jazzhands"."xifprop_pval_tokcolid";
 -- CHECK CONSTRAINTS, etc
 ALTER TABLE jazzhands.property DROP CONSTRAINT IF EXISTS ckc_prop_isenbld;
 -- TRIGGERS, etc
+DROP TRIGGER IF EXISTS trigger_audit_property ON jazzhands.property;
 DROP TRIGGER IF EXISTS trigger_validate_property ON jazzhands.property;
 DROP TRIGGER IF EXISTS trig_userlog_property ON jazzhands.property;
-DROP TRIGGER IF EXISTS trigger_audit_property ON jazzhands.property;
 SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'property');
 ---- BEGIN audit.property TEARDOWN
 
@@ -2034,28 +2063,28 @@ COMMENT ON COLUMN property.start_date IS 'date/time that the assignment takes ef
 COMMENT ON COLUMN property.finish_date IS 'date/time that the assignment ceases taking effect';
 COMMENT ON COLUMN property.is_enabled IS 'indiciates if the property is temporarily disabled or not.';
 -- INDEXES
-CREATE INDEX xifprop_acctcol_id ON property USING btree (account_collection_id);
+CREATE INDEX xif20property ON property USING btree (netblock_collection_id);
 CREATE INDEX xif19property ON property USING btree (property_value_nblk_coll_id);
-CREATE INDEX xifprop_site_code ON property USING btree (site_code);
-CREATE INDEX xifprop_pval_dnsdomid ON property USING btree (property_value_dns_domain_id);
-CREATE INDEX xifprop_devcolid ON property USING btree (device_collection_id);
-CREATE INDEX xifprop_pval_compid ON property USING btree (property_value_company_id);
-CREATE INDEX xif22property ON property USING btree (account_realm_id);
-CREATE INDEX xif21property ON property USING btree (service_env_collection_id);
-CREATE INDEX xifprop_compid ON property USING btree (company_id);
-CREATE INDEX xif23property ON property USING btree (layer2_network_id);
-CREATE INDEX xif17property ON property USING btree (property_value_person_id);
-CREATE INDEX xifprop_pval_acct_colid ON property USING btree (property_value_account_coll_id);
-CREATE INDEX xifprop_pval_swpkgid ON property USING btree (property_value_sw_package_id);
 CREATE INDEX xifprop_pval_tokcolid ON property USING btree (property_value_token_col_id);
 CREATE INDEX xif18property ON property USING btree (person_id);
-CREATE INDEX xifprop_pval_pwdtyp ON property USING btree (property_value_password_type);
-CREATE INDEX xifprop_osid ON property USING btree (operating_system_id);
-CREATE INDEX xif24property ON property USING btree (layer3_network_id);
-CREATE INDEX xifprop_dnsdomid ON property USING btree (dns_domain_id);
-CREATE INDEX xifprop_nmtyp ON property USING btree (property_name, property_type);
-CREATE INDEX xif20property ON property USING btree (netblock_collection_id);
+CREATE INDEX xif21property ON property USING btree (service_env_collection_id);
+CREATE INDEX xifprop_pval_compid ON property USING btree (property_value_company_id);
+CREATE INDEX xifprop_site_code ON property USING btree (site_code);
+CREATE INDEX xif17property ON property USING btree (property_value_person_id);
+CREATE INDEX xifprop_devcolid ON property USING btree (device_collection_id);
 CREATE INDEX xifprop_account_id ON property USING btree (account_id);
+CREATE INDEX xifprop_compid ON property USING btree (company_id);
+CREATE INDEX xifprop_nmtyp ON property USING btree (property_name, property_type);
+CREATE INDEX xif23property ON property USING btree (layer2_network_id);
+CREATE INDEX xif24property ON property USING btree (layer3_network_id);
+CREATE INDEX xifprop_pval_swpkgid ON property USING btree (property_value_sw_package_id);
+CREATE INDEX xif22property ON property USING btree (account_realm_id);
+CREATE INDEX xifprop_pval_pwdtyp ON property USING btree (property_value_password_type);
+CREATE INDEX xifprop_pval_dnsdomid ON property USING btree (property_value_dns_domain_id);
+CREATE INDEX xifprop_acctcol_id ON property USING btree (account_collection_id);
+CREATE INDEX xifprop_pval_acct_colid ON property USING btree (property_value_account_coll_id);
+CREATE INDEX xifprop_dnsdomid ON property USING btree (dns_domain_id);
+CREATE INDEX xifprop_osid ON property USING btree (operating_system_id);
 
 -- CHECK CONSTRAINTS
 ALTER TABLE property ADD CONSTRAINT ckc_prop_isenbld
@@ -2064,44 +2093,54 @@ ALTER TABLE property ADD CONSTRAINT ckc_prop_isenbld
 -- FOREIGN KEYS FROM
 
 -- FOREIGN KEYS TO
--- consider FK property and netblock_collection
-ALTER TABLE property
-	ADD CONSTRAINT fk_property_pv_nblkcol_id
-	FOREIGN KEY (property_value_nblk_coll_id) REFERENCES netblock_collection(netblock_collection_id);
+-- consider FK property and layer3_network
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE property
+--	ADD CONSTRAINT fk_prop_l3netid
+--	FOREIGN KEY (layer3_network_id) REFERENCES layer3_network(layer3_network_id);
+
 -- consider FK property and person
 ALTER TABLE property
 	ADD CONSTRAINT fk_property_val_prsnid
 	FOREIGN KEY (property_value_person_id) REFERENCES person(person_id);
+-- consider FK property and sw_package
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_pval_swpkgid
+	FOREIGN KEY (property_value_sw_package_id) REFERENCES sw_package(sw_package_id);
 -- consider FK property and netblock_collection
 ALTER TABLE property
-	ADD CONSTRAINT fk_property_nblk_coll_id
-	FOREIGN KEY (netblock_collection_id) REFERENCES netblock_collection(netblock_collection_id);
--- consider FK property and person
+	ADD CONSTRAINT fk_property_pv_nblkcol_id
+	FOREIGN KEY (property_value_nblk_coll_id) REFERENCES netblock_collection(netblock_collection_id);
+-- consider FK property and account
 ALTER TABLE property
-	ADD CONSTRAINT fk_property_person_id
-	FOREIGN KEY (person_id) REFERENCES person(person_id);
+	ADD CONSTRAINT fk_property_acctid
+	FOREIGN KEY (account_id) REFERENCES account(account_id);
 -- consider FK property and layer2_network
 -- Skipping this FK since table does not exist yet
 --ALTER TABLE property
 --	ADD CONSTRAINT fk_prop_l2netid
 --	FOREIGN KEY (layer2_network_id) REFERENCES layer2_network(layer2_network_id);
 
--- consider FK property and val_property
+-- consider FK property and person
 ALTER TABLE property
-	ADD CONSTRAINT fk_property_nmtyp
-	FOREIGN KEY (property_name, property_type) REFERENCES val_property(property_name, property_type);
--- consider FK property and site
-ALTER TABLE property
-	ADD CONSTRAINT fk_property_site_code
-	FOREIGN KEY (site_code) REFERENCES site(site_code);
--- consider FK property and account
-ALTER TABLE property
-	ADD CONSTRAINT fk_property_acctid
-	FOREIGN KEY (account_id) REFERENCES account(account_id);
+	ADD CONSTRAINT fk_property_person_id
+	FOREIGN KEY (person_id) REFERENCES person(person_id);
 -- consider FK property and val_password_type
 ALTER TABLE property
 	ADD CONSTRAINT fk_property_pval_pwdtyp
 	FOREIGN KEY (property_value_password_type) REFERENCES val_password_type(password_type);
+-- consider FK property and site
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_site_code
+	FOREIGN KEY (site_code) REFERENCES site(site_code);
+-- consider FK property and val_property
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_nmtyp
+	FOREIGN KEY (property_name, property_type) REFERENCES val_property(property_name, property_type);
+-- consider FK property and company
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_compid
+	FOREIGN KEY (company_id) REFERENCES company(company_id);
 -- consider FK property and service_environment_collection
 ALTER TABLE property
 	ADD CONSTRAINT fk_prop_svc_env_coll_id
@@ -2110,52 +2149,42 @@ ALTER TABLE property
 ALTER TABLE property
 	ADD CONSTRAINT fk_property_devcolid
 	FOREIGN KEY (device_collection_id) REFERENCES device_collection(device_collection_id);
--- consider FK property and operating_system
-ALTER TABLE property
-	ADD CONSTRAINT fk_property_osid
-	FOREIGN KEY (operating_system_id) REFERENCES operating_system(operating_system_id);
--- consider FK property and sw_package
-ALTER TABLE property
-	ADD CONSTRAINT fk_property_pval_swpkgid
-	FOREIGN KEY (property_value_sw_package_id) REFERENCES sw_package(sw_package_id);
--- consider FK property and account_collection
-ALTER TABLE property
-	ADD CONSTRAINT fk_property_acct_col
-	FOREIGN KEY (account_collection_id) REFERENCES account_collection(account_collection_id);
--- consider FK property and account_realm
-ALTER TABLE property
-	ADD CONSTRAINT fk_property_acctrealmid
-	FOREIGN KEY (account_realm_id) REFERENCES account_realm(account_realm_id);
 -- consider FK property and dns_domain
 ALTER TABLE property
 	ADD CONSTRAINT fk_property_dnsdomid
 	FOREIGN KEY (dns_domain_id) REFERENCES dns_domain(dns_domain_id);
--- consider FK property and token_collection
-ALTER TABLE property
-	ADD CONSTRAINT fk_property_pval_tokcolid
-	FOREIGN KEY (property_value_token_col_id) REFERENCES token_collection(token_collection_id);
--- consider FK property and company
-ALTER TABLE property
-	ADD CONSTRAINT fk_property_compid
-	FOREIGN KEY (company_id) REFERENCES company(company_id);
--- consider FK property and company
-ALTER TABLE property
-	ADD CONSTRAINT fk_property_pval_compid
-	FOREIGN KEY (property_value_company_id) REFERENCES company(company_id);
--- consider FK property and account_collection
-ALTER TABLE property
-	ADD CONSTRAINT fk_property_pval_acct_colid
-	FOREIGN KEY (property_value_account_coll_id) REFERENCES account_collection(account_collection_id);
 -- consider FK property and dns_domain
 ALTER TABLE property
 	ADD CONSTRAINT fk_property_pval_dnsdomid
 	FOREIGN KEY (property_value_dns_domain_id) REFERENCES dns_domain(dns_domain_id);
--- consider FK property and layer3_network
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_prop_l3netid
---	FOREIGN KEY (layer3_network_id) REFERENCES layer3_network(layer3_network_id);
-
+-- consider FK property and operating_system
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_osid
+	FOREIGN KEY (operating_system_id) REFERENCES operating_system(operating_system_id);
+-- consider FK property and account_collection
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_pval_acct_colid
+	FOREIGN KEY (property_value_account_coll_id) REFERENCES account_collection(account_collection_id);
+-- consider FK property and token_collection
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_pval_tokcolid
+	FOREIGN KEY (property_value_token_col_id) REFERENCES token_collection(token_collection_id);
+-- consider FK property and account_realm
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_acctrealmid
+	FOREIGN KEY (account_realm_id) REFERENCES account_realm(account_realm_id);
+-- consider FK property and account_collection
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_acct_col
+	FOREIGN KEY (account_collection_id) REFERENCES account_collection(account_collection_id);
+-- consider FK property and netblock_collection
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_nblk_coll_id
+	FOREIGN KEY (netblock_collection_id) REFERENCES netblock_collection(netblock_collection_id);
+-- consider FK property and company
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_pval_compid
+	FOREIGN KEY (property_value_company_id) REFERENCES company(company_id);
 
 -- TRIGGERS
 CREATE TRIGGER trigger_validate_property BEFORE INSERT OR UPDATE ON property FOR EACH ROW EXECUTE PROCEDURE validate_property();
@@ -2167,8 +2196,10 @@ ALTER SEQUENCE property_property_id_seq
 	 OWNED BY property.property_id;
 DROP TABLE IF EXISTS property_v57;
 DROP TABLE IF EXISTS audit.property_v57;
--- DONE DEALING WITH TABLE property [4210267]
+-- DONE DEALING WITH TABLE property [4352444]
 --------------------------------------------------------------------
+
+
 --------------------------------------------------------------------
 -- DEALING WITH TABLE vlan_range [4204396]
 
@@ -3258,9 +3289,6 @@ CREATE TRIGGER trigger_device_one_location_validate BEFORE INSERT OR UPDATE ON d
 
 -- XXX - may need to include trigger function
 CREATE TRIGGER trigger_verify_device_voe BEFORE INSERT OR UPDATE ON device FOR EACH ROW EXECUTE PROCEDURE verify_device_voe();
-
--- XXX - may need to include trigger function
-CREATE TRIGGER trigger_device_update_location_fix BEFORE UPDATE OF device_type_id ON device FOR EACH ROW EXECUTE PROCEDURE device_update_location_fix();
 
 -- XXX - may need to include trigger function
 CREATE TRIGGER trigger_delete_per_device_device_collection BEFORE DELETE ON device FOR EACH ROW EXECUTE PROCEDURE delete_per_device_device_collection();
@@ -5712,6 +5740,7 @@ DROP FUNCTION IF EXISTS perform_audit_secondary_netblock (  );
 DROP FUNCTION IF EXISTS perform_audit_val_layer2_encapsulation_type (  );
 DROP FUNCTION IF EXISTS perform_audit_vlan_range (  );
 DROP FUNCTION IF EXISTS update_dns_zone (  );
+
 -- Changed function
 SELECT schema_support.save_grants_for_replay('jazzhands', 'validate_property');
 CREATE OR REPLACE FUNCTION jazzhands.validate_property()
@@ -5776,6 +5805,10 @@ BEGIN
 				(account_collection_Id = NEW.account_collection_Id)) AND
 			((netblock_collection_Id IS NULL AND NEW.netblock_collection_Id IS NULL) OR
 				(netblock_collection_Id = NEW.netblock_collection_Id)) AND
+			((layer2_network_id IS NULL AND NEW.layer2_network_id IS NULL) OR
+				(layer2_network_id = NEW.layer2_network_id)) AND
+			((layer3_network_id IS NULL AND NEW.layer3_network_id IS NULL) OR
+				(layer3_network_id = NEW.layer3_network_id)) AND
 			((person_id IS NULL AND NEW.Person_id IS NULL) OR
 				(Person_Id = NEW.person_id))
 			;
@@ -5813,10 +5846,16 @@ BEGIN
 				(Person_Id = NEW.Person_Id)) AND
 			((Account_Id IS NULL AND NEW.Account_Id IS NULL) OR
 				(Account_Id = NEW.Account_Id)) AND
+			((Account_Id IS NULL AND NEW.Account_Id IS NULL) OR
+				(Account_Id = NEW.Account_Id)) AND
 			((Account_Realm_id IS NULL AND NEW.Account_Realm_id IS NULL) OR
 				(Account_Realm_id = NEW.Account_Realm_id)) AND
 			((account_collection_Id IS NULL AND NEW.account_collection_Id IS NULL) OR
 				(account_collection_Id = NEW.account_collection_Id)) AND
+			((layer2_network_id IS NULL AND NEW.layer2_network_id IS NULL) OR
+				(layer2_network_id = NEW.layer2_network_id)) AND
+			((layer3_network_id IS NULL AND NEW.layer3_network_id IS NULL) OR
+				(layer3_network_id = NEW.layer3_network_id)) AND
 			((netblock_collection_Id IS NULL AND NEW.netblock_collection_Id IS NULL) OR
 				(netblock_collection_Id = NEW.netblock_collection_Id));
 
@@ -6117,6 +6156,30 @@ BEGIN
 	ELSIF v_prop.Permit_account_collection_Id = 'PROHIBITED' THEN
 			IF NEW.account_collection_Id IS NOT NULL THEN
 				RAISE 'account_collection_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_layer2_network_id = 'REQUIRED' THEN
+			IF NEW.layer2_network_id IS NULL THEN
+				RAISE 'layer2_network_id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_layer2_network_id = 'PROHIBITED' THEN
+			IF NEW.layer2_network_id IS NOT NULL THEN
+				RAISE 'layer2_network_id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_layer3_network_id = 'REQUIRED' THEN
+			IF NEW.layer3_network_id IS NULL THEN
+				RAISE 'layer3_network_id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_layer3_network_id = 'PROHIBITED' THEN
+			IF NEW.layer3_network_id IS NOT NULL THEN
+				RAISE 'layer3_network_id is prohibited.'
 					USING ERRCODE = 'invalid_parameter_value';
 			END IF;
 	END IF;
@@ -7829,8 +7892,12 @@ CREATE CONSTRAINT TRIGGER trigger_netblock_collection_member_enforce AFTER INSER
 CREATE CONSTRAINT TRIGGER trigger_service_environment_coll_hier_enforce AFTER INSERT OR UPDATE ON service_environment_coll_hier DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE PROCEDURE service_environment_coll_hier_enforce();
 CREATE CONSTRAINT TRIGGER trigger_service_environment_collection_member_enforce AFTER INSERT OR UPDATE ON svc_environment_coll_svc_env DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE PROCEDURE service_environment_collection_member_enforce();
 CREATE CONSTRAINT TRIGGER trigger_token_collection_member_enforce AFTER INSERT OR UPDATE ON token_collection_token DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE PROCEDURE token_collection_member_enforce();
+CREATE CONSTRAINT TRIGGER trigger_token_collection_hier_enforce AFTER INSERT OR UPDATE ON token_collection_hier DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE PROCEDURE token_collection_hier_enforce();
 
 CREATE INDEX xif5chassis_location ON chassis_location USING btree (module_device_type_id, chassis_device_type_id, device_type_module_name);
+
+DROP TRIGGER IF EXISTS trigger_device_update_location_fix ON device;
+drop function if exists device_update_location_fix();
 
 -- Random clean up of regrant/recreate
 delete from __recreate where schema = 'netblock_utils' and object = 'find_best_parent_id';
