@@ -33,6 +33,8 @@ Invoked:
 	netblock_utils.find_best_parent_id
 */
 
+select now();
+
 \set ON_ERROR_STOP
 SELECT schema_support.begin_maintenance();
 
@@ -7944,3 +7946,5 @@ SELECT schema_support.replay_object_recreates();
 SELECT schema_support.replay_saved_grants();
 
 SELECT schema_support.end_maintenance();
+
+select now();
