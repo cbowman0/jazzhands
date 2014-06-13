@@ -655,7 +655,7 @@ insert into val_property
 	permit_account_collection_id, permit_device_collection_id, 
 	property_data_type
 ) values (
-	'UnixGroupMemberOverride', 'MclassUnixProp', 'N', 
+	'UnixGroupMemberOverride', 'MclassUnixProp', 'Y', 
 	'REQUIRED', 'REQUIRED', 
 	'account_collection_id'
 );
