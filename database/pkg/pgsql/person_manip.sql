@@ -19,8 +19,22 @@
  * $Id$
  */
 
-drop schema if exists person_manip cascade;
-create schema person_manip authorization jazzhands;
+-- Create schema if it does not exist, do nothing otherwise.
+DO $$
+DECLARE
+	_tal INTEGER;
+BEGIN
+	select count(*)
+	from pg_catalog.pg_namespace
+	into _tal
+	where nspname = 'person_manip';
+	IF _tal = 0 THEN
+		DROP SCHEMA IF EXISTS person_manip;
+		CREATE SCHEMA person_manip AUTHORIZATION jazzhands;
+	END IF;
+END;
+$$;
+
 
 -------------------------------------------------------------------
 -- returns the Id tag for CM
@@ -155,7 +169,7 @@ CREATE OR REPLACE FUNCTION person_manip.add_user(
 	is_manager VARCHAR(1) 				DEFAULT 'N',
 	is_exempt VARCHAR(1) 				DEFAULT 'Y',
 	is_full_time VARCHAR(1) 			DEFAULT 'Y',
-	employee_id INTEGER DEFAULT NULL,
+	employee_id TEXT 				DEFAULT NULL,
 	hire_date DATE DEFAULT NULL,
 	termination_date DATE DEFAULT NULL,
 	job_title VARCHAR DEFAULT NULL,
@@ -278,7 +292,7 @@ CREATE OR REPLACE FUNCTION person_manip.add_person(
 	is_manager VARCHAR(1),
 	is_exempt VARCHAR(1),
 	is_full_time VARCHAR(1),
-	employee_id INTEGER,
+	employee_id VARCHAR,
 	hire_date DATE,
 	termination_date DATE,
 	person_company_relation VARCHAR,
@@ -330,7 +344,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 --
 -- THIS FUNCTION IS DEPRECATED AND WILL GO AWAY.  Call add_person instead
 --
-CREATE OR REPLACE FUNCTION person_manip.add_account_non_person(
+CREATE OR REPLACE FUNCTION person_manip.add_user_non_person(
 	_company_id integer, 
 	_account_status character varying, 
 	_login character varying, 

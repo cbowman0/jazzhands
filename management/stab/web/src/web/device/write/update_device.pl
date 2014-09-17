@@ -344,7 +344,6 @@ sub do_update_device {
 
 	if ($retire_device) {
 		return retire_device( $stab, $devid );
-
 		# this does not return.
 	}
 
@@ -577,7 +576,7 @@ sub reconcile_dev_functions {
 sub update_location {
 	my ( $stab, $devid ) = @_;
 
-	my $locid = $stab->cgi_get_ids('LOCATION_ID');
+	my $locid = $stab->cgi_get_ids('RACK_LOCATION_ID');
 
 	my $numchanges = 0;
 	my $rackid = $stab->cgi_parse_param( 'LOCATION_RACK_ID', $locid );
@@ -587,8 +586,6 @@ sub update_location {
 
 	my $ru   = $stab->cgi_parse_param( 'LOCATION_RU_OFFSET', $locid );
 	my $side = $stab->cgi_parse_param( 'LOCATION_RACK_SIDE', $locid );
-	my $interoff =
-	  $stab->cgi_parse_param( 'LOCATION_INTER_DEV_OFFSET', $locid );
 
 	my $curloc = $stab->get_location_from_devid( $devid, 1 );
 
@@ -608,28 +605,22 @@ sub update_location {
 		$curloc = undef;
 	}
 
-	$interoff = 0 if ( !$interoff );
-
 	if ( !defined($ru) || $ru !~ /^-?\d+$/ ) {
 		$stab->error_return('U Offset must be a number.');
 	}
-	if ( $interoff !~ /^\d+$/ ) {
-		$stab->error_return('inter device offset must be a number.');
-	}
 
 	my %newloc = (
-		LOCATION_ID                 => $locid,
+		RACK_LOCATION_ID            => $locid,
 		RACK_ID                     => $rackid,
 		RACK_U_OFFSET_OF_DEVICE_TOP => $ru,
 		RACK_SIDE                   => $side,
-		INTER_DEVICE_OFFSET         => $interoff,
 	);
 	my $newloc = \%newloc;
 
 	#
 	# no location previously existed, lets set a new one!
 	#
-	if ( !$curloc || !defined( $curloc->{ _dbx('LOCATION_ID') } ) ) {
+	if ( !$curloc || !defined( $curloc->{ _dbx('RACK_LOCATION_ID') } ) ) {
 		return $stab->add_location_to_dev( $devid, $newloc );
 	}
 
@@ -640,7 +631,7 @@ sub update_location {
 	if (
 		$tally
 		&& !$stab->run_update_from_hash(
-			"LOCATION", "LOCATION_ID", $locid, $diffs
+			"RACK_LOCATION", "RACK_LOCATION_ID", $locid, $diffs
 		)
 	  )
 	{
@@ -2392,20 +2383,6 @@ sub delete_device_connections {
 	1;
 }
 
-sub delete_device_collection_membership {
-	my ( $stab, $devid ) = @_;
-
-	my $q = qq{
-		delete from device_collection_device where device_id = ?
-	};
-	my $sth = $stab->prepare($q) || $stab->return_db_err;
-
-	my $numchanges = $sth->execute($devid) || $stab->return_db_err($sth);
-
-	$sth->finish;
-	$numchanges;
-}
-
 sub delete_device_phys_ports {
 	my ( $stab, $devid, $limit ) = @_;
 
@@ -2424,6 +2401,7 @@ sub delete_device_phys_ports {
 	1;
 }
 
+# this can probably die since retirement is in a stored procedure now
 sub delete_device_interfaces {
 	my ( $stab, $devid ) = @_;
 
@@ -2506,50 +2484,18 @@ sub delete_device_power {
 sub retire_device {
 	my ( $stab, $devid ) = @_;
 
-	my $dbdevice = $stab->get_dev_from_devid($devid);
-	if ( !$dbdevice ) {
-		$stab->error_return("Device no longer exists.");
-	}
-	my $numnotes = $stab->get_num_dev_notes($devid);
+	my $sth = $stab->prepare(qq{
+		SELECT	device_utils.retire_device(
+				in_device_id := ?
+			);
+	}) || die $stab->return_db_err($stab);
 
-	# connections/phys_ports can probably be rolled into each other
-	# once there's no physical port manipulation in the network
-	# interface triggers.
-	delete_device_connections( $stab, $devid );
-	delete_device_interfaces( $stab, $devid );
-	delete_device_phys_ports( $stab, $devid );
-	delete_device_power( $stab, $devid );
-
-	delete_device_collection_membership( $stab, $devid );
-
-	my (@removeqs) = ( "SELECT device_utils.retire_device_ancillary(?);", );
-
-	my $devtoo = 0;
-	if (
-		(
-			  !$dbdevice->{ _dbx('SERIAL_NUMBER') }
-			|| $dbdevice->{ _dbx('SERIAL_NUMBER') } =~ m,^n/a$,i
-			|| $dbdevice->{ _dbx('SERIAL_NUMBER') } =~
-			m,^Not-Applicable,i
-		)
-		&& !$numnotes
-	  )
-	{
-		push( @removeqs, "delete from device where device_id = ?" );
-		$devtoo = 1;
-	} else {
-		push( @removeqs,
-"update device set device_name = NULL, service_environment = 'unallocated', device_status = 'removed', voe_symbolic_track_id = NULL where device_id = ?"
-		);
-	}
-
-	foreach my $q (@removeqs) {
-		my $sth = $stab->prepare($q) || $stab->return_db_err;
-		$sth->execute($devid) || $stab->return_db_err($sth);
-	}
+	$sth->execute($devid) || $stab->return_db_err($sth);
+	my ($stillhere) = ($sth->fetchrow_array);
+	$sth->finish;
 
 	my ( $url, $msg );
-	if ($devtoo) {
+	if (! $stillhere) {
 		$url = "../";
 		$msg = "Device Removed";
 	} else {

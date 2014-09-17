@@ -116,26 +116,93 @@ sub guess_parent_netblock_id {
 	}
 
 	# select is needed for postgres 9.1 to optimize right.
-	my $q = qq {
+	my $q1 = qq {
 		select  Netblock_Id,
-			net_manip.inet_dbtop(ip_address) as IP,
-			ip_address
+			host(ip_address) as IP,
+			ip_address, masklen(ip_address) as netmask_bits,
+			family(ip_address) as ip_family
 		  from  netblock
 		  where	netblock_id in (
 			SELECT netblock_utils.find_best_parent_id(
-				in_IpAddress := net_manip.inet_ptodb(:ip), 
+				in_IpAddress := :ip, 
 				in_ip_universe_id := 0,
 				in_netblock_type := 'default', 
 				in_is_single_address := :sing)
 			)
 	};
+	my $q2 = qq {
+		select  Netblock_Id,
+			host(ip_address) as IP,
+			ip_address, masklen(ip_address) as netmask_bits,
+			family(ip_address) as ip_family
+		  from  netblock
+		  where	netblock_id in (
+			SELECT netblock_utils.find_best_parent_id(
+				in_IpAddress := :ip, 
+				in_ip_universe_id := 0,
+				in_netblock_type := 'default', 
+				in_is_single_address := :sing,
+				in_fuzzy_can_subnet := true )
+			)
+	};
+	my $q3 = qq {
+		select  Netblock_Id,
+			host(ip_address) as IP,
+			ip_address, masklen(ip_address) as netmask_bits,
+			family(ip_address) as ip_family
+		  from  netblock
+		  where	netblock_id in (
+			SELECT netblock_utils.find_best_parent_id(
+				in_IpAddress := :ip, 
+				in_ip_universe_id := 0,
+				in_netblock_type := 'default', 
+				in_is_single_address := :sing,
+				in_fuzzy_can_subnet := true,
+				can_fix_can_subnet := true)
+			)
+	};
 
-	my $sth = $self->prepare($q) || $self->return_db_err($self);
+	# Logic is - check for a parent..   if found, return.
+	# If not found, check for a parent and do not care about
+	# can_subnet.  If found, and its an ipv6 block >= /64 or its an
+	# ipv4 block >= /24, then it the routine is called again, switching
+	# the network to not be subnetable.  note I'm using the > literally
+	# not in terms of "bigger" or "smaller" block.  ugh.
+
+	my $sth = $self->prepare($q1) || $self->return_db_err($self);
 	$sth->bind_param( ':ip',   $in_ip ) || die $sth->errstr;
 	$sth->bind_param( ':sing', $sing )  || die $sth->errstr;
 	$sth->execute || $self->return_db_err($sth);
 	my $rv = $sth->fetchrow_hashref;
 	$sth->finish;
+
+	if(!$rv) {
+		$sth = $self->prepare($q2) || $self->return_db_err($self);
+		$sth->bind_param( ':ip',   $in_ip ) || die $sth->errstr;
+		$sth->bind_param( ':sing', $sing )  || die $sth->errstr;
+		$sth->execute || $self->return_db_err($sth);
+		$rv = $sth->fetchrow_hashref;
+		$sth->finish;
+		my $bits = $rv->{ _dbx('netmask_bits') };
+		if($rv->{ _dbx('ip_family')} eq '6') {
+			if( $bits < 64) {
+				return undef;
+			}
+		} elsif($rv->{ _dbx('ip_family')} eq '4') {
+			if($bits < 24) {
+				return undef;
+			}
+		}
+		if($rv) {
+			$sth = $self->prepare($q3) || $self->return_db_err($self);
+			$sth->bind_param( ':ip',   $in_ip ) || die $sth->errstr;
+			$sth->bind_param( ':sing', $sing )  || die $sth->errstr;
+			$sth->execute || $self->return_db_err($sth);
+			$rv = $sth->fetchrow_hashref;
+			$sth->finish;
+		}
+	}
+
 	$rv;
 }
 
@@ -241,7 +308,7 @@ sub add_netblock {
 	};
 
 	for my $f (
-		'is_single_address',
+		'is_single_address', 'netblock_type',
 		'can_subnet',      'parent_netblock_id',
 		'netblock_status', 'nic_id',
 		'nic_company_id',  'ip_universe_id',
@@ -333,15 +400,14 @@ sub get_location_from_devid {
 
 	my $q = qq{
 		select
-			l.LOCATION_ID,
+			l.RACK_LOCATION_ID,
 			l.RACK_ID as LOCATION_RACK_ID,
 			l.RACK_U_OFFSET_OF_DEVICE_TOP as LOCATION_RU_OFFSET,
 			l.RACK_SIDE as LOCATION_RACK_SIDE,
-			l.INTER_DEVICE_OFFSET as LOCATION_INTER_DEV_OFFSET,
 			r.SITE_CODE as RACK_SITE_CODE
-		  from  location l
-			inner join device d on
-				d.location_id = l.location_id
+		  from  rack_location l
+			inner join device d
+				using (rack_location_id)
 			inner join rack r on
 				r.rack_id = l.rack_id
 		 where  d.device_id = ?
@@ -543,7 +609,6 @@ sub add_location_to_dev {
 		rack_u_offset_of_device_top =>
 		  $loc->{ _dbx('RACK_U_OFFSET_OF_DEVICE_TOP') },
 		rack_side           => $loc->{ _dbx('RACK_SIDE') },
-		inter_device_offset => $loc->{ _dbx('INTER_DEVICE_OFFSET') },
 	};
 
 	my $numchanges = 0;
@@ -551,7 +616,7 @@ sub add_location_to_dev {
 	if (
 		!(
 			$numchanges += $self->DBInsert(
-				table  => 'location',
+				table  => 'rack_location',
 				hash   => $new,
 				errors => \@errs
 			)
@@ -561,11 +626,11 @@ sub add_location_to_dev {
 		$self->error_return( join( " ", @errs ) );
 	}
 
-	my $locid = $new->{ _dbx('LOCATION_ID') };
+	my $locid = $new->{ _dbx('RACK_LOCATION_ID') };
 
 	my ($dq) = qq{
 		update	device
-		   set	location_id = :locid
+		   set	rack_location_id = :locid
 		  where	device_id = :devid
 	};
 	my $dsth = $self->prepare($dq) || $self->return_db_err();

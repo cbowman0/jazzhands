@@ -1,3 +1,18 @@
+-- Copyright (c) 2013-2014, Todd M. Kover
+-- All rights reserved.
+--
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--       http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+
 -- Copyright (c) 2012-2014 Matthew Ragan
 -- Copyright (c) 2005-2010, Vonage Holdings Corp.
 -- All rights reserved.
@@ -28,6 +43,8 @@
 -- Name: id_tag(); Type: FUNCTION; Schema: netblock_utils; Owner: jazzhands
 --
 
+drop schema if exists netblock_utils cascade;
+create schema netblock_utils authorization jazzhands;
 
 -- Create schema if it does not exist, do nothing otherwise.
 DO $$
@@ -44,15 +61,6 @@ BEGIN
         END IF;
 END;
 $$;
-
-
-CREATE OR REPLACE FUNCTION netblock_utils.id_tag() RETURNS character varying
-	LANGUAGE plpgsql
-	AS $_$
-BEGIN
-	RETURN('<-- $Id -->');
-END;
-$_$;
 
 CREATE OR REPLACE FUNCTION netblock_utils.find_best_parent_id(
 	in_IpAddress jazzhands.netblock.ip_address%type,
@@ -74,7 +82,7 @@ BEGIN
 	select  Netblock_Id
 	  into	par_nbid
 	  from  ( select Netblock_Id, Ip_Address
-		    from netblock
+		    from jazzhands.netblock
 		   where
 		   	in_IpAddress <<= ip_address
 		    and is_single_address = 'N'
@@ -94,11 +102,10 @@ BEGIN
 	) subq LIMIT 1;
 
 	IF par_nbid IS NULL AND in_is_single_address = 'Y' AND in_fuzzy_can_subnet THEN
-		RAISE NOTICE 'oh, yeah...';
 		select  Netblock_Id
 		  into	par_nbid
 		  from  ( select Netblock_Id, Ip_Address, Netmask_Bits
-			    from netblock
+			    from jazzhands.netblock
 			   where
 			   	in_IpAddress <<= ip_address
 			    and is_single_address = 'N'
@@ -111,14 +118,14 @@ BEGIN
 				and (in_netblock_id IS NULL OR
 					netblock_id != in_netblock_id)
 				and netblock_id not IN (
-					select parent_netblock_id from netblock 
+					select parent_netblock_id from jazzhands.netblock 
 						where is_single_address = 'N'
 						and parent_netblock_id is not null
 				)
 			order by masklen(ip_address) desc
 		) subq LIMIT 1;
 
-		IF can_fix_can_subnet AND par_nbd IS NOT NULL THEN
+		IF can_fix_can_subnet AND par_nbid IS NOT NULL THEN
 			UPDATE netblock SET can_subnet = 'N' where netblock_id = par_nbid;
 		END IF;
 	END IF;
@@ -257,19 +264,23 @@ CREATE OR REPLACE FUNCTION netblock_utils.find_free_netblock(
 	parent_netblock_id		jazzhands.netblock.netblock_id%TYPE,
 	netmask_bits			integer DEFAULT NULL,
 	single_address			boolean DEFAULT false,
-	allocate_from_bottom	boolean DEFAULT true
+	allocation_method		text DEFAULT NULL,
+	desired_ip_address		inet DEFAULT NULL,
+	rnd_masklen_threshold   integer DEFAULT 110,
+	rnd_max_count           integer DEFAULT 1024
 ) RETURNS TABLE (
 	ip_address		inet,
 	netblock_type	jazzhands.netblock.netblock_type%TYPE,
 	ip_universe_id	jazzhands.netblock.ip_universe_id%TYPE
 ) AS $$
 BEGIN
-	RETURN QUERY SELECT netblock_utils.find_free_netblocks(
-		parent_netblock_id := parent_netblock_id,
-		netmask_bits := netmask_bits,
-		single_address := single_address,
-		allocate_from_bottom := allocate_from_bottom,
-		max_addresses := 1);
+	RETURN QUERY SELECT * FROM netblock_utils.find_free_netblocks(
+			parent_netblock_id := parent_netblock_id,
+			netmask_bits := netmask_bits,
+			single_address := single_address,
+			allocate_from_bottom := allocate_from_bottom,
+			desired_ip_address := desired_ip_address,
+			max_addresses := 1);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -277,19 +288,23 @@ CREATE OR REPLACE FUNCTION netblock_utils.find_free_netblocks(
 	parent_netblock_id		jazzhands.netblock.netblock_id%TYPE,
 	netmask_bits			integer DEFAULT NULL,
 	single_address			boolean DEFAULT false,
-	allocate_from_bottom	boolean DEFAULT true,
-	max_addresses			integer DEFAULT 1024
+	allocation_method		text DEFAULT NULL,
+	max_addresses			integer DEFAULT 1024,
+	desired_ip_address		inet DEFAULT NULL,
+	rnd_masklen_threshold   integer DEFAULT 110,
+	rnd_max_count           integer DEFAULT 1024
 ) RETURNS TABLE (
 	ip_address		inet,
 	netblock_type	jazzhands.netblock.netblock_type%TYPE,
 	ip_universe_id	jazzhands.netblock.ip_universe_id%TYPE
 ) AS $$
 BEGIN
-	RETURN QUERY SELECT netblock_utils.find_free_netblocks(
+	RETURN QUERY SELECT * FROM netblock_utils.find_free_netblocks(
 		parent_netblock_list := ARRAY[parent_netblock_id],
 		netmask_bits := netmask_bits,
 		single_address := single_address,
-		allocate_from_bottom := allocate_from_bottom,
+		allocation_method := allocation_method,
+		desired_ip_address := desired_ip_address,
 		max_addresses := max_addresses);
 END;
 $$ LANGUAGE plpgsql;
@@ -298,8 +313,11 @@ CREATE OR REPLACE FUNCTION netblock_utils.find_free_netblocks(
 	parent_netblock_list	integer[],
 	netmask_bits			integer DEFAULT NULL,
 	single_address			boolean DEFAULT false,
-	allocate_from_bottom	boolean DEFAULT true,
-	max_addresses			integer DEFAULT 1024
+	allocation_method		text DEFAULT NULL,
+	max_addresses			integer DEFAULT 1024,
+	desired_ip_address		inet DEFAULT NULL,
+	rnd_masklen_threshold   integer DEFAULT 110,
+	rnd_max_count           integer DEFAULT 1024
 ) RETURNS TABLE (
 	ip_address		inet,
 	netblock_type	jazzhands.netblock.netblock_type%TYPE,
@@ -307,18 +325,65 @@ CREATE OR REPLACE FUNCTION netblock_utils.find_free_netblocks(
 ) AS $$
 DECLARE
 	parent_nbid		jazzhands.netblock.netblock_id%TYPE;
-	step			integer;
-	nb_size			integer;
-	offset			integer;
 	netblock_rec	jazzhands.netblock%ROWTYPE;
+	inet_list		inet[];
 	current_ip		inet;
+	saved_method	text;
 	min_ip			inet;
 	max_ip			inet;
 	matches			integer;
+	rnd_matches		integer;
+	max_rnd_value	bigint;
+	rnd_value		bigint;
 	family_bits		integer;
 BEGIN
 	matches := 0;
+	saved_method = allocation_method;
+
+	IF allocation_method IS NOT NULL AND allocation_method
+			NOT IN ('top', 'bottom', 'random', 'default') THEN
+		RAISE 'address_type must be one of top, bottom, random, or default'
+		USING ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	--
+	-- Sanitize masklen input.  This is a little complicated.
+	--
+	-- If a single address is desired, we always use a /32 or /128
+	-- in the parent loop and everything else is ignored
+	--
+	-- Otherwise, if netmask_bits is passed, that wins, otherwise
+	-- the netmask of whatever is passed with desired_ip_address wins
+	--
+	-- If none of these are the case, then things are wrong and we
+	-- bail
+	--
+
+	IF NOT single_address THEN 
+		IF desired_ip_address IS NOT NULL AND netmask_bits IS NULL THEN
+			netmask_bits := masklen(desired_ip_address);
+		ELSIF desired_ip_address IS NOT NULL AND 
+				netmask_bits IS NOT NULL THEN
+			desired_ip_address := set_masklen(desired_ip_address,
+				netmask_bits);
+		END IF;
+		IF netmask_bits IS NULL THEN
+			RAISE EXCEPTION 'netmask_bits must be set'
+			USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+		IF allocation_method = 'random' THEN
+			RAISE EXCEPTION 'random netblocks may only be returned for single addresses'
+			USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
 	FOREACH parent_nbid IN ARRAY parent_netblock_list LOOP
+		rnd_matches := 0;
+		--
+		-- Restore this, because we may have overrridden it for a previous
+		-- block
+		--
+		allocation_method = saved_method;
 		SELECT 
 			* INTO netblock_rec
 		FROM
@@ -333,18 +398,79 @@ BEGIN
 		family_bits := 
 			(CASE family(netblock_rec.ip_address) WHEN 4 THEN 32 ELSE 128 END);
 
-		IF single_address THEN 
-			netmask_bits := family_bits;
-		ELSIF netmask_bits <= masklen(netblock_rec.ip_address) THEN
-			RAISE EXCEPTION 'netmask_bits must be larger than the netblock (%)',
-				masklen(netblock_rec.ip_address);
+		-- If desired_ip_address is passed, then allocation_method is
+		-- irrelevant
+
+		IF desired_ip_address IS NOT NULL THEN
+			--
+			-- If the IP address is not the same family as the parent block,
+			-- we aren't going to find it
+			--
+			IF family(desired_ip_address) != 
+					family(netblock_rec.ip_address) THEN
+				CONTINUE;
+			END IF;
+			allocation_method := 'bottom';
 		END IF;
 
-		IF netmask_bits > family_bits
-			THEN
+		--
+		-- If allocation_method is 'default' or NULL, then use 'bottom'
+		-- unless it's for a single IPv6 address in a netblock larger than 
+		-- rnd_masklen_threshold
+		--
+		IF allocation_method IS NULL OR allocation_method = 'default' THEN
+			allocation_method := 
+				CASE WHEN 
+					single_address AND 
+					family(netblock_rec.ip_address) = 6 AND
+					masklen(netblock_rec.ip_address) <= rnd_masklen_threshold
+				THEN
+					'random'
+				ELSE
+					'bottom'
+				END;
+		END IF;
+
+		IF allocation_method = 'random' AND 
+				family_bits - masklen(netblock_rec.ip_address) < 2 THEN
+			-- Random allocation doesn't work if we don't have enough
+			-- bits to play with, so just do sequential.
+			allocation_method := 'bottom';
+		END IF;
+
+		IF single_address THEN 
+			netmask_bits := family_bits;
+			IF desired_ip_address IS NOT NULL THEN
+				desired_ip_address := set_masklen(desired_ip_address,
+					masklen(netblock_rec.ip_address));
+			END IF;
+		ELSIF netmask_bits <= masklen(netblock_rec.ip_address) THEN
+			-- If the netmask is not for a smaller netblock than this parent,
+			-- then bounce to the next one, because maybe it's larger
+			RAISE DEBUG
+				'netblock (%) is not larger than netmask_bits of % - skipping',
+				masklen(netblock_rec.ip_address),
+				netmask_bits;
+			CONTINUE;
+		END IF;
+
+		IF netmask_bits > family_bits THEN
 			RAISE EXCEPTION 'netmask_bits must be no more than % for netblock %',
 				family_bits,
 				netblock_rec.ip_address;
+		END IF;
+
+		--
+		-- Short circuit the check if we're looking for a specific address
+		-- and it's not in this netblock
+		--
+
+		IF desired_ip_address IS NOT NULL AND
+				NOT (desired_ip_address <<= netblock_rec.ip_address) THEN
+			RAISE DEBUG 'desired_ip_address % is not in netblock %',
+				desired_ip_address,
+				netblock_rec.ip_address;
+			CONTINUE;
 		END IF;
 
 		IF single_address AND netblock_rec.can_subnet = 'Y' THEN
@@ -357,49 +483,73 @@ BEGIN
 				netblock_rec.netblock_id;
 		END IF;
 
-		-- It would be nice to be able to use generate_series here, but
-		-- that could get really huge
+		RAISE DEBUG 'Searching netblock % (%) using the % allocation method',
+			netblock_rec.netblock_id,
+			netblock_rec.ip_address,
+			allocation_method;
 
-		nb_size := 1 << ( family_bits - netmask_bits );
-		min_ip := netblock_rec.ip_address;
-		max_ip := min_ip + (1 << (family_bits - masklen(min_ip)));
-
-		IF allocate_from_bottom THEN
-			current_ip := set_masklen(netblock_rec.ip_address, netmask_bits);
+		IF desired_ip_address IS NOT NULL THEN
+			min_ip := desired_ip_address;
+			max_ip := desired_ip_address + 1;
 		ELSE
-			current_ip := set_masklen(max_ip, netmask_bits) - nb_size;
-			nb_size := -nb_size;
+			min_ip := netblock_rec.ip_address;
+			max_ip := broadcast(min_ip) + 1;
 		END IF;
 
-		RAISE DEBUG 'Searching netblock % (%)',
-			netblock_rec.netblock_id,
-			netblock_rec.ip_address;
+		IF allocation_method = 'top' THEN
+			current_ip := network(set_masklen(max_ip - 1, netmask_bits));
+		ELSIF allocation_method = 'random' THEN
+			max_rnd_value := (x'7fffffffffffffff'::bigint >> CASE 
+				WHEN family_bits - masklen(netblock_rec.ip_address) >= 63
+				THEN 0
+				ELSE 63 - (family_bits - masklen(netblock_rec.ip_address))
+				END) - 2;
+			-- random() appears to only do 32-bits, which is dumb
+			-- I'm pretty sure that all of the casts are not required here,
+			-- but better to make sure
+			current_ip := min_ip + 
+					((((random() * x'7fffffff'::bigint)::bigint << 32) + 
+					(random() * x'ffffffff'::bigint)::bigint + 1)
+					% max_rnd_value) + 1;
+		ELSE -- it's 'bottom'
+			current_ip := set_masklen(min_ip, netmask_bits);
+		END IF;
 
 		-- For single addresses, make the netmask match the netblock of the
 		-- containing block, and skip the network and broadcast addresses
+		-- We shouldn't need to skip for IPv6 addresses, but some things
+		-- apparently suck
 
 		IF single_address THEN
-			current_ip := set_masklen(current_ip, masklen(netblock_rec.ip_address));
-			IF family(netblock_rec.ip_address) = 4 AND
-					masklen(netblock_rec.ip_address) < 31 THEN
-				current_ip := current_ip + nb_size;
-				min_ip := min_ip - 1;
+			current_ip := set_masklen(current_ip, 
+				masklen(netblock_rec.ip_address));
+			--
+			-- If we're not allocating a single /31 or /32 for IPv4 or
+			-- /127 or /128 for IPv6, then we want to skip the all-zeros
+			-- and all-ones addresses
+			--
+			IF masklen(netblock_rec.ip_address) < (family_bits - 1) AND
+					desired_ip_address IS NULL THEN
+				current_ip := current_ip + 
+					CASE WHEN allocation_method = 'top' THEN -1 ELSE 1 END;
+				min_ip := min_ip + 1;
 				max_ip := max_ip - 1;
 			END IF;
 		END IF;
 
-		RAISE DEBUG 'Starting with IP address % with step of %',
+		RAISE DEBUG 'Starting with IP address % with step masklen of %',
 			current_ip,
-			nb_size;
+			netmask_bits;
 
 		WHILE (
 				current_ip >= min_ip AND
 				current_ip < max_ip AND
-				matches < max_addresses
+				matches < max_addresses AND
+				rnd_matches < rnd_max_count
 		) LOOP
 			RAISE DEBUG '   Checking netblock %', current_ip;
 
-			PERFORM * FROM netblock n WHERE
+			PERFORM * FROM jazzhands.netblock n WHERE
 				n.ip_universe_id = netblock_rec.ip_universe_id AND
 				n.netblock_type = netblock_rec.netblock_type AND
 				-- A block with the parent either contains or is contained
@@ -410,19 +560,195 @@ BEGIN
 				ELSE
 					(n.ip_address >>= current_ip OR current_ip >>= n.ip_address)
 				END;
-			IF NOT FOUND THEN
+			IF NOT FOUND AND (inet_list IS NULL OR
+					NOT (current_ip = ANY(inet_list))) THEN
 				find_free_netblocks.netblock_type :=
 					netblock_rec.netblock_type;
 				find_free_netblocks.ip_universe_id :=
 					netblock_rec.ip_universe_id;
 				find_free_netblocks.ip_address := current_ip;
 				RETURN NEXT;
+				inet_list := array_append(inet_list, current_ip);
 				matches := matches + 1;
+				-- Reset random counter if we found something
+				rnd_matches := 0;
+			ELSIF allocation_method = 'random' THEN
+				-- Increase random counter if we didn't find something
+				rnd_matches := rnd_matches + 1;
 			END IF;
 
-			current_ip := current_ip + nb_size;
+			-- Select the next IP address
+			current_ip := 
+				CASE WHEN single_address THEN
+					CASE 
+						WHEN allocation_method = 'bottom' THEN current_ip + 1
+						WHEN allocation_method = 'top' THEN current_ip - 1
+						ELSE min_ip + ((
+							((random() * x'7fffffff'::bigint)::bigint << 32) 
+							+ 
+							(random() * x'ffffffff'::bigint)::bigint + 1
+							) % max_rnd_value) + 1 
+					END
+				ELSE
+					CASE WHEN allocation_method = 'bottom' THEN 
+						network(broadcast(current_ip) + 1)
+					ELSE 
+						network(current_ip - 1)
+					END
+				END;
 		END LOOP;
 	END LOOP;
 	RETURN;
 END;
 $$ LANGUAGE 'plpgsql';
+
+
+CREATE OR REPLACE FUNCTION netblock_utils.list_unallocated_netblocks(
+	netblock_id		jazzhands.netblock.netblock_id%TYPE DEFAULT NULL,
+	ip_address		inet DEFAULT NULL,
+	ip_universe_id	integer DEFAULT 0,
+	netblock_type	text DEFAULT 'default'
+) RETURNS TABLE (
+	ip_addr			inet
+) AS $$
+DECLARE
+	ip_array		inet[];
+	netblock_rec	RECORD;
+	parent_nbid		jazzhands.netblock.netblock_id%TYPE;
+	family_bits		integer;
+	idx				integer;
+BEGIN
+	IF netblock_id IS NOT NULL THEN
+		SELECT * INTO netblock_rec FROM jazzhands.netblock n WHERE n.netblock_id = 
+			list_unallocated_netblocks.netblock_id;
+		IF NOT FOUND THEN
+			RAISE EXCEPTION 'netblock_id % not found', netblock_id;
+		END IF;
+		IF netblock_rec.is_single_address = 'Y' THEN
+			RETURN;
+		END IF;
+		ip_address := netblock_rec.ip_address;
+		ip_universe_id := netblock_rec.ip_universe_id;
+		netblock_type := netblock_rec.netblock_type;
+	ELSIF ip_address IS NULL THEN
+		RAISE EXCEPTION 'netblock_id or ip_address must be passed';
+	END IF;
+	SELECT ARRAY(
+		SELECT 
+			n.ip_address
+		FROM
+			netblock n
+		WHERE
+			n.ip_address <<= list_unallocated_netblocks.ip_address AND
+			n.ip_universe_id = list_unallocated_netblocks.ip_universe_id AND
+			n.netblock_type = list_unallocated_netblocks.netblock_type AND
+			is_single_address = 'N' AND
+			can_subnet = 'N'
+		ORDER BY
+			n.ip_address
+	) INTO ip_array;
+
+	IF array_length(ip_array, 1) IS NULL THEN
+		ip_addr := ip_address;
+		RETURN NEXT;
+		RETURN;
+	END IF;
+
+	ip_array := array_prepend(
+		list_unallocated_netblocks.ip_address - 1, 
+		array_append(
+			ip_array, 
+			broadcast(list_unallocated_netblocks.ip_address) + 1
+			));
+
+	idx := 1;
+	WHILE idx < array_length(ip_array, 1) LOOP
+		RETURN QUERY SELECT cin.ip_addr FROM
+			netblock_utils.calculate_intermediate_netblocks(ip_array[idx], ip_array[idx + 1]) cin;
+		idx := idx + 1;
+	END LOOP;
+
+	RETURN;
+END;
+$$ LANGUAGE 'plpgsql';
+
+CREATE OR REPLACE FUNCTION netblock_utils.calculate_intermediate_netblocks(
+	ip_block_1		inet DEFAULT NULL,
+	ip_block_2		inet DEFAULT NULL
+) RETURNS TABLE (
+	ip_addr			inet
+) AS $$
+DECLARE
+	current_nb		inet;
+	new_nb			inet;
+	min_addr		inet;
+	max_addr		inet;
+BEGIN
+	IF ip_block_1 IS NULL OR ip_block_2 IS NULL THEN
+		RAISE EXCEPTION 'Must specify both ip_block_1 and ip_block_2';
+	END IF;
+
+	IF family(ip_block_1) != family(ip_block_2) THEN
+		RAISE EXCEPTION 'families of ip_block_1 and ip_block_2 must match';
+	END IF;
+
+	-- Make sure these are network blocks
+	ip_block_1 := network(ip_block_1);
+	ip_block_2 := network(ip_block_2);
+
+	-- If the blocks are subsets of each other, then error
+
+	IF ip_block_1 <<= ip_block_2 OR ip_block_2 <<= ip_block_1 THEN
+		RAISE EXCEPTION 'netblocks intersect each other';
+	END IF;
+
+	-- Order the blocks correctly
+
+	IF ip_block_1 > ip_block_2 THEN
+		new_nb := ip_block_1;
+		ip_block_1 := ip_block_2;
+		ip_block_2 := new_nb;
+	END IF;
+
+	current_nb := ip_block_1;
+	max_addr := broadcast(ip_block_1);
+
+	-- Loop through bumping the netmask up and seeing if the destination block is in the new block
+	LOOP
+		new_nb := network(set_masklen(current_nb, masklen(current_nb) - 1));
+
+		-- If the block is in our new larger netblock, then exit this loop
+		IF (new_nb >>= ip_block_2) THEN
+			current_nb := broadcast(current_nb) + 1;
+			EXIT;
+		END IF;
+	
+		-- If the max address of the new netblock is larger than the last one, then it's empty
+		IF set_masklen(broadcast(new_nb), 32) > set_masklen(max_addr, 32) THEN
+			ip_addr := set_masklen(max_addr + 1, masklen(current_nb));
+			RETURN NEXT;
+			max_addr := broadcast(new_nb);
+		END IF;
+		current_nb := new_nb;
+	END LOOP;
+
+	-- Now loop through there to find the unused blocks at the front
+
+	LOOP
+		IF host(current_nb) = host(ip_block_2) THEN
+			RETURN;
+		END IF;
+		current_nb := set_masklen(current_nb, masklen(current_nb) + 1);
+		IF NOT (current_nb >>= ip_block_2) THEN
+			ip_addr := current_nb;
+			RETURN NEXT;
+			current_nb := broadcast(current_nb) + 1;
+			CONTINUE;
+		END IF;
+	END LOOP;
+	RETURN;
+END;
+$$ LANGUAGE plpgsql;
+
+GRANT USAGE ON SCHEMA netblock_utils TO PUBLIC;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA netblock_utils TO ro_role;

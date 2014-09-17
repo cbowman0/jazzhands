@@ -2,7 +2,7 @@
 %define prefix	/var/www/stab
 %define release 0
 Name:   	jazzhands-stab
-Version:        0.57.10
+Version:        0.58.3
 Release:        0%{?dist}
 Summary:        JazzHands STAB Web Front End
 Group:  	System Environment/Libraries
@@ -12,7 +12,7 @@ Source0:        %{name}-%{version}.tar.gz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-buildroot
 BuildArch:	noarch
 BuildRequires:  perl-ExtUtils-MakeMaker
-Requires:      	jazzhands-perl-mgmt, jazzhands-perl-common >= 0.56.3, jazzhands-perl-stab, jazzhands-javascript-common 
+Requires:      	jazzhands-perl-mgmt, jazzhands-perl-common >= 0.56.3, jazzhands-perl-stab = %{version} , jazzhands-javascript-common 
 
 %description
 
@@ -176,6 +176,16 @@ rm -rf %{buildroot}
 %{_mandir}/man3/*
 
 %changelog
+* Sun Jun 22 2014 Todd Kover <kovert@omniscient.com> 0.58.3
+- make it so add_netblock inputs can set netblock_type (bug fix)
+* Wed Jun 11 2014 Todd Kover <kovert@omniscient.com> 0.58.2
+- overhaul device/rack retirement to be in database
+- improve rack elevations
+* Wed Jun 11 2014 Todd Kover <kovert@omniscient.com> 0.58.1
+- support showing inferred PTRs in ip6.addr zones
+- comment out some questionable legacy defaults
+- improve finding best parent netblock logic to deal with blocks that meant
+  to be broadcast domains, probably 
 * Fri May  2 2014 Todd Kover <kovert@omniscient.com> 0.57.10
 - small random bug fixes
 - if its an in-addr zone, make the type reverse automatically

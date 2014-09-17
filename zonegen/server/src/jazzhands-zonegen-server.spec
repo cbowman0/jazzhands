@@ -4,7 +4,7 @@
 Summary:    jazzhands-zonegen-server - generates and pushes out zones
 Vendor:     JazzHands
 Name:       jazzhands-zonegen-server
-Version:    0.57.10.1
+Version:    0.58.5
 Release:    1
 License:    Unknown
 Group:      System/Management
@@ -27,7 +27,7 @@ Generates zone and configuration from JazzHands database
 
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/%{prefix}/%{zgroot}
-for file in do-zone-generation.sh generate-zones.pl ; do
+for file in generate-and-sync.sh generate-zones.pl ; do
 	newfn=`echo $file | sed 's/\..*$//'`
 	install -m 555  $file %{buildroot}/%{prefix}/%{zgroot}/$newfn
 done
@@ -39,7 +39,7 @@ rm -rf %{buildroot}
 %files
 %defattr(755,root,root,-)
 
-%{prefix}/%{zgroot}/do-zone-generation
+%{prefix}/%{zgroot}/generate-and-sync
 %{prefix}/%{zgroot}/generate-zones
 
 %post
@@ -54,6 +54,18 @@ if [ ! -d /var/lib/zonegen ] ; then
 fi
 
 %changelog
+* Thu Sep 11 2014 Todd Kover <kovert@omniscient.com> 0.58.5
+- add --nogen option and more verbosity/debug
+* Wed Jun 25 2014 Todd Kover <kovert@omniscient.com> 0.58.4.2
+- fix path to spec file
+* Wed Jun 25 2014 Todd Kover <kovert@omniscient.com> 0.58.4.1
+- remove extra my that unfortunately change of a variable
+* Tue Jun 24 2014 Todd Kover <kovert@omniscient.com> 0.58.4
+- migrate to generate-and-sync from do-zone-generation
+* Fri Jun 20 2014 Todd Kover <kovert@omniscient.com> 0.58.3
+- generate the allzone_hostfile smartly, update docs
+- update docs wit detail of other changes that went in recently
+- make the mtime of a zone the same as the db's last generated date
 * Mon Jun  9 2014 Todd Kover <kovert@omniscient.com> 0.57.10
 - migrate zonegen to Net::IP from Net::Netmask
 - convert to postgresql native inetbaseness for ipv4

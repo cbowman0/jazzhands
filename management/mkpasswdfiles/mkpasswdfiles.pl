@@ -596,6 +596,7 @@ sub generate_passwd_files($) {
 
 	#
 	# NOTE:  Need to come up with a smarter way of getting user properties.
+	# NOTE:  Inner ssh key query is so the output is always ordered the same
 	$q = qq{
 	select distinct c.device_collection_id, a.account_id, 
 			   c.device_collection_name mclass,
@@ -638,15 +639,37 @@ sub generate_passwd_files($) {
 		on (a.account_id = p2.account_id
 		    and p2.password_type = 'des')
 		left join (
-		select	account_id, array_agg(ssh_public_key) as ssh_public_key
-			from	account_ssh_key ask
-			inner join ssh_key skey using (ssh_key_id)
-			group by account_id
-		) ssh on (a.account_id = ssh.account_id)
+			select device_collection_id, account_id,
+				array_agg(ssh_public_key) as ssh_public_key
+			FROM ( SELECT * FROM (
+				SELECT  dchd.device_collection_id,
+						account_id,
+						ssh_public_key
+	    		FROM    device_collection_ssh_key dcssh
+						INNER JOIN ssh_key USING (ssh_key_id)
+						INNER JOIN v_acct_coll_acct_expanded ac
+		    				USING (account_collection_id)
+						INNER JOIN account a USING (account_id)
+						INNER JOIN v_device_coll_hier_detail dchd ON
+							dchd.parent_device_collection_id =
+							dcssh.device_collection_id
+			UNION
+			       SELECT  NULL as device_collection_id,
+					account_id,
+					ssh_public_key
+				    FROM    account_ssh_key ask
+				    INNER JOIN ssh_key skey using (ssh_key_id)
+			) keylist 
+				ORDER BY account_id, coalesce(device_collection_id, 0), 
+					ssh_public_key ) keylisto
+			GROUP BY device_collection_id, account_id
+		) ssh on a.account_id = ssh.account_id  AND
+			(ssh.device_collection_id is NULL or ssh.device_collection_id =
+				c.device_collection_id )
 	where is_disabled = 'N'
 	and c.device_collection_type = 'mclass'
-	-- and ac.account_collection_type in ('systems', 'per-user')
     };
+	# -- and ac.account_collection_type in ('systems', 'per-user')
 
 	if ($q_mclass_ids) {
 		$q .= "and cce.device_collection_id in $q_mclass_ids";
@@ -689,29 +712,44 @@ sub generate_passwd_files($) {
 		  get_passwd_line( $m_prop->{$dcid}, $u_prop->{$dcid}{$suid},
 			$g_prop->{$dcid}, $r );
 
+		## Check to see if the login already exists in the array.  In
+		## which case, the first one is favored, except for ssh keys which
+		## are added to the existing record.  This is really the only
+		## legitimate reason for the same login showing up twice
+		if( $r->{ _dbx('SSH_PUBLIC_KEY') } ) {
+			my @uh = grep($_->{login} eq $pwd[0], @pwdlines);
+			if(scalar @uh ) {
+				my $uh = pop(@uh);
+				foreach my $k (@{ $r->{ _dbx('SSH_PUBLIC_KEY') } }) {
+					push(@ {$uh->{ssh_public_key}}, $k);
+				}
+				next;  # one dude!
+			}
+		}
+
 		## We need to store the mapping from DEVICE_COLLECTION_ID and
 		## LOGIN to GROUP_NAME and GID. We will need it later to
 		## generate the group files. We keep the information in the
 		## global variable $passwd_grp which is a hash reference.
 
-		$login                       = $pwd[0];
-		$gid                         = $pwd[3];
-		$gname                       = $pwd[7];
+		$login		       = $pwd[0];
+		$gid			 = $pwd[3];
+		$gname		       = $pwd[7];
 		$passwd_grp->{$dcid}{$login} = {
 			GROUP_NAME => $gname,
-			GID        => $gid
+			GID	=> $gid
 		};
 
 		my $up       = $u_prop->{$dcid}{$suid};
 		my $userhash = {
 			'account_id'    => $r->{ _dbx('ACCOUNT_ID') },
-			'login'         => $pwd[0],
+			'login'	 => $pwd[0],
 			'password_hash' => $pwd[1],
-			'uid'           => int($pwd[2]),
-			'gid'           => int($pwd[3]),
-			'gecos'         => $pwd[4],
-			'home'          => $pwd[5],
-			'shell'         => $pwd[6],
+			'uid'	   => int($pwd[2]),
+			'gid'	   => int($pwd[3]),
+			'gecos'	 => $pwd[4],
+			'home'	  => $pwd[5],
+			'shell'	 => $pwd[6],
 			'group_name'    => $pwd[7],
 			'PreferLocal'   => (
 				     $up->{'PreferLocal'}
@@ -765,7 +803,7 @@ sub generate_passwd_files($) {
 sub generate_group_files($) {
 	my $dir = shift;
 	my (
-		$q,         $sth,   $r,      $fh,
+		$q,	 $sth,   $r,      $fh,
 		$mclass,    %group, %member, %m_member,
 		%gn_member, %gn_m_member
 	);
@@ -1029,8 +1067,8 @@ sub generate_group_files($) {
 				{
 					'group_name'     => $gname,
 					'group_password' => '*',
-					'gid'            => int($gid),
-					'members'        => \@m
+					'gid'	    => int($gid),
+					'members'	=> \@m
 				}
 			);
 		}
@@ -1574,7 +1612,7 @@ sub generate_appaal_files($) {
 	# for mclasses.  There is probably a smarter way to do it.
 	my $allapps;
 	my $appkeys     = {};
-	my $md          = {};
+	my $md	  = {};
 	my $closeapp    = 0;
 	my $closemclass = 0;
 	do {
@@ -1603,7 +1641,7 @@ sub generate_appaal_files($) {
 				$closeapp = 1;
 			}
 		} else {
-			$last_app         = $applname;
+			$last_app	 = $applname;
 			$md->{file_owner} = $owner;
 			$md->{file_group} = $group;
 			$md->{file_mode} = sprintf "0%o", $mode;
@@ -1910,7 +1948,7 @@ sub generate_config_files {
 				$fh = new_mclass_file( $dir, $mclass, $fh,
 					$mclass_fn );
 				$last_mclass = $mclass;
-				$cfg         = {};
+				$cfg	 = {};
 			}
 		}
 
@@ -2129,6 +2167,8 @@ sub create_json_manifest {
 
 sub main {
 	my $dir;
+
+	chdir("/") if (!-r ".");
 
 	GetOptions(
 		'random-sleep=i' => \$o_random,
