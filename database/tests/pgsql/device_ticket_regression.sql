@@ -65,11 +65,13 @@ BEGIN
 
 	INSERT INTO device (
 		device_type_id, device_name, device_status, site_code,
-		service_environment, operating_system_id,
+		service_environment_id, operating_system_id,
 		ownership_status, is_monitored
 	) values (
 		_dt.device_type_id, 'JHTEST device', 'up', 'JHTEST01',
-		'production', 0,
+		(select service_environment_id from service_environment
+		 where service_environment_name = 'production'),
+		0,
 		'owned', 'Y'
 	) RETURNING * into _dev;
 

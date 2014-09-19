@@ -89,12 +89,15 @@ BEGIN
 
 	INSERT INTO device (
 		device_type_id, device_name, device_status, site_code,
-		service_environment, operating_system_id,
+		service_environment_id, 
+		operating_system_id,
 		ownership_status, is_monitored,
 		rack_location_id
 	) values (
 		_chassis_dt.device_type_id, 'JHTEST chassis', 'up', 'JHTEST01',
-		'production', 0,
+		(select service_environment_id from service_environment
+		 where service_environment_name = 'production'),
+		0,
 		'owned', 'Y',
 		_chassisloc.rack_location_id
 	) RETURNING * into _chassis;
@@ -201,12 +204,15 @@ BEGIN
 	BEGIN
 		INSERT INTO device (
 			device_type_id, device_name, device_status, site_code,
-			service_environment, operating_system_id,
+			service_environment_id, 
+			operating_system_id,
 			ownership_status, is_monitored,
 			chassis_location_id
 		) values (
 			_sled_dt.device_type_id, 'JHTEST sled', 'up', 'JHTEST01',
-			'production', 0,
+			(select service_environment_id from service_environment
+		 	where service_environment_name = 'production'),
+			0,
 			'owned', 'Y',
 			_sledloc.chassis_location_id
 		) RETURNING * into _sled;
@@ -219,12 +225,14 @@ BEGIN
 	BEGIN
 		INSERT INTO device (
 			device_type_id, device_name, device_status, site_code,
-			service_environment, operating_system_id,
+			service_environment_id, operating_system_id,
 			ownership_status, is_monitored, parent_device_id,
 			rack_location_id, chassis_location_id
 		) values (
 			_sled_dt.device_type_id, 'JHTEST sled', 'up', 'JHTEST01',
-			'production', 0,
+			(select service_environment_id from service_environment
+		 	where service_environment_name = 'production'),
+			0,
 			'owned', 'Y', _chassis.device_Id,
 			_chassisloc.rack_location_id, _sledloc.chassis_location_id
 		) RETURNING * into _sled;
@@ -236,12 +244,14 @@ BEGIN
 	RAISE NOTICE 'Inserting sled device; this should work...';
 	INSERT INTO device (
 		device_type_id, device_name, device_status, site_code,
-		service_environment, operating_system_id,
+		service_environment_id, operating_system_id,
 		ownership_status, is_monitored, parent_device_id,
 		chassis_location_id
 	) values (
 		_sled_dt.device_type_id, 'JHTEST sled', 'up', 'JHTEST01',
-		'production', 0,
+		(select service_environment_id from service_environment
+			where service_environment_name = 'production'),
+		0,
 		'owned', 'Y', _chassis.device_id,
 		_sledloc.chassis_location_id
 	) RETURNING * into _sled;

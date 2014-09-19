@@ -137,19 +137,19 @@ insert into val_production_state (production_state)
 insert into val_service_env_coll_type
         ( service_env_collection_type ) values ('per-environment');
 
-INSERT INTO service_environment (service_environment, production_state)
+INSERT INTO service_environment (service_environment_name, production_state)
 	VALUES ('unspecified', 'unspecified');
-INSERT INTO service_environment (service_environment, production_state)
+INSERT INTO service_environment (service_environment_name, production_state)
 	VALUES ('unallocated', 'unallocated');
-INSERT INTO service_environment (service_environment, production_state)
+INSERT INTO service_environment (service_environment_name, production_state)
 	VALUES ('production', 'production');
-INSERT INTO service_environment (service_environment, production_state)
+INSERT INTO service_environment (service_environment_name, production_state)
 	VALUES ('development', 'development');
-INSERT INTO service_environment (service_environment, production_state)
+INSERT INTO service_environment (service_environment_name, production_state)
 	VALUES ('qa', 'test');
-INSERT INTO service_environment (service_environment, production_state)
+INSERT INTO service_environment (service_environment_name, production_state)
 	VALUES ('staging', 'test');
-INSERT INTO service_environment (service_environment, production_state)
+INSERT INTO service_environment (service_environment_name, production_state)
 	VALUES ('test', 'test');
 
 INSERT INTO VAL_Ownership_Status (Ownership_Status)

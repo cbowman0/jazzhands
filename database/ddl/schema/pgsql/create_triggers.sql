@@ -1158,7 +1158,7 @@ AFTER INSERT OR UPDATE ON token_collection_hier
 CREATE OR REPLACE FUNCTION check_svcenv_colllection_hier_loop()
 	RETURNS TRIGGER AS $$
 BEGIN
-	IF NEW.service_env_collection_idw = 
+	IF NEW.service_env_collection_id = 
 		NEW.child_service_env_coll_id THEN
 			RAISE EXCEPTION 'svcenv Collection Loops Not Pernitted '
 			USING ERRCODE = 20704;	/* XXX */

@@ -28,7 +28,7 @@ DECLARE
 	_tally			integer;
 	_companyid		company.company_id%type;
 	_defprop		property%rowtype;
-	_acc_realm-id		account_realm.account_realm_id%type;
+	_acc_realm_id		account_realm.account_realm_id%type;
 	_acc1			account%rowtype;
 	_acc2			account%rowtype;
 BEGIN
