@@ -26,6 +26,7 @@
 CREATE OR REPLACE FUNCTION v_corp_family_account_regression() RETURNS BOOLEAN AS $$
 DECLARE
 	_tally			integer;
+	_personid		company.person_id%type;
 	_companyid		company.company_id%type;
 	_defprop		property%rowtype;
 	_acc_realm_id		account_realm.account_realm_id%type;
@@ -34,7 +35,19 @@ DECLARE
 BEGIN
 	RAISE NOTICE 'v_corp_family_account regression: BEGIN';
 	RAISE NOTICE 'v_corp_family_account: Cleanup Records from Previous Tests';
-	RAISE EXCEPTION 'Need to write these';
+
+	RAISE NOTICE 'v_corp_family_account: Adding prerequisites';
+	INSERT INTO account_realm (account_realm_name)
+		VALUES ('JHTEST-AR') RETURNING account_realm_id INTO _acc_realm_id
+
+	INSERT INTO person (first_name, last_name)
+		VALUES ('JH', 'TEST') RETURNING person_id INTO _personid;
+
+	INSERT INTO company (company_name, is_corporate_family)
+		VALUES ('JHTEST, Inc', 'Y') RETURNING company_id into _companyid;
+
+	RAISE NOTICE 'Testing insert into v_corp_family_account... ';
+	INSERT INTO v_corp_family_account (login, person_id
 
 	RAISE NOTICE 'Testing to see if max_num_collections works... ';
 	BEGIN
@@ -51,6 +64,7 @@ BEGIN
 	RAISE NOTICE 'Cleaning up...';
 
 	RAISE NOTICE 'v_corp_family_account regression: DONE';
+	RAISE EXCEPTION 'Need to write these';
 	RETURN true;
 END;
 $$ LANGUAGE plpgsql;
