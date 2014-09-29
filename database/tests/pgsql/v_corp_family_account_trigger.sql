@@ -26,7 +26,7 @@
 CREATE OR REPLACE FUNCTION v_corp_family_account_regression() RETURNS BOOLEAN AS $$
 DECLARE
 	_tally			integer;
-	_personid		company.person_id%type;
+	_personid		person.person_id%type;
 	_companyid		company.company_id%type;
 	_defprop		property%rowtype;
 	_acc_realm_id		account_realm.account_realm_id%type;
@@ -38,7 +38,8 @@ BEGIN
 
 	RAISE NOTICE 'v_corp_family_account: Adding prerequisites';
 	INSERT INTO account_realm (account_realm_name)
-		VALUES ('JHTEST-AR') RETURNING account_realm_id INTO _acc_realm_id
+		VALUES ('JHTEST-AR') 
+		RETURNING account_realm_id INTO _acc_realm_id;
 
 	INSERT INTO person (first_name, last_name)
 		VALUES ('JH', 'TEST') RETURNING person_id INTO _personid;
@@ -73,5 +74,6 @@ $$ LANGUAGE plpgsql;
 SELECT v_corp_family_account_regression();
 -- set search_path=jazzhands;
 DROP FUNCTION v_corp_family_account_regression();
+
 
 \t off
