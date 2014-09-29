@@ -342,7 +342,9 @@ BEGIN
 			((layer3_network_id IS NULL AND NEW.layer3_network_id IS NULL) OR
 				(layer3_network_id = NEW.layer3_network_id)) AND
 			((person_id IS NULL AND NEW.Person_id IS NULL) OR
-				(Person_Id = NEW.person_id))
+				(Person_Id = NEW.person_id)) AND
+			((property_collection_id IS NULL AND NEW.property_collection_id IS NULL) OR
+				(property_collection_id = NEW.property_collection_id))
 			;
 			
 		IF FOUND THEN
@@ -389,7 +391,10 @@ BEGIN
 			((layer3_network_id IS NULL AND NEW.layer3_network_id IS NULL) OR
 				(layer3_network_id = NEW.layer3_network_id)) AND
 			((netblock_collection_Id IS NULL AND NEW.netblock_collection_Id IS NULL) OR
-				(netblock_collection_Id = NEW.netblock_collection_Id));
+				(netblock_collection_Id = NEW.netblock_collection_Id)) AND
+			((property_collection_Id IS NULL AND NEW.property_collection_Id IS NULL) OR
+				(property_collection_Id = NEW.property_collection_Id))
+		;
 
 		IF FOUND THEN
 			RAISE EXCEPTION 
@@ -724,6 +729,18 @@ BEGIN
 	ELSIF v_prop.Permit_netblock_collection_Id = 'PROHIBITED' THEN
 			IF NEW.netblock_collection_Id IS NOT NULL THEN
 				RAISE 'netblock_collection_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_property_collection_Id = 'REQUIRED' THEN
+			IF NEW.property_collection_Id IS NULL THEN
+				RAISE 'property_collection_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_property_collection_Id = 'PROHIBITED' THEN
+			IF NEW.property_collection_Id IS NOT NULL THEN
+				RAISE 'property_collection_Id is prohibited.'
 					USING ERRCODE = 'invalid_parameter_value';
 			END IF;
 	END IF;
