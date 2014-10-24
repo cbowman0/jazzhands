@@ -2004,10 +2004,8 @@ sub create_host_symlinks($@) {
 			my $n = "$entry.$$";
 			mkdir($n, 0750);
 			if($target =~ /^\./) {
-				warn "../$target -> $n/mclass";
 				symlink("../$target", "$n/mclass");
 			} else {
-				warn "$target -> $n/mclass";
 				symlink("$target", "$n/mclass");
 			}
 			unlink ($entry);
