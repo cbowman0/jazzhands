@@ -2072,13 +2072,16 @@ sub create_host_symlinks($@) {
 
 	foreach my $device ( keys %old ) {
 		if ( exists $new->{$device} ) {
+			if(! -f "$dir/$device") {
+				mkdir("$dir/$device", 0750);
+			}
 			if ( $new->{$device}{ _dbx('MCLASS') } ne
 				$old{$device} )
 			{
-				unlink("$dir/$device");
+				unlink("$dir/$device/mclass");
 				symlink(
-"../mclass/$new->{$device}{_dbx('MCLASS')}",
-					"$dir/$device"
+"../../mclass/$new->{$device}{_dbx('MCLASS')}",
+					"$dir/$device/mclass"
 				);
 			}
 		}
