@@ -1977,10 +1977,9 @@ sub generate_config_files {
 #
 # usage: create_host_symlinks($dir, @mclasses);
 #
-# The function adjusts host symbolic links in the directory $dir to
-# correctly point to the mclass directory for the specified
-# MCLASSes. Symbolic links are modified only when necessary. If they
-# point to the right MCLASS already, they are left alone.
+# This function creates a new directory named after the host, and checks to
+# see if it contains a symlink "mclass" and if it points to the right
+# mclass.  It changes it otherwise.
 #
 ###############################################################################
 
@@ -1995,18 +1994,43 @@ sub create_host_symlinks($@) {
 	## Examine the existing symbolic links in $dir, and record
 	## information about them in %old.
 
-	foreach my $link (<$dir/*>) {
-		my $target = readlink($link);
+	foreach my $entry (<$dir/*>) {
+		my $target = readlink($entry);
+
+		#
+		# This is for conversion, if its a symlink then migrate to a directory
+		# and symlink "mclass" to the mclass", then evalute the mclass link.
+		if($target) {
+			my $n = "$entry.$$";
+			mkdir($n, 0750);
+			if($target =~ /^\./) {
+				warn "../$target -> $n/mclass";
+				symlink("../$target", "$n/mclass");
+			} else {
+				warn "$target -> $n/mclass";
+				symlink("$target", "$n/mclass");
+			}
+			unlink ($entry);
+			rename ($n, $entry);
+		}
+
+		#
+		# Now check things for real
+		#
+		$target = readlink("$entry/mclass");
+		if(!$target) {
+			die "$target should be a directory";
+		}
 		my ( $device, $mclass );
 
 		## Determine the device name from the symbolic link
 
-		if ( $link =~ m|.*/([^/]*)$| ) {
+		if ( $entry =~ m|.*/([^/]*)$| ) {
 			$device = $1;
 		}
 
 		else {
-			die "can't parse link $link\n";
+			die "can't parse link $entry\n";
 		}
 
 		## Determine the MCLASS name from the symlink target
@@ -2070,7 +2094,7 @@ sub create_host_symlinks($@) {
 			## for a few MCLASSes as opposed to all of them and links
 			## need to be repointed.
 			unlink("$dir/$device");
-			symlink( "../mclass/$new->{$device}{_dbx('MCLASS')}",
+			symlink( "../../mclass/$new->{$device}{_dbx('MCLASS')}",
 				"$dir/$device" );
 		}
 	}
