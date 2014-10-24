@@ -2017,37 +2017,35 @@ sub create_host_symlinks($@) {
 		#
 		# Now check things for real
 		#
-		$target = readlink("$entry/mclass");
-		if(!$target) {
-			die "$target should be a directory";
+		if(-d "$entry" && -r "$entry/mclass" && !readlink("$entry/mclass")) {
+			die "$entry/mclass should be a symlink";
 		}
 		my ( $device, $mclass );
 
 		## Determine the device name from the symbolic link
+		if($target) {
+			if ( $entry =~ m|.*/([^/]*)$| ) {
+				$device = $1;
+			} else {
+				die "can't parse link $entry\n";
+			}
 
-		if ( $entry =~ m|.*/([^/]*)$| ) {
-			$device = $1;
-		}
+			## Determine the MCLASS name from the symlink target
 
-		else {
-			die "can't parse link $entry\n";
-		}
+			if ( $target =~ m|\.\./mclass/([^/]+)| ) {
+				$mclass = $1;
+			}
 
-		## Determine the MCLASS name from the symlink target
+			else {
+				die "can't parse link target $target\n";
+			}
 
-		if ( $target =~ m|\.\./mclass/([^/]+)| ) {
-			$mclass = $1;
-		}
+			## Add the symlink info to %old if the script runs for all
+			## MCLASSes or if this MCLASS is one of the specified MCLASSes.
 
-		else {
-			die "can't parse link target $target\n";
-		}
-
-		## Add the symlink info to %old if the script runs for all
-		## MCLASSes or if this MCLASS is one of the specified MCLASSes.
-
-		if ( !@mclasses || grep( $mclass eq $_, @mclasses ) > 0 ) {
-			$old{$device} = $mclass;
+			if ( !@mclasses || grep( $mclass eq $_, @mclasses ) > 0 ) {
+				$old{$device} = $mclass;
+			}
 		}
 	}
 
@@ -2079,6 +2077,7 @@ sub create_host_symlinks($@) {
 				$old{$device} )
 			{
 				unlink("$dir/$device/mclass");
+warn "symlink $device";
 				symlink(
 "../../mclass/$new->{$device}{_dbx('MCLASS')}",
 					"$dir/$device/mclass"
@@ -2098,7 +2097,7 @@ sub create_host_symlinks($@) {
 			## need to be repointed.
 			unlink("$dir/$device");
 			symlink( "../../mclass/$new->{$device}{_dbx('MCLASS')}",
-				"$dir/$device" );
+				"$dir/$device/mclass" );
 		}
 	}
 }
