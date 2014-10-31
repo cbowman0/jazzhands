@@ -39,7 +39,7 @@ WITH RECURSIVE var_recurse (
 UNION ALL
 	SELECT	
 		x.level + 1			as level,
-		x.company_id			as root_company_id,
+		x.root_company_id		as root_company_id,
 		c.company_id			as company_id,
 		c.parent_company_id		as parent_company_id,
 		x.person_id			as person_id,

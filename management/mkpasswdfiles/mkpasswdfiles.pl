@@ -2190,6 +2190,7 @@ sub main {
 
 	## create any per-host files
 	#- create_host_files( "$o_output_dir/hosts", @ARGV );
+	create_host_files( "$o_output_dir/hosts", @ARGV );
 
 	$dbh->disconnect;
 
