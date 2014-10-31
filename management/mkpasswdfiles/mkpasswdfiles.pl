@@ -577,6 +577,19 @@ sub _by_uid($$) {
 # Creates passwd files for all specified MCLASSes in the directory $dir.
 #
 ###############################################################################
+sub get_setting_value($$) {
+	my($array, $setting) = @_;
+
+
+	if($array) {
+		for(my $i = 0; $i < scalar(@{$array}); $i += 2) {
+			if($array->[$i] eq '$setting') {
+				return $array->[$i+1];
+			}
+		}
+	}
+	'N';
+}
 
 sub generate_passwd_files($) {
 	my $dir = shift;
@@ -585,97 +598,25 @@ sub generate_passwd_files($) {
 	$u_prop = get_uclass_properties();
 	$m_prop = get_mclass_properties();
 
-	## The following query returns the passwd file lines for all MCLASSes
-	## but without the overrides. Overrides are applied later.
+	## The following query returns the passwd file lines for all MCLASSes,
+	## including overrides.
 
-	my $dys = "90";    # XXX - oracle, need to be smarter
-	$dys = "interval '90 days'";
-
-	my $now = "sysdate";    # XXX - oracle, need to be smarter
-	$now = "current_timestamp";
+	my $and = "";
+	if ($q_mclass_ids) {
+		$and .= "and device_collection_id in $q_mclass_ids";
+	}
 
 	#
 	# NOTE:  Need to come up with a smarter way of getting user properties.
 	# NOTE:  Inner ssh key query is so the output is always ordered the same
 	$q = qq{
-	select distinct c.device_collection_id, a.account_id, 
-			   c.device_collection_name mclass,
-	       login,
-	       case when login = 'root'
-		      or coalesce(p1.expire_time, p1.change_time + $dys) > $now
-		    then p1.password else null end md5_password,
-	       case when login = 'root'
-		      or coalesce(p2.expire_time, p2.change_time + $dys) > $now
-		    then p2.password else null end des_password,
-	       unix_uid, ugac.account_collection_name as group_name, 
-			   unix_gid, first_name, 
-	       case when length(middle_name) = 1
-		    then middle_name || '.' else middle_name end middle_name,
-	       last_name, default_home, shell, ssh.ssh_public_key,
-		a.description
-	from account a
-			join person p
-				on (p.person_id = a.person_id)
-	     join account_unix_info ui
-		on (a.account_id = ui.account_id)
-	     join unix_group ug
-		on (ui.unix_group_acct_collection_id 
-					= ug.account_collection_id)
-			 join account_collection ugac
-		on (ugac.account_collection_id 
-					= ug.account_collection_id)
-	     join v_device_col_acct_col_expanded cce
-		on (a.account_id = cce.account_id)
-	     join device_collection c
-		on (cce.device_collection_id = c.device_collection_id)
-	     join account_collection ac on 
-				(cce.account_collection_id = ac.account_collection_id)
-			 join val_person_status vps
-				on a.account_status = vps.person_status
-	     left join account_password p1
-		on (a.account_id = p1.account_id
-		    and p1.password_type = 'md5')
-	     left join account_password p2
-		on (a.account_id = p2.account_id
-		    and p2.password_type = 'des')
-		left join (
-			select device_collection_id, account_id,
-				array_agg(ssh_public_key) as ssh_public_key
-			FROM ( SELECT * FROM (
-				SELECT  dchd.device_collection_id,
-						account_id,
-						ssh_public_key
-	    		FROM    device_collection_ssh_key dcssh
-						INNER JOIN ssh_key USING (ssh_key_id)
-						INNER JOIN v_acct_coll_acct_expanded ac
-		    				USING (account_collection_id)
-						INNER JOIN account a USING (account_id)
-						INNER JOIN v_device_coll_hier_detail dchd ON
-							dchd.parent_device_collection_id =
-							dcssh.device_collection_id
-			UNION
-			       SELECT  NULL as device_collection_id,
-					account_id,
-					ssh_public_key
-				    FROM    account_ssh_key ask
-				    INNER JOIN ssh_key skey using (ssh_key_id)
-			) keylist 
-				ORDER BY account_id, coalesce(device_collection_id, 0), 
-					ssh_public_key ) keylisto
-			GROUP BY device_collection_id, account_id
-		) ssh on a.account_id = ssh.account_id  AND
-			(ssh.device_collection_id is NULL or ssh.device_collection_id =
-				c.device_collection_id )
-	where is_disabled = 'N'
-	and c.device_collection_type = 'mclass'
-    };
-	# -- and ac.account_collection_type in ('systems', 'per-user')
-
-	if ($q_mclass_ids) {
-		$q .= "and cce.device_collection_id in $q_mclass_ids";
-	}
-
-	$q .= " order by device_collection_id, unix_uid";
+		SELECT	device_collection_name, map.* 
+		FROM	v_unix_passwd_mappings map
+				INNER JOIN device_collection USING (device_collection_id)
+		WHERE	device_collection_type = 'mclass'
+				$and
+		ORDER BY device_collection_name, unix_uid
+	};
 
 	$sth = $dbh->prepare($q);
 	$sth->execute;
@@ -695,71 +636,56 @@ sub generate_passwd_files($) {
 				my $json = JSON::PP->new->ascii;
 				print $fh $json->pretty->encode( \@pwdlines );
 				$fh =
-				  new_mclass_file( $dir, $r->{ _dbx('MCLASS') },
+				  new_mclass_file( $dir, $r->{ _dbx('DEVICE_COLLECTION_NAME') },
 					$fh, 'passwd' );
 				$last_dcid = $dcid;
 				undef(@pwdlines);
 			}
 		} else {
-			$fh = new_mclass_file( $dir, $r->{ _dbx('MCLASS') },
+			$fh = new_mclass_file( $dir, $r->{ _dbx('DEVICE_COLLECTION_NAME') },
 				$fh, 'passwd' );
 			$last_dcid = $dcid;
 		}
 
-		## Apply all overrides to the passwd file line $r
-
-		@pwd =
-		  get_passwd_line( $m_prop->{$dcid}, $u_prop->{$dcid}{$suid},
-			$g_prop->{$dcid}, $r );
-
-		## Check to see if the login already exists in the array.  In
-		## which case, the first one is favored, except for ssh keys which
-		## are added to the existing record.  This is really the only
+		### Check to see if the login already exists in the array.  In
+		### which case, the first one is favored, except for ssh keys which
+		### are added to the existing record.  This is really the only
 		## legitimate reason for the same login showing up twice
-		if( $r->{ _dbx('SSH_PUBLIC_KEY') } ) {
-			my @uh = grep($_->{login} eq $pwd[0], @pwdlines);
-			if(scalar @uh ) {
-				my $uh = pop(@uh);
-				foreach my $k (@{ $r->{ _dbx('SSH_PUBLIC_KEY') } }) {
-					push(@ {$uh->{ssh_public_key}}, $k);
-				}
-				next;  # one dude!
-			}
-		}
+		#if( $r->{ _dbx('SSH_PUBLIC_KEY') } ) {
+		#	my @uh = grep($_->{login} eq $pwd[0], @pwdlines);
+		#	if(scalar @uh ) {
+		#		my $uh = pop(@uh);
+		#		foreach my $k (@{ $r->{ _dbx('SSH_PUBLIC_KEY') } }) {
+		#			push(@ {$uh->{ssh_public_key}}, $k);
+		#		}
+		#		next;  # one dude!
+		#	}
+		#}
 
 		## We need to store the mapping from DEVICE_COLLECTION_ID and
 		## LOGIN to GROUP_NAME and GID. We will need it later to
 		## generate the group files. We keep the information in the
 		## global variable $passwd_grp which is a hash reference.
 
-		$login		       = $pwd[0];
-		$gid			 = $pwd[3];
-		$gname		       = $pwd[7];
-		$passwd_grp->{$dcid}{$login} = {
-			GROUP_NAME => $gname,
-			GID	=> $gid
-		};
-
 		my $up       = $u_prop->{$dcid}{$suid};
 		my $userhash = {
 			'account_id'    => $r->{ _dbx('ACCOUNT_ID') },
-			'login'	 => $pwd[0],
-			'password_hash' => $pwd[1],
-			'uid'	   => int($pwd[2]),
-			'gid'	   => int($pwd[3]),
-			'gecos'	 => $pwd[4],
-			'home'	  => $pwd[5],
-			'shell'	 => $pwd[6],
-			'group_name'    => $pwd[7],
-			'PreferLocal'   => (
-				     $up->{'PreferLocal'}
-				  && $up->{'PreferLocal'} eq 'Y'
-			  ) ? 'Y' : 'N',
-			'PreferLocalSSHAuthorizedKeys' => (
-				     $up->{'PreferLocalSSHAuthorizedKeys'}
-				  && $up->{'PreferLocalSSHAuthorizedKeys'} eq
-				  'Y'
-			) ? 'Y' : 'N',
+			'login'         => $r->{ _dbx('LOGIN') },
+			'password_hash' => $r->{ _dbx('CRYPT') },
+			'uid'           => int( $r->{ _dbx('UNIX_UID') } ),
+			'gid'           => int( $r->{ _dbx('UNIX_GID') } ),
+			'gecos'         => $r->{ _dbx('GECOS') },
+			'home'          => $r->{ _dbx('HOME') },
+			'shell'         => $r->{ _dbx('SHELL') },
+			'group_name'    => $r->{ _dbx('GROUP_NAME') },
+			'PreferLocal'   => get_setting_value(
+				$r->{ _dbx('setting') },
+				'PreferLocal'
+			),
+			'PreferLocalSSHAuthorizedKeys' => get_setting_value(
+				$r->{ _dbx('setting') },
+				'PreferLocal'
+			),
 		};
 
 		if ( defined $r->{ _dbx('SSH_PUBLIC_KEY') } ) {
@@ -2261,6 +2187,10 @@ sub main {
 	## Adjust the symlinks
 
 	create_host_symlinks( "$o_output_dir/hosts", @ARGV );
+
+	## create any per-host files
+	#- create_host_files( "$o_output_dir/hosts", @ARGV );
+
 	$dbh->disconnect;
 
 	## Create the manifest
