@@ -651,16 +651,21 @@ sub generate_passwd_files($) {
 		### which case, the first one is favored, except for ssh keys which
 		### are added to the existing record.  This is really the only
 		## legitimate reason for the same login showing up twice
-		#if( $r->{ _dbx('SSH_PUBLIC_KEY') } ) {
-		#	my @uh = grep($_->{login} eq $pwd[0], @pwdlines);
-		#	if(scalar @uh ) {
-		#		my $uh = pop(@uh);
-		#		foreach my $k (@{ $r->{ _dbx('SSH_PUBLIC_KEY') } }) {
-		#			push(@ {$uh->{ssh_public_key}}, $k);
-		#		}
-		#		next;  # one dude!
-		#	}
-		#}
+		##
+		## It may be possible to do something clever with unnest
+		## in v_device_collection_account_ssh_key to make this
+		## go away
+		if( $r->{ _dbx('SSH_PUBLIC_KEY') } ) {
+			my $login = $r->{ _dbx('LOGIN') };
+			my @uh = grep($_->{login} eq $login, @pwdlines);
+			if(scalar @uh ) {
+				my $uh = pop(@uh);
+				foreach my $k (@{ $r->{ _dbx('SSH_PUBLIC_KEY') } }) {
+					push(@ {$uh->{ssh_public_key}}, $k);
+				}
+				next;  # one dude!
+			}
+		}
 
 		## We need to store the mapping from DEVICE_COLLECTION_ID and
 		## LOGIN to GROUP_NAME and GID. We will need it later to
@@ -2190,7 +2195,6 @@ sub main {
 
 	## create any per-host files
 	#- create_host_files( "$o_output_dir/hosts", @ARGV );
-	create_host_files( "$o_output_dir/hosts", @ARGV );
 
 	$dbh->disconnect;
 

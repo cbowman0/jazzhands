@@ -84,3 +84,10 @@
 \i create_v_device_col_acct_col_expanded.sql
 \i create_v_corp_family_account.sql
 
+-- passwd file generation
+\i pgsql/create_v_device_collection_account_ssh_key.sql
+\i pgsql/create_v_unix_mclass_settings.sql
+
+\i pgsql/create_v_unix_account_overrides.sql
+\i pgsql/create_v_device_col_account_cart.sql
+\i pgsql/create_v_unix_passwd_mappings.sql
