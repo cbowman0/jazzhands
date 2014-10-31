@@ -630,7 +630,7 @@ CREATE OR REPLACE FUNCTION schema_support.save_dependant_objects_for_replay(
 	schema varchar,
 	object varchar,
 	dropit boolean DEFAULT true,
-	doobjectdeps boolean DEFAULT false,
+	doobjectdeps boolean DEFAULT false
 ) RETURNS VOID AS $$
 DECLARE
 	_r		RECORD;
