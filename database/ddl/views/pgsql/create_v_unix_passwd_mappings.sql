@@ -22,17 +22,19 @@
 --
 -- This relies on v_device_col_account_cart which limits the responses to
 -- just mclasses/accounts mapped through the UnixLogin property
--- 
+--
 --
 create or replace view v_unix_passwd_mappings AS
-select 
+select
 	device_collection_id, account_id, login, crypt,
 	unix_uid,
 	unix_group_name,
 	unix_gid,
-	gecos,
+	regexp_replace(gecos, ' +', ' ', 'g') AS gecos,
 	regexp_replace(
-		CASE 
+		CASE
+			WHEN forcehome IS NOT NULL and forcehome ~ '/$' THEN
+				concat(forcehome, login)
 			WHEN home IS NOT NULL and home ~ '^/' THEN
 				home
 			WHEN hometype = 'generic' THEN
@@ -49,9 +51,9 @@ select
 FROM
 (
 SELECT	o.device_collection_id,
-		a.account_id, login, 
-		coalesce(setting[(select i + 1 
-			from generate_subscripts(setting, 1) as i 
+		a.account_id, login,
+		coalesce(setting[(select i + 1
+			from generate_subscripts(setting, 1) as i
 			where setting[i] = 'ForceCrypt')]::text, (
 				CASE WHEN (expire_time is not NULL AND now() < expire_time) OR
 						now() - change_time < (
@@ -61,31 +63,36 @@ SELECT	o.device_collection_id,
 								 90::text)::text, 'days')::text)::interval
 					THEN password
 				END
-			)) as crypt,
-		coalesce(setting[(select i + 1 
-			from generate_subscripts(setting, 1) as i 
+			), '*') as crypt,
+		coalesce(setting[(select i + 1
+			from generate_subscripts(setting, 1) as i
 			where setting[i] = 'ForceUID')]::integer, unix_uid) as unix_uid,
 		ugac.account_collection_name as unix_group_name,
 		unix_gid,
 		CASE WHEN a.description IS NOT NULL THEN a.description
 			ELSE concat(coalesce(preferred_first_name, first_name), ' ',
-			 	middle_name, ' ', 
-			 	coalesce(preferred_last_name, last_name), ' ') 
+				case WHEN middle_name is NOT NULL AND
+					length(middle_name) = 1 THEN concat(middle_name,'.')
+				ELSE middle_name END, ' ',
+				coalesce(preferred_last_name, last_name), ' ')
 			END as gecos,
-		coalesce(setting[(select i + 1 
-			from generate_subscripts(setting, 1) as i 
+		coalesce(setting[(select i + 1
+			from generate_subscripts(setting, 1) as i
 			where setting[i] = 'ForceHome')], default_home) as home,
-		coalesce(setting[(select i + 1 
-			from generate_subscripts(setting, 1) as i 
+		coalesce(setting[(select i + 1
+			from generate_subscripts(setting, 1) as i
 			where setting[i] = 'ForceShell')], shell) as shell,
 		o.setting,
 		mcs.mclass_setting,
+		setting[(select i + 1
+			from generate_subscripts(setting, 1) as i
+			where setting[i] = 'ForceHome')] as forcehome,
 		mclass_setting[(select i + 1
-	    from generate_subscripts(mcs.mclass_setting, 1) as i
-	    where mcs.mclass_setting[i] = 'HomePlace')] as homeplace,
+			from generate_subscripts(mcs.mclass_setting, 1) as i
+			where mcs.mclass_setting[i] = 'HomePlace')] as homeplace,
 		mclass_setting[(select i + 1
-	    from generate_subscripts(mcs.mclass_setting, 1) as i
-	    where mcs.mclass_setting[i] = 'UnixHomeType')] as hometype,
+			from generate_subscripts(mcs.mclass_setting, 1) as i
+			where mcs.mclass_setting[i] = 'UnixHomeType')] as hometype,
 		ssh_public_key
 FROM	account a
 			JOIN v_device_col_account_cart o using (account_id)
@@ -93,14 +100,14 @@ FROM	account a
 			JOIN person p USING (person_id)
 			JOIN account_unix_info ui USING (account_id)
 			JOIN unix_group ug on (ui.unix_group_acct_collection_id
-			 	= ug.account_collection_id)
+				= ug.account_collection_id)
 			JOIN account_collection ugac
 				on (ugac.account_collection_id = ug.account_collection_id)
 			JOIN val_person_status vps ON vps.person_status = a.account_status
 				AND vps.is_disabled = 'N'
 			LEFT JOIN v_device_collection_account_ssh_key ssh
 				ON (a.account_id = ssh.account_id  AND
-					(ssh.device_collection_id is NULL 
+					(ssh.device_collection_id is NULL
 						or ssh.device_collection_id =
 							o.device_collection_id ))
 			LEFT JOIN v_unix_mclass_settings mcs
@@ -108,17 +115,17 @@ FROM	account a
 			LEFT JOIN (
 				SELECT * FROM
 				(
-				SELECT	dchd.device_collection_id, 
+				SELECT	dchd.device_collection_id,
 						p.property_value_password_type as password_type,
 						row_number() OVER (partition by
 							dchd.device_collection_id)  as ord
 				FROM	property p
 						INNER JOIN v_device_coll_hier_detail dchd
-							ON dchd.parent_device_collection_id = 
+							ON dchd.parent_device_collection_id =
 								p.device_collection_id
-				WHERE	
-						p.property_name = 'UnixPwType' 
-				AND	 	p.property_type = 'MclassUnixProp'
+				WHERE
+						p.property_name = 'UnixPwType'
+				AND		p.property_type = 'MclassUnixProp'
 				) subq WHERE ord = 1
 			) pwt ON o.device_collection_id = pwt.device_collection_id
 			LEFT JOIN account_password ap

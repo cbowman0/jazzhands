@@ -577,18 +577,18 @@ sub _by_uid($$) {
 # Creates passwd files for all specified MCLASSes in the directory $dir.
 #
 ###############################################################################
-sub get_setting_value($$) {
-	my($array, $setting) = @_;
+sub get_setting_value($$$) {
+	my($array, $setting, $default) = @_;
 
 
 	if($array) {
 		for(my $i = 0; $i < scalar(@{$array}); $i += 2) {
-			if($array->[$i] eq '$setting') {
+			if($array->[$i] eq $setting) {
 				return $array->[$i+1];
 			}
 		}
 	}
-	'N';
+	$default;
 }
 
 sub generate_passwd_files($) {
@@ -679,14 +679,14 @@ sub generate_passwd_files($) {
 			'gecos'	 => $r->{ _dbx('GECOS') },
 			'home'	  => $r->{ _dbx('HOME') },
 			'shell'	 => $r->{ _dbx('SHELL') },
-			'group_name'    => $r->{ _dbx('GROUP_NAME') },
+			'group_name'    => $r->{ _dbx('UNIX_GROUP_NAME') },
 			'PreferLocal'   => get_setting_value(
 				$r->{ _dbx('setting') },
-				'PreferLocal'
+				'PreferLocal', 'N'
 			),
 			'PreferLocalSSHAuthorizedKeys' => get_setting_value(
 				$r->{ _dbx('setting') },
-				'PreferLocal'
+				'PreferLocalSSHAuthorizedKeys', 'N'
 			),
 		};
 
@@ -778,7 +778,7 @@ sub generate_group_files($) {
 
 
 		# sometimes an undef shows up, so strip it out
-		my @peeps = map { defined($_) && $_} @$peeps;
+		my @peeps = grep ( defined($_), @$peeps);
 
 		push(
 			@grplines,
