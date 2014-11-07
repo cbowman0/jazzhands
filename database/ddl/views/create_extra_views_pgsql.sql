@@ -91,3 +91,8 @@
 \i pgsql/create_v_unix_account_overrides.sql
 \i pgsql/create_v_device_col_account_cart.sql
 \i pgsql/create_v_unix_passwd_mappings.sql
+
+-- group file generation
+\i pgsql/create_v_unix_group_overrides.sql
+\i pgsql/create_v_device_col_account_col_cart.sql
+\i pgsql/create_v_unix_group_mappings.sql

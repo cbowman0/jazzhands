@@ -606,9 +606,6 @@ sub generate_passwd_files($) {
 		$and .= "and device_collection_id in $q_mclass_ids";
 	}
 
-	#
-	# NOTE:  Need to come up with a smarter way of getting user properties.
-	# NOTE:  Inner ssh key query is so the output is always ordered the same
 	$q = qq{
 		SELECT	device_collection_name, map.* 
 		FROM	v_unix_passwd_mappings map
@@ -675,13 +672,13 @@ sub generate_passwd_files($) {
 		my $up       = $u_prop->{$dcid}{$suid};
 		my $userhash = {
 			'account_id'    => $r->{ _dbx('ACCOUNT_ID') },
-			'login'         => $r->{ _dbx('LOGIN') },
+			'login'	 => $r->{ _dbx('LOGIN') },
 			'password_hash' => $r->{ _dbx('CRYPT') },
-			'uid'           => int( $r->{ _dbx('UNIX_UID') } ),
-			'gid'           => int( $r->{ _dbx('UNIX_GID') } ),
-			'gecos'         => $r->{ _dbx('GECOS') },
-			'home'          => $r->{ _dbx('HOME') },
-			'shell'         => $r->{ _dbx('SHELL') },
+			'uid'	   => int( $r->{ _dbx('UNIX_UID') } ),
+			'gid'	   => int( $r->{ _dbx('UNIX_GID') } ),
+			'gecos'	 => $r->{ _dbx('GECOS') },
+			'home'	  => $r->{ _dbx('HOME') },
+			'shell'	 => $r->{ _dbx('SHELL') },
 			'group_name'    => $r->{ _dbx('GROUP_NAME') },
 			'PreferLocal'   => get_setting_value(
 				$r->{ _dbx('setting') },
@@ -734,278 +731,71 @@ sub generate_passwd_files($) {
 sub generate_group_files($) {
 	my $dir = shift;
 	my (
-		$q,	 $sth,   $r,      $fh,
-		$mclass,    %group, %member, %m_member,
-		%gn_member, %gn_m_member
+		$q,	 $sth,   $fh,
 	);
 
-	## The following query determines which unix groups are assigned
-	## to which MCLASSes taking device collection inheritance
-	## into account. The query also determines the group password and
-	## the default GID which the group would have without any overrides.
-	$q = q{
-	select distinct dchd.device_collection_id, 
-			   dc.device_collection_name mclass, 
-	       ug.account_collection_id, 
-			   ugu.account_collection_name as group_name, 
-	       ug.unix_gid, 
-	       ug.group_password	-- XXX needs to be a property
-	from v_device_coll_hier_detail dchd
-	join device_collection dc
-		on dchd.device_collection_id = dc.device_collection_id
-	join v_property p
-		on p.device_collection_id = dchd.parent_device_collection_id
-	join unix_group ug on 
-			p.account_collection_id = ug.account_collection_id
-		join account_collection ugu on 
-			ugu.account_collection_id = ug.account_collection_id 
-	where dc.device_collection_type = 'mclass'
-		and p.property_type = 'MclassUnixProp'
-	and p.property_name = 'UnixGroup'
-    };
-
+	my $and = "";
 	if ($q_mclass_ids) {
-		$q .= "and dchd.device_collection_id in $q_mclass_ids";
+		$and .= "and device_collection_id in $q_mclass_ids";
 	}
+
+	$q = qq{
+		SELECT	device_collection_name, map.* 
+		FROM	v_unix_group_mappings map
+				INNER JOIN device_collection USING (device_collection_id)
+		WHERE	device_collection_type = 'mclass'
+				$and
+		ORDER BY device_collection_name, unix_gid
+	};
 
 	$sth = $dbh->prepare($q);
 	$sth->execute;
 
-	## We store the results in the hash %group which has the
-	## DEVICE_COLLECTION_ID and ACCOUNT_COLLECTION_ID as it's keys.
-
-	while ( $r = $sth->fetchrow_hashref ) {
+	my @grplines;
+	my $last_dcid;
+	while ( my $r = $sth->fetchrow_hashref ) {
 		my $dcid = $r->{ _dbx('DEVICE_COLLECTION_ID') };
-		my $ugid = $r->{ _dbx('ACCOUNT_COLLECTION_ID') };
-
-		$group{$dcid}{$ugid} = $r;
-	}
-
-	## This is an auxiliary query which maps MCLASS IDs to MCLASS names
-
-	$q = q{
-	select device_collection_id, device_collection_name mclass 
-		from device_collection
-	where device_collection_type = 'mclass'
-    };
-
-	$mclass = $dbh->selectall_hashref( $q, _dbx('DEVICE_COLLECTION_ID') );
-
-	## The following query determines Unix Group membership on a specific
-	## mclass (device collection).  It does not handle 'user is a member of
-	## this group everywhere' which is handled in a later query.
-
-	## The following query determines Unix group membership. It maps
-	## Unix groups to logins that belong to each particular group for
-	## entries in ACCOUNT_COLLECTION_ACCOUNT that have a property
-	## of UnixGroup set for the given DEVICE_COLLECTION_ID
-
-	## property:
-	## -- lhs: mclass device_collection_id, unix group account_collection_id
-	## -- rhs: account collection that gets membership
-
-	$q = q{
-		select	distinct dc.device_collection_id, 
-				ug.account_collection_id, 
-				grp_ac.account_collection_name as group_name, 
-				a.login
-		from v_device_coll_hier_detail dc
-		    inner join v_property p on
-				p.device_collection_id = dc.parent_device_collection_id
-		    inner join account_collection grp_ac using (account_collection_id)
-		    inner join unix_group ug using (account_collection_id)
-		    inner join v_acct_coll_acct_expanded mac
-				on mac.account_collection_id = p.property_value_account_coll_id
-		    inner join account a
-				on mac.account_id = a.account_id
-		    inner join val_person_status vps
-				on vps.person_status = a.account_status
-		where
-				p.property_name = 'UnixGroupMemberOverride'
-			and p.property_type = 'MclassUnixProp'
-			and vps.is_disabled = 'N'
-    };
-
-	if ($q_mclass_ids) {
-		$q .= "and dc.device_collection_id in $q_mclass_ids";
-	}
-
-	$sth = $dbh->prepare($q);
-	$sth->execute;
-
-	## We store the results in two hashes, $m_member and $gn_m_member.
-	## The first level key is the DEVICE_COLLECTION_ID for both. The
-	## second level key of $m_member is the ACCOUNT_COLLECTION_ID.
-	## The second level key of $gn_m_member is the group name. The value
-	## for both hashes is a reference to the list of the group members.
-
-	while ( $r = $sth->fetchrow_hashref ) {
-		my $dcid  = $r->{ _dbx('DEVICE_COLLECTION_ID') };
-		my $ugid  = $r->{ _dbx('ACCOUNT_COLLECTION_ID') };
 		my $gname = $r->{ _dbx('GROUP_NAME') };
+		my $gid = $r->{ _dbx('UNIX_GID') };
+		my $gpwd = $r->{ _dbx('GROUP_PASSWORD') };
+		my $peeps = $r->{ _dbx('MEMBERS') };
 
-		push( @{ $m_member{$dcid}{$ugid} },     $r->{ _dbx('LOGIN') } );
-		push( @{ $gn_m_member{$dcid}{$gname} }, $r->{ _dbx('LOGIN') } );
-	}
-
-	## The following query determines Unix group membership everywhere.
-	## It basically just shows account collection membership, recursively.
-	## This could probably be combined with the above query with a UNION,
-	## but earlier# iterations under Oracle just could not handle it.
-	## Each query separately takes a few seconds, but once they were combined,
-	## it never finishes.  Lots has changed since then.
-
-	$q = q{
-		select  ug.account_collection_id,
-				gac.account_collection_name as group_name,
-				a.login
-		 from   unix_group ug
-			inner join account_collection gac using (account_collection_id)
-			inner join v_acct_coll_acct_expanded vacae 
-			    using (account_collection_id)
-			inner join account a
-			    using (account_id)
-			inner join val_person_status vps
-			    on vps.person_status = a.account_status
-		where   is_disabled = 'N'
-    };
-
-	$sth = $dbh->prepare($q);
-	$sth->execute;
-
-	## We store the results in two hashes, $member and $gn_member.
-	## The first level key is the DEVICE_COLLECTION_ID for both. The
-	## second level key of $member is the ACCOUNT_COLLECTION_ID. The second
-	## level key of $gn_member is the group name. The value for both
-	## hashes is a reference to the list of the group members.
-
-	while ( $r = $sth->fetchrow_hashref ) {
-		my $ugid  = $r->{ _dbx('ACCOUNT_COLLECTION_ID') };
-		my $gname = $r->{ _dbx('GROUP_NAME') };
-
-		push( @{ $member{$ugid} },     $r->{ _dbx('LOGIN') } );
-		push( @{ $gn_member{$gname} }, $r->{ _dbx('LOGIN') } );
-	}
-
-	## The $passwd_grp hash is built during generation of passwd
-	## files. The first level key is the DEVICE_COLLECTION_ID, the
-	## second level key is LOGIN, the third level keys are
-	## 'GROUP_NAME' and 'GID'. The hash stores the primary Unix group
-	## information for all users on all MCLASSes. Let's iterate over
-	## all MCLASSes that have any users in the passwd file then.
-
-	foreach my $dcid ( keys %$passwd_grp ) {
-		my $gdc = $group{$dcid};
-		my $gp  = $g_prop->{$dcid};
-		my $gm;
-
-		#- next if(!$gdc);
-		## $gm will store group member information for this MCLASS.
-		## The first level key is the group name. The second level
-		## keys are 'gid', 'password', and 'members'.
-
-		## First add to $gm all groups that are assigned this MCLASS
-
-		foreach my $ugid ( keys %$gdc ) {
-			my $g     = $gdc->{$ugid};
-			my $gpass = $g->{ _dbx('GROUP_PASSWORD') } || '*';
-			my $gname = $g->{ _dbx('GROUP_NAME') };
-			my $gid =
-			    $gp && defined( $gp->{$gname} )
-			  ? $gp->{$gname}{ _dbx('FORCE_GID') }
-			  : $g->{ _dbx('UNIX_GID') };
-
-			$gm->{$gname}{gid}      = $gid;
-			$gm->{$gname}{password} = $gpass;
-
-			## Add members that this group has everywhere
-
-			push( @{ $gm->{$gname}{members} }, @{ $member{$ugid} } )
-			  if ( defined $member{$ugid} );
-
-			## Add members that are specific to this MCLASS
-
-
-			push(
-				@{ $gm->{$gname}{members} },
-				@{ $m_member{$dcid}{$ugid} }
-			) if ( defined $m_member{$dcid}{$ugid} );
+		if ( defined($last_dcid) ) {
+			if ( $last_dcid != $dcid ) {
+				my $json = JSON::PP->new->ascii;
+				print $fh $json->pretty->encode( \@grplines );
+				$fh =
+				  new_mclass_file( $dir, $r->{ _dbx('DEVICE_COLLECTION_NAME') },
+					$fh, 'group' );
+				$last_dcid = $dcid;
+				undef(@grplines);
+			}
+		} else {
+			$fh = new_mclass_file( $dir, $r->{ _dbx('DEVICE_COLLECTION_NAME') },
+				$fh, 'group' );
+			$last_dcid = $dcid;
 		}
 
-		## Now add default groups for users on this MCLASS. We take
-		## the group information from $passwd_grp which stores the
-		## primary group information from the passwd file.
 
-		foreach my $login ( sort keys %{ $passwd_grp->{$dcid} } ) {
-			my $gname = $passwd_grp->{$dcid}{$login}{GROUP_NAME};
-			my $gid   = $passwd_grp->{$dcid}{$login}{GID};
+		# sometimes an undef shows up, so strip it out
+		my @peeps = map { defined($_) && $_} @$peeps;
 
-			$gm->{$gname}{gid} ||= $gid;
-			$gm->{$gname}{password} ||= '*';
-
-			## Add members that this group has everywhere
-
-			push(
-				@{ $gm->{$gname}{members} },
-				@{ $gn_member{$gname} }
-			) if ( defined $gn_member{$gname} );
-
-			## Add members that are specific to this MCLASS
-
-			push(
-				@{ $gm->{$gname}{members} },
-				@{ $gn_m_member{$dcid}{$gname} }
-			) if ( defined $gn_m_member{$dcid}{$gname} );
-		}
-
-		## And now write all the groups to the group file
-
-		$fh = new_mclass_file( $dir, $mclass->{$dcid}{ _dbx('MCLASS') },
-			$fh, 'group' );
-
-		my @allgrp;
-		foreach my $gname (
-			sort    ## by GID
+		push(
+			@grplines,
 			{
-				$gm->{$a}{gid} <=> $gm->{$b}{gid}
-			} keys %$gm
-		  )
-		{
-			my $gpass = $gm->{$gname}{password};
-			my $gid   = $gm->{$gname}{gid};
-			my ( @m, %is_mem );
-
-			## Some Unix groups are actually empty in JazzHands, that's why
-			## we need the if statement here.
-
-			@m = @{ $gm->{$gname}{members} }
-			  if ( defined $gm->{$gname}{members} );
-
-			## Remove duplicate members from @m
-
-			map { $is_mem{$_} = 1 } @m;
-			@m = keys(%is_mem);
-
-			## Remove users who are not in the passwd file
-
-			@m = grep( defined( $passwd_grp->{$dcid}{$_} ), @m );
-
-			#print $fh "$gname:*:$gid:"
-			#  . join( ',', sort { $a cmp $b } @m ) . "\n";
-			@m = sort(@m);
-			push(
-				@allgrp,
-				{
-					'group_name'     => $gname,
-					'group_password' => '*',
-					'gid'	    => int($gid),
-					'members'	=> \@m
-				}
-			);
-		}
-		my $json = JSON::PP->new->ascii;
-		print $fh $json->pretty->encode( \@allgrp );
+				'group_name'     => $gname,
+				'group_password' => '*',
+				'gid'	    => int($gid),
+				'members'	=> \@peeps
+			}
+		);
 	}
+
+	## Let's not forget to write the passwd file for the last MCLASS
+	my $json = JSON::PP->new->ascii;
+	print $fh $json->pretty->encode( \@grplines ) if ($fh);
+	$fh->close if ( defined $fh );
+
 }
 
 ###############################################################################
@@ -2006,9 +1796,8 @@ sub create_host_symlinks($@) {
 				$old{$device} )
 			{
 				unlink("$dir/$device/mclass");
-warn "symlink $device";
 				symlink(
-"../../mclass/$new->{$device}{_dbx('MCLASS')}",
+					"../../mclass/$new->{$device}{_dbx('MCLASS')}",
 					"$dir/$device/mclass"
 				);
 			}
