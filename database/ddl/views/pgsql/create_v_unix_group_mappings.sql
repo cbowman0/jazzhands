@@ -16,32 +16,24 @@
 -- $Id$
 --
 
-/*
-orig:
-	device_collection_id
-	device_collection_name
-	account_collection_id,
-	account_colletion_name as group_name
-	unix_group_passwd
-	[	members ]
-
-	need to consider:
-		- groups that appear explicitly
-		- groups that appear because users on are the machine
-		- members of both types of groups that that appear are in 
-			groups AND on the machine
- */
-
 --
 -- This query returns what can become a group entry for a given mclass,
 -- applying all the various ways for mclass properties to tweak behavior
 --
 -- This relies on v_device_col_account_col_cart which limits the responses to
--- just mclasses/accounts mapped through the UnixGroup property
+-- just mclasses/accounts mapped through the UnixGroup property.  That feature
+-- may be able to be undone...
 -- 
 --
 create or replace view v_unix_group_mappings AS
-WITH ugmap AS (
+WITH accts AS (
+		SELECT a.* 
+		FROM account a
+			INNER JOIN account_unix_info using (account_id)
+			INNER JOIN val_person_status vps 
+				ON a.account_status = vps.person_status
+			WHERE vps.is_disabled = 'N'
+), ugmap AS (
 	SELECT dch.device_collection_id, vace.account_collection_id
 		FROM property  p
 			JOIN v_device_coll_hier_detail dch ON
@@ -59,9 +51,7 @@ WITH ugmap AS (
 						dch.parent_device_collection_id
 			join v_acct_coll_acct_expanded vace 
 				using (account_collection_id)
-			join account a on vace.account_id = a.account_id
-			join val_person_status vps 
-				on a.account_status = vps.person_status
+			join accts a on vace.account_id = a.account_id
 			join account_unix_info aui on a.account_id = aui.account_id
 			join unix_group ug
 				on ug.account_collection_id = aui.unix_group_acct_collection_id
@@ -69,7 +59,6 @@ WITH ugmap AS (
 		on ug.account_collection_id = uag.account_collection_id
 	WHERE property_name = 'UnixLogin'
 	AND property_type = 'MclassUnixProp'
-	AND vps.is_disabled = 'N'
 ), dcugm AS (
 	SELECT  dch.device_collection_id, p.account_collection_id, aca.account_id
 	FROM    property p
@@ -93,12 +82,6 @@ WITH ugmap AS (
 		) actoa
 			JOIN account_unix_info ui USING (account_id)
 			JOIN account a USING (account_id)
-), accts AS (
-		SELECT a.* 
-		FROM account a
-			INNER JOIN val_person_status vps 
-				ON a.account_status = vps.person_status
-			WHERE vps.is_disabled = 'N'
 ) SELECT	dc.device_collection_id,
 		ac.account_collection_id,
 		ac.account_collection_name as group_name,
