@@ -82,6 +82,12 @@ WITH accts AS (
 		) actoa
 			JOIN account_unix_info ui USING (account_id)
 			JOIN account a USING (account_id)
+), grp_accounts AS (
+	SELECT	g.* 
+	FROM	grp_members g
+			JOIN accts using (account_id)
+			JOIN v_unix_passwd_mappings
+				USING (device_collection_id, account_id)
 ) SELECT	dc.device_collection_id,
 		ac.account_collection_id,
 		ac.account_collection_name as group_name,
@@ -99,9 +105,8 @@ FROM	device_collection dc
 		JOIN unix_group USING (account_collection_id)
 		LEFT JOIN v_device_col_account_col_cart o
 			USING (device_collection_id,account_collection_id)
-		LEFT JOIN grp_members 
-			USING (device_collection_id, account_collection_id)
-		LEFT JOIN accts a ON grp_members.account_id = a.account_id
+		LEFT JOIN grp_accounts a
+			USING (device_collection_id,account_collection_id)
 		LEFT JOIN v_unix_mclass_settings mcs
 				ON mcs.device_collection_id = dc.device_collection_id
 WHERE	dc.device_collection_type = 'mclass'
