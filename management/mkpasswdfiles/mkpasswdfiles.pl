@@ -675,7 +675,6 @@ sub generate_passwd_files($) {
 			'login'	 => $r->{ _dbx('LOGIN') },
 			'password_hash' => $r->{ _dbx('CRYPT') },
 			'uid'	   => int( $r->{ _dbx('UNIX_UID') } ),
-			'gid'	   => int( $r->{ _dbx('UNIX_GID') } ),
 			'gecos'	 => $r->{ _dbx('GECOS') },
 			'home'	  => $r->{ _dbx('HOME') },
 			'shell'	 => $r->{ _dbx('SHELL') },

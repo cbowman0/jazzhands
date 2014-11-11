@@ -29,7 +29,6 @@ select
 	device_collection_id, account_id, login, crypt,
 	unix_uid,
 	unix_group_name,
-	unix_gid,
 	regexp_replace(gecos, ' +', ' ', 'g') AS gecos,
 	regexp_replace(
 		CASE
@@ -68,7 +67,6 @@ SELECT	o.device_collection_id,
 			from generate_subscripts(setting, 1) as i
 			where setting[i] = 'ForceUserUID')]::integer, unix_uid) as unix_uid,
 		ugac.account_collection_name as unix_group_name,
-		unix_gid,
 		CASE WHEN a.description IS NOT NULL THEN a.description
 			ELSE concat(coalesce(preferred_first_name, first_name), ' ',
 				case WHEN middle_name is NOT NULL AND
