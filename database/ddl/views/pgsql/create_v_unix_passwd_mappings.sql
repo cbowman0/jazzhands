@@ -66,7 +66,7 @@ SELECT	o.device_collection_id,
 			), '*') as crypt,
 		coalesce(setting[(select i + 1
 			from generate_subscripts(setting, 1) as i
-			where setting[i] = 'ForceUID')]::integer, unix_uid) as unix_uid,
+			where setting[i] = 'ForceUserUID')]::integer, unix_uid) as unix_uid,
 		ugac.account_collection_name as unix_group_name,
 		unix_gid,
 		CASE WHEN a.description IS NOT NULL THEN a.description

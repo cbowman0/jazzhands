@@ -32,14 +32,14 @@
 create or replace view v_device_col_account_cart AS
 WITH x AS (
 select	device_collection_id, account_id, NULL as setting
-FROM	v_device_col_acct_col_expanded 
+FROM	v_device_col_acct_col_unixlogin 
 		INNER JOIN account USING (account_id)
 		INNER JOIN account_unix_info USING (account_id)
 UNION select device_collection_id, account_id, setting
  	from v_unix_account_overrides
 		INNER JOIN account USING (account_id)
 		INNER JOIN account_unix_info USING (account_id)
-		INNER JOIN v_device_col_acct_col_expanded USING 
+		INNER JOIN v_device_col_acct_col_unixlogin USING 
 			(device_collection_id, account_id)
 ) SELECT device_collection_id, account_id, setting
 FROM (
@@ -49,14 +49,3 @@ FROM (
 	FROM x
 ) xx
 WHERE rn = 1;
-
---
--- This is a version without the aformentioned restrictions:
---
---	select	device_collection_id, account_id, NULL as setting
---	FROM	device_collection, account
---	WHERE	(device_collection_id, account_id) not in
---			(select device_collection_id, account_id  
---				FROM v_unix_account_overrides)
---	UNION select * from v_unix_account_overrides
-
