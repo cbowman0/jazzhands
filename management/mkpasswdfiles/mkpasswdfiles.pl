@@ -132,7 +132,7 @@ my $o_output_dir = "/var/lib/jazzhands/creds-mgmt-server/out";
 my $o_verbose;
 my $o_random;
 
-my ( $q_mclass_ids, $dbh, $g_prop, $passwd_grp, %mclass_file );
+my ( $q_mclass_ids, $dbh, $passwd_grp, %mclass_file );
 my (
 	%sudo_defaults,  %sudo_cmnd_aliases, %sudo_uclasses,
 	%sudo_user_spec, %sudo_expand_uclass
@@ -168,230 +168,6 @@ sub get_support_email($) {
 	$sth->finish;
 	$addr = 'support@example.com' if ( !$addr );
 	$addr;
-}
-
-###############################################################################
-#
-# usage: @pwdline = get_passwd_line($mp, $up, $gp, $u);
-#
-# Applies various properties and overrides to a raw passwd file line
-# record $u. The record is pulled from tables and views SYSTEM_USER,
-# USER_UNIX_INFO, UNIX_GROUP, V_DEVICE_COL_UCLASS_EXPANDED,
-# DEVICE_COLLECTION, and SYSTEM_PASSWORD with a minimal preprocessing.
-# The function returns an array of 8 elements. The first 7 elements
-# can be written directly to the passwd file, the 8th element is the
-# name of the primary Unix group of the user.
-#
-# $u is a reference to a hash with the following elements:
-#
-#   DEVICE_COLLECTION_ID
-#   SYSTEM_USER_ID
-#   MCLASS
-#   LOGIN
-#   MD5_PASSWORD,
-#   DES_PASSWORD
-#   UNIX_UID
-#   GROUP_NAME
-#   UNIX_GID
-#   FIRST_NAME
-#   MIDDLE_NAME
-#   LAST_NAME
-#   DEFAULT_HOME
-#   SHELL
-#
-# $mp is a reference to a hash with the following elements. They are
-# pulled from the MCLASS_UNIX_PROP table.
-#
-#   MCLASS_UNIX_PW_TYPE
-#   HOME_PLACE
-#   MCLASS_UNIX_HOME_TYPE
-#
-# $up is a reference to a hash with the following elements. They are
-# pulled from the PROPERTY table.
-#
-#   ForceCrypt
-#   ForceUserUID
-#   ForceUserGroup
-#   ForceHome
-#   ForceShell
-#   ForceStdShell
-#
-# $gp is a reference to a hash whose first level key is a Unix group
-# name, the second level key is FORCE_GID and the value is the GID for
-# this group. This hash reflects the content of the
-# UNIX_GROUP_PROPERTY table.
-#
-# Any and all properties described above can be missing, and $mp, $up,
-# and $gp can be completely undefined as appropriate for the MCLASS in
-# question.
-#
-###############################################################################
-
-sub get_passwd_line($$$$) {
-	my ( $mp, $up, $gp, $u ) = @_;
-	my ( $login, $crypt, $uid, $gname, $gid, $full_name, $home, $shell );
-
-	## Default values
-
-	$login = $u->{ _dbx('LOGIN') };
-	$crypt = '*';
-	$uid   = $u->{ _dbx('UNIX_UID') };
-	$gid   = $u->{ _dbx('UNIX_GID') };
-	$home  = $u->{ _dbx('DEFAULT_HOME') };
-	$shell = $u->{ _dbx('SHELL') };
-
-	## Determine the password
-
-	if ( defined( $up->{'ForceCrypt'} ) ) {
-		$crypt = $up->{ForceCrypt};
-	} else {
-		if ( defined( $mp->{ _dbx('MCLASS_UNIX_PW_TYPE') } ) ) {
-			my $ptype = $mp->{ _dbx('MCLASS_UNIX_PW_TYPE') };
-			if ( defined( $u->{$ptype} ) ) {
-				$crypt = $u->{$ptype};
-			}
-		} else {
-			if ( $u->{ _dbx('MD5_PASSWORD') } ) {
-				$crypt = $u->{ _dbx('MD5_PASSWORD') };
-			} elsif ( $u->{ _dbx('DES_PASSWORD') } ) {
-				$crypt = $u->{ _dbx('DES_PASSWORD') };
-			}
-		}
-	}
-
-	$crypt = '*' if ( !$crypt );
-
-	## Determine UID
-
-	$uid = defined( $up->{ForceUserUID} ) ? $up->{ForceUserUID} : $uid;
-
-	## Determine GID
-
-	if ( defined( $up->{ForceUserGroup} ) ) {
-		$gname = $up->{ForceUserGroup}{ _dbx('GROUP_NAME') };
-		$gid =
-		  defined( $gp->{$gname} )
-		  ? $gp->{$gname}{ _dbx('FORCE_GID') }
-		  : $up->{ForceUserGroup}{ _dbx('UNIX_GID') };
-	}
-
-	else {
-		$gname = $u->{ _dbx('GROUP_NAME') };
-		$gid =
-		  defined( $gp->{$gname} ) ? $gp->{$gname}{_dbx('FORCE_GID')} : $gid;
-	}
-
-	## Determine full name
-
-	if ( defined( $u->{ _dbx('DESCRIPTION') } ) ) {
-		$full_name = $u->{ _dbx('DESCRIPTION') };
-	} else {
-		$full_name = join(
-			' ',
-			grep( defined($_),
-				$u->{ _dbx('FIRST_NAME') },
-				$u->{ _dbx('MIDDLE_NAME') },
-				$u->{ _dbx('LAST_NAME') } )
-		);
-	}
-
-	## Determine home directory
-
-	my $hp =
-	  defined( $mp->{ _dbx('HOME_PLACE') } )
-	  ? $mp->{ _dbx('HOME_PLACE') }
-	  : '/home';
-	if ($home) {
-		$home =~ m!/([^/]+)$!;
-		if ( defined($1) ) {
-			$home = "$hp/$1";
-		}
-	}
-
-	#  home of last resort
-	$home = "$hp/$login" if ( !defined($home) );
-
-	if ( ( $mp->{ _dbx('MCLASS_UNIX_HOME_TYPE') } || '' ) eq 'generic' ) {
-		$home = "$hp/generic";
-	}
-
-	if ( defined( $up->{ForceHome} ) ) {
-		$home = $up->{ForceHome};
-		$home .= $login if ( $up->{ForceHome} =~ m!/$! );
-	}
-
-	## Determine the login shell
-
-	if ( defined( $up->{ForceShell} ) && !defined( $up->{ForceStdShell} ) )
-	{
-		$shell = $up->{ForceShell};
-	}
-
-	return ( $login, $crypt, $uid, $gid, $full_name, $home, $shell,
-		$gname );
-}
-
-###############################################################################
-#
-# usage: $u_prop = get_uclass_properties();
-#
-# Retrieves PROPERTYs for all MCLASSes and all enabled
-# users. Uses the V_DEV_COL_USER_PROP_EXPANDED view to expand UCLASSes
-# all the way down to individual users, take inheritance into account,
-# and resolve conflicting properties. Returns a reference to a hash.
-# The first level key is DEVICE_COLLECTION_ID, the second level key is
-# SYSTEM_USER_ID, the third level key is PROPERTY_NAME, and the
-# value is PROPERTY_VALUE. If PROPERTY_NAME is ForceUserGroup,
-# there are two fourth level keys GROUP_NAME and UNIX_GID, and the
-# values are the group name and the GID of the group.
-#
-###############################################################################
-
-sub get_uclass_properties() {
-	my ( $q, $sth, $mu_prop, @r );
-
-	# XXX - need to port this.  Its not clear that a group name
-	#	is the right way to go about this
-	# return  undef;
-
-	$q = q{
-	select device_collection_id, account_id,
-	       property_name, property_value
-	from v_dev_col_user_prop_expanded pe
-			join account a using(account_id)
-			join val_person_status vps
-				on vps.person_status = a.account_status
-	where vps.is_disabled = 'N'
-	and property_type = 'UnixPasswdFileValue'
-	and device_collection_id is not null
-    };
-
-	if ($q_mclass_ids) {
-		$q .= "and device_collection_id in $q_mclass_ids";
-	}
-
-	$sth = $dbh->prepare($q);
-	$sth->execute;
-
-	## If there are lines with duplicate device_collection_id,
-	## system_user_id, property_name, the first line is what counts.
-
-	while ( @r = $sth->fetchrow_array ) {
-		my ( $dcid, $suid, $upn, $pv, $gid ) = @r;
-
-		unless ( exists $mu_prop->{$dcid}{$suid}{$upn} ) {
-			if ( $upn eq 'ForceUserGroup' ) {
-				$mu_prop->{$dcid}{$suid}{$upn} = {
-					GROUP_NAME => $pv,
-					UNIX_GID   => $gid
-				};
-			} else {
-				$mu_prop->{$dcid}{$suid}{$upn} = $pv;
-			}
-		}
-	}
-
-	return $mu_prop;
 }
 
 ###############################################################################
@@ -478,61 +254,6 @@ sub get_mclass_properties {
 
 ###############################################################################
 #
-# usage: $g_prop = get_group_properties();
-#
-# Retrieves UNIX_GROUP_PROPERTY values for all MCLASSes and all
-# UNIX_GROUPs. Takes inheritance into account, and resolves conflicts
-# between properties at different levels in the inheritance
-# tree. Returns a reference to a hash. The first level key is the
-# DEVICE_COLLECTION_ID, the second level key is the group name, the
-# third level key is one of DEVICE_COLLECTION_ID, GROUP_NAME, or
-# FORCE_GID, and the value is the value of the corresponding
-# attribute.
-#
-###############################################################################
-
-sub get_group_properties() {
-	my ( $q, $sth, $g_prop, $r );
-
-	$q = q{
-	select device_collection_id, 
-		ac.account_collection_name as group_name, force_gid
-	from unix_group g
-	join (
-	  select row_number()
-	    over (partition by hd.device_collection_id, gp.account_collection_id
-		  order by device_collection_level,
-			hd.parent_device_collection_id) r,
-	    hd.device_collection_id, account_collection_id, 
-	    property_value AS force_gid
-	  from v_device_coll_hier_detail hd
-	  join v_property gp
-	  on hd.parent_device_collection_id = gp.device_collection_id
-	  where gp.property_name = 'ForceGroupGID'
-	  	and gp.property_type = 'UnixGroupFileProperty') y
-	join account_collection ac
-		using (account_collection_id)
-	on g.account_collection_id = y.account_collection_id
-	where r = 1
-    };
-
-	if ($q_mclass_ids) {
-		$q .= "and device_collection_id in $q_mclass_ids";
-	}
-
-	$sth = $dbh->prepare($q);
-	$sth->execute;
-
-	while ( $r = $sth->fetchrow_hashref ) {
-		$g_prop->{ $r->{ _dbx('DEVICE_COLLECTION_ID') } }
-		  { $r->{ _dbx('GROUP_NAME') } } = $r;
-	}
-
-	return $g_prop;
-}
-
-###############################################################################
-#
 # usage: $fh = new_mclass_file($dir, $mclass, $fh, $filename);
 #
 # Closes the filehandle $fh if $fh is defined. Creates the directory
@@ -593,10 +314,9 @@ sub get_setting_value($$$) {
 
 sub generate_passwd_files($) {
 	my $dir = shift;
-	my ( $q, $sth, $m_prop, $u_prop, $r, $last_dcid, $fh, @pwdlines );
+	my ( $q, $sth, $r, $last_dcid, $fh, @pwdlines );
 
-	$u_prop = get_uclass_properties();
-	$m_prop = get_mclass_properties();
+	print "Processing passwd files\n" if ($o_verbose);
 
 	## The following query returns the passwd file lines for all MCLASSes,
 	## including overrides.
@@ -669,7 +389,6 @@ sub generate_passwd_files($) {
 		## generate the group files. We keep the information in the
 		## global variable $passwd_grp which is a hash reference.
 
-		my $up       = $u_prop->{$dcid}{$suid};
 		my $userhash = {
 			'account_id'    => $r->{ _dbx('ACCOUNT_ID') },
 			'login'	 => $r->{ _dbx('LOGIN') },
@@ -732,6 +451,8 @@ sub generate_group_files($) {
 	my (
 		$q,	 $sth,   $fh,
 	);
+
+	print "Processing group files\n" if ($o_verbose);
 
 	my $and = "";
 	if ($q_mclass_ids) {
@@ -1955,8 +1676,6 @@ sub main {
 	## Group properties are used by both generate_passwd_files, and
 	## generate_group_files. That's why we store them in a global
 	## variable.
-
-	$g_prop = get_group_properties();
 
 	## Generate all the files
 
