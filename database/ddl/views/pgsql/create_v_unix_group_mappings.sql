@@ -81,7 +81,7 @@ WITH accts AS (
 		 SELECT * from dcugm
 		) actoa
 			JOIN account_unix_info ui USING (account_id)
-			JOIN account a USING (account_id)
+			JOIN accts a USING (account_id)
 ), grp_accounts AS (
 	SELECT	g.* 
 	FROM	grp_members g
@@ -109,7 +109,6 @@ FROM	device_collection dc
 			USING (device_collection_id,account_collection_id)
 		LEFT JOIN v_unix_mclass_settings mcs
 				ON mcs.device_collection_id = dc.device_collection_id
-WHERE	dc.device_collection_type = 'mclass'
 GROUP BY	dc.device_collection_id,
 		ac.account_collection_id,
 		ac.account_collection_name,

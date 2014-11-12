@@ -25,6 +25,30 @@
 --
 --
 create or replace view v_unix_passwd_mappings AS
+WITH accts as (
+	SELECT a.*, aui.unix_uid, aui.unix_group_acct_collection_id,
+		aui.shell, aui.default_home
+	FROM account a
+		INNER JOIN account_unix_info aui using (account_id)
+		INNER JOIN val_person_status vps
+			ON a.account_status = vps.person_status
+	WHERE vps.is_disabled = 'N'
+), extra_groups AS (
+	SELECT	device_collection_id, acae.account_id,
+			array_agg(ac.account_collection_name) as group_names
+	FROM	v_property p
+			INNER JOIN device_collection dc USING (device_collection_id)
+			INNER JOIN account_collection ac USING (account_collection_id)
+			INNER JOIN account_collection pac ON
+				pac.account_collection_id = p.property_value_account_coll_id
+			INNER JOIN  v_acct_coll_acct_expanded acae ON
+				pac.account_collection_id = acae.account_collection_id
+	WHERE
+			p.property_type = 'MclassUnixProp'
+	AND		p.property_name = 'UnixGroupMemberOverride'
+	AND		dc.device_collection_type != 'mclass'
+	GROUP BY device_collection_id, acae.account_id
+)
 select
 	device_collection_id, account_id, login, crypt,
 	unix_uid,
@@ -46,7 +70,8 @@ select
 		END, '/+', '/', 'g') as home,
 	shell, ssh_public_key,
 	setting,
-	mclass_setting
+	mclass_setting,
+	group_names
 FROM
 (
 SELECT	o.device_collection_id,
@@ -57,7 +82,7 @@ SELECT	o.device_collection_id,
 				CASE WHEN (expire_time is not NULL AND now() < expire_time) OR
 						now() - change_time < (
 								concat(coalesce((select property_value
-									from property where property_type='Defaults'
+									from v_property where property_type='Defaults'
 										and property_name='_maxpasswdlife')::text,
 								 90::text)::text, 'days')::text)::interval
 					THEN password
@@ -91,18 +116,17 @@ SELECT	o.device_collection_id,
 		mclass_setting[(select i + 1
 			from generate_subscripts(mcs.mclass_setting, 1) as i
 			where mcs.mclass_setting[i] = 'UnixHomeType')] as hometype,
-		ssh_public_key
-FROM	account a
+		ssh_public_key,
+		extra_groups.group_names
+FROM	accts a
 			JOIN v_device_col_account_cart o using (account_id)
 			JOIN device_collection dc USING (device_collection_id)
 			JOIN person p USING (person_id)
-			JOIN account_unix_info ui USING (account_id)
-			JOIN unix_group ug on (ui.unix_group_acct_collection_id
+			JOIN unix_group ug on (a.unix_group_acct_collection_id
 				= ug.account_collection_id)
 			JOIN account_collection ugac
 				on (ugac.account_collection_id = ug.account_collection_id)
-			JOIN val_person_status vps ON vps.person_status = a.account_status
-				AND vps.is_disabled = 'N'
+			LEFT JOIN extra_groups USING (device_collection_id, account_id)
 			LEFT JOIN v_device_collection_account_ssh_key ssh
 				ON (a.account_id = ssh.account_id  AND
 					(ssh.device_collection_id is NULL
@@ -117,7 +141,7 @@ FROM	account a
 						p.property_value_password_type as password_type,
 						row_number() OVER (partition by
 							dchd.device_collection_id)  as ord
-				FROM	property p
+				FROM	v_property p
 						INNER JOIN v_device_coll_hier_detail dchd
 							ON dchd.parent_device_collection_id =
 								p.device_collection_id
