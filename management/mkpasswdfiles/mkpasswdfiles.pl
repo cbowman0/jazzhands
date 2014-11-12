@@ -359,6 +359,11 @@ sub build_userhash($$) {
 		),
 	};
 
+	if ( defined $r->{ _dbx('EXTRA_GROUPS') } ) {
+		$userhash->{'extra_groups'} =
+		  $r->{ _dbx('EXTRA_GROUPS') };
+	}
+
 	if ( defined $r->{ _dbx('SSH_PUBLIC_KEY') } ) {
 		$userhash->{'ssh_public_key'} =
 		  $r->{ _dbx('SSH_PUBLIC_KEY') };

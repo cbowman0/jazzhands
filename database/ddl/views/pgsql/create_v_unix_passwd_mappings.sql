@@ -71,7 +71,7 @@ select
 	shell, ssh_public_key,
 	setting,
 	mclass_setting,
-	group_names
+	group_names as extra_groups
 FROM
 (
 SELECT	o.device_collection_id,
