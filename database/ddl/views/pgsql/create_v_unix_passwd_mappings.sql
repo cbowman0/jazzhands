@@ -129,7 +129,6 @@ FROM	account a
 			LEFT JOIN account_password ap
 				ON ap.account_id = a.account_id
 				AND  ap.password_type = pwt.password_type
-WHERE	dc.device_collection_type = 'mclass'
 ) s
 order by device_collection_id, account_id
 ;
