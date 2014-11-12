@@ -77,7 +77,7 @@ FROM (
 			FROM    v_acct_coll_prop_expanded acpe
 				INNER JOIN v_acct_coll_acct_expanded acae 
 						USING (account_collection_id)
-				INNER JOIN property p USING (property_id)
+				INNER JOIN v_property p USING (property_id)
 				INNER JOIN dcmap dchd
 					ON dchd.parent_device_collection_id = p.device_collection_id
 			WHERE	p.property_type IN ('UnixPasswdFileValue', 

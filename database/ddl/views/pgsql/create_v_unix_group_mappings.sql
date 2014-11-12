@@ -35,7 +35,7 @@ WITH accts AS (
 			WHERE vps.is_disabled = 'N'
 ), ugmap AS (
 	SELECT dch.device_collection_id, vace.account_collection_id
-		FROM property  p
+		FROM v_property  p
 			JOIN v_device_coll_hier_detail dch ON
 				p.device_collection_id = dch.parent_device_collection_id
 			join v_account_collection_expanded vace 
@@ -45,7 +45,7 @@ WITH accts AS (
 		AND property_type = 'MclassUnixProp'
 	UNION
 	select dch.device_collection_id, uag.account_collection_id
-	from   property p
+	from   v_property p
 			JOIN v_device_coll_hier_detail dch ON
 					p.device_collection_id = 
 						dch.parent_device_collection_id
@@ -61,7 +61,7 @@ WITH accts AS (
 	AND property_type = 'MclassUnixProp'
 ), dcugm AS (
 	SELECT  dch.device_collection_id, p.account_collection_id, aca.account_id
-	FROM    property p
+	FROM    v_property p
 			INNER JOIN unix_group ug USING (account_collection_id)
 			JOIN v_device_coll_hier_detail dch ON
 				p.device_collection_id = dch.parent_device_collection_id
