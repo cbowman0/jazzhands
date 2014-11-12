@@ -293,7 +293,7 @@ sub _by_uid($$) {
 
 ###############################################################################
 #
-# usage: generate_passwd_files($dir);
+# usage: generate_passwd_files($dir, $style);
 #
 # Creates passwd files for all specified MCLASSes in the directory $dir.
 #
@@ -312,8 +312,63 @@ sub get_setting_value($$$) {
 	$default;
 }
 
-sub generate_passwd_files($) {
+sub build_userhash($$) {
+	my($r, $pwdlines) = @_;
+
+	### Check to see if the login already exists in the array.  In
+	### which case, the first one is favored, except for ssh keys which
+	### are added to the existing record.  This is really the only
+	## legitimate reason for the same login showing up twice
+	##
+	## It may be possible to do something clever with unnest
+	## in v_device_collection_account_ssh_key to make this
+	## go away
+	if( $r->{ _dbx('SSH_PUBLIC_KEY') } ) {
+		my $login = $r->{ _dbx('LOGIN') };
+		my @uh = grep($_->{login} eq $login, @$pwdlines);
+		if(scalar @uh ) {
+			my $uh = pop(@uh);
+			foreach my $k (@{ $r->{ _dbx('SSH_PUBLIC_KEY') } }) {
+				push(@ {$uh->{ssh_public_key}}, $k);
+			}
+			next;  # one dude!
+		}
+	}
+
+	## We need to store the mapping from DEVICE_COLLECTION_ID and
+	## LOGIN to GROUP_NAME and GID. We will need it later to
+	## generate the group files. We keep the information in the
+	## global variable $passwd_grp which is a hash reference.
+
+	my $userhash = {
+		'account_id'    => $r->{ _dbx('ACCOUNT_ID') },
+		'login'	 => $r->{ _dbx('LOGIN') },
+		'password_hash' => $r->{ _dbx('CRYPT') },
+		'uid'	   => int( $r->{ _dbx('UNIX_UID') } ),
+		'gecos'	 => $r->{ _dbx('GECOS') },
+		'home'	  => $r->{ _dbx('HOME') },
+		'shell'	 => $r->{ _dbx('SHELL') },
+		'group_name'    => $r->{ _dbx('UNIX_GROUP_NAME') },
+		'PreferLocal'   => get_setting_value(
+			$r->{ _dbx('setting') },
+			'PreferLocal', 'N'
+		),
+		'PreferLocalSSHAuthorizedKeys' => get_setting_value(
+			$r->{ _dbx('setting') },
+			'PreferLocalSSHAuthorizedKeys', 'N'
+		),
+	};
+
+	if ( defined $r->{ _dbx('SSH_PUBLIC_KEY') } ) {
+		$userhash->{'ssh_public_key'} =
+		  $r->{ _dbx('SSH_PUBLIC_KEY') };
+	}
+	$userhash;
+}
+
+sub generate_passwd_files($$) {
 	my $dir = shift;
+	my $style = shift;
 	my ( $q, $sth, $r, $last_dcid, $fh, @pwdlines );
 
 	print "Processing passwd files\n" if ($o_verbose);
@@ -321,19 +376,45 @@ sub generate_passwd_files($) {
 	## The following query returns the passwd file lines for all MCLASSes,
 	## including overrides.
 
-	my $and = "";
-	if ($q_mclass_ids) {
-		$and .= "and device_collection_id in $q_mclass_ids";
-	}
+	if($style eq 'mclass') {
+		my $and = "";
+		if ($q_mclass_ids) {
+			$and .= "and device_collection_id in $q_mclass_ids";
+		}
 
-	$q = qq{
-		SELECT	device_collection_name, map.* 
-		FROM	v_unix_passwd_mappings map
-				INNER JOIN device_collection USING (device_collection_id)
-		WHERE	device_collection_type = 'mclass'
-				$and
-		ORDER BY device_collection_name, unix_uid
-	};
+		$q = qq{
+			SELECT	device_collection_name, map.* 
+			FROM	v_unix_passwd_mappings map
+					INNER JOIN device_collection USING (device_collection_id)
+			WHERE	device_collection_type = 'mclass'
+					$and
+			ORDER BY device_collection_name, unix_uid
+		};
+	} elsif($style eq 'per-host') {
+		my $and = "";
+		if ($q_mclass_ids) {
+			$and .= qq{and device_id in (
+				select device_id
+				FROM	device_collection_device
+						INNER JOIN device_collection USING (device_collection_id)
+				WHERE	device_collection_id IN $q_mclass_ids
+				)
+			};
+		}
+	
+		$q = qq{
+			SELECT	d.device_name, map.* 
+			FROM	v_unix_passwd_mappings map
+					INNER JOIN device_collection USING (device_collection_id)
+					INNER JOIN device_collection_device 
+							USING (device_collection_id)
+					INNER JOIN device d USING (device_id)
+			WHERE	device_collection_type = 'per-device'
+					$and
+			ORDER BY device_name, unix_uid
+		};
+
+	}
 
 	$sth = $dbh->prepare($q);
 	$sth->execute;
@@ -348,74 +429,25 @@ sub generate_passwd_files($) {
 		## If we switched to a new MCLASS, write the passwd file
 		## and empty @pwdlines
 
+		my $outname = ($style eq 'mclass')?$r->{ _dbx('DEVICE_COLLECTION_NAME') }:
+			$r->{ _dbx('DEVICE_NAME') };
 		if ( defined($last_dcid) ) {
 			if ( $last_dcid != $dcid ) {
 				my $json = JSON::PP->new->ascii;
 				print $fh $json->pretty->encode( \@pwdlines );
 				$fh =
-				  new_mclass_file( $dir, $r->{ _dbx('DEVICE_COLLECTION_NAME') },
-					$fh, 'passwd' );
+				  new_mclass_file( $dir, $outname, $fh, 'passwd' );
 				$last_dcid = $dcid;
 				undef(@pwdlines);
 			}
 		} else {
-			$fh = new_mclass_file( $dir, $r->{ _dbx('DEVICE_COLLECTION_NAME') },
-				$fh, 'passwd' );
+			$fh = new_mclass_file( $dir, $outname, $fh, 'passwd' );
 			$last_dcid = $dcid;
 		}
-
-		### Check to see if the login already exists in the array.  In
-		### which case, the first one is favored, except for ssh keys which
-		### are added to the existing record.  This is really the only
-		## legitimate reason for the same login showing up twice
-		##
-		## It may be possible to do something clever with unnest
-		## in v_device_collection_account_ssh_key to make this
-		## go away
-		if( $r->{ _dbx('SSH_PUBLIC_KEY') } ) {
-			my $login = $r->{ _dbx('LOGIN') };
-			my @uh = grep($_->{login} eq $login, @pwdlines);
-			if(scalar @uh ) {
-				my $uh = pop(@uh);
-				foreach my $k (@{ $r->{ _dbx('SSH_PUBLIC_KEY') } }) {
-					push(@ {$uh->{ssh_public_key}}, $k);
-				}
-				next;  # one dude!
-			}
-		}
-
-		## We need to store the mapping from DEVICE_COLLECTION_ID and
-		## LOGIN to GROUP_NAME and GID. We will need it later to
-		## generate the group files. We keep the information in the
-		## global variable $passwd_grp which is a hash reference.
-
-		my $userhash = {
-			'account_id'    => $r->{ _dbx('ACCOUNT_ID') },
-			'login'	 => $r->{ _dbx('LOGIN') },
-			'password_hash' => $r->{ _dbx('CRYPT') },
-			'uid'	   => int( $r->{ _dbx('UNIX_UID') } ),
-			'gecos'	 => $r->{ _dbx('GECOS') },
-			'home'	  => $r->{ _dbx('HOME') },
-			'shell'	 => $r->{ _dbx('SHELL') },
-			'group_name'    => $r->{ _dbx('UNIX_GROUP_NAME') },
-			'PreferLocal'   => get_setting_value(
-				$r->{ _dbx('setting') },
-				'PreferLocal', 'N'
-			),
-			'PreferLocalSSHAuthorizedKeys' => get_setting_value(
-				$r->{ _dbx('setting') },
-				'PreferLocalSSHAuthorizedKeys', 'N'
-			),
-		};
-
-		if ( defined $r->{ _dbx('SSH_PUBLIC_KEY') } ) {
-			$userhash->{'ssh_public_key'} =
-			  $r->{ _dbx('SSH_PUBLIC_KEY') };
-		}
+		my $userhash = build_userhash($r, \@pwdlines);
 
 		## Accumulate all passwd file lines in @pwdlines.
 		## $pwd[7] is the group name. We don't need it anymore.
-
 		push( @pwdlines, $userhash );
 	}
 
@@ -1679,7 +1711,7 @@ sub main {
 
 	## Generate all the files
 
-	generate_passwd_files($dir);
+	generate_passwd_files($dir, 'mclass');
 	generate_group_files($dir);
 	retrieve_sudo_data();
 	generate_sudoers_files($dir);
@@ -1701,7 +1733,7 @@ sub main {
 	create_host_symlinks( "$o_output_dir/hosts", @ARGV );
 
 	## create any per-host files
-	#- create_host_files( "$o_output_dir/hosts", @ARGV );
+	generate_passwd_files("$o_output_dir/hosts", 'per-host');
 
 	$dbh->disconnect;
 
