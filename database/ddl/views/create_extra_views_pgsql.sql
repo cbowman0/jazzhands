@@ -84,6 +84,10 @@
 \i create_v_device_col_acct_col_expanded.sql
 \i create_v_corp_family_account.sql
 
+-- possibly to replace v_device_col_acct_col_expanded
+\i create_v_device_col_acct_col_unixlogin.sql
+\i create_v_device_col_acct_col_unixgroup.sql
+
 -- passwd file generation
 \i pgsql/create_v_device_collection_account_ssh_key.sql
 \i pgsql/create_v_unix_mclass_settings.sql
