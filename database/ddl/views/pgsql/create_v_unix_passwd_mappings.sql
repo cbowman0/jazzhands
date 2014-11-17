@@ -26,7 +26,8 @@
 --
 create or replace view v_unix_passwd_mappings AS
 WITH  passtype AS (
-	SELECT * FROM
+	SELECT ap.account_id, ap.password, ap.expire_time, ap.change_time,
+	subq.* FROM
 	(
 		SELECT	dchd.device_collection_id,
 			p.property_value_password_type as password_type,
@@ -39,7 +40,10 @@ WITH  passtype AS (
 		WHERE
 				p.property_name = 'UnixPwType'
 		AND		p.property_type = 'MclassUnixProp'
-	) subq WHERE ord = 1
+	) subq 
+			INNER JOIN account_password ap USING (password_type)
+			INNER JOIN account_unix_info a USING (account_id)
+	WHERE ord = 1 
 ), accts as (
 	SELECT a.*, aui.unix_uid, aui.unix_group_acct_collection_id,
 		aui.shell, aui.default_home
@@ -151,9 +155,7 @@ FROM	accts a
 				ON mcs.device_collection_id = dc.device_collection_id
 			LEFT JOIN passtype pwt
 				ON o.device_collection_id = pwt.device_collection_id
-			LEFT JOIN account_password ap
-				ON ap.account_id = a.account_id
-				AND  ap.password_type = pwt.password_type
+				AND a.account_id = pwt.account_id
 ) s
 order by device_collection_id, account_id
 ;
