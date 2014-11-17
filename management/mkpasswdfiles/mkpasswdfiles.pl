@@ -381,6 +381,7 @@ sub generate_passwd_files($$) {
 	## The following query returns the passwd file lines for all MCLASSes,
 	## including overrides.
 
+	my $outclass = 'passwd';
 	if($style eq 'mclass') {
 		my $and = "";
 		if ($q_mclass_ids) {
@@ -396,6 +397,7 @@ sub generate_passwd_files($$) {
 			ORDER BY device_collection_name, unix_uid
 		};
 	} elsif($style eq 'per-host') {
+		$outclass = 'hostpasswd';
 		my $and = "";
 		if ($q_mclass_ids) {
 			$and .= qq{and device_id in (
@@ -418,7 +420,6 @@ sub generate_passwd_files($$) {
 					$and
 			ORDER BY device_name, unix_uid
 		};
-
 	}
 
 	$sth = $dbh->prepare($q);
@@ -441,12 +442,12 @@ sub generate_passwd_files($$) {
 				my $json = JSON::PP->new->ascii;
 				print $fh $json->pretty->encode( \@pwdlines );
 				$fh =
-				  new_mclass_file( $dir, $outname, $fh, 'passwd' );
+				  new_mclass_file( $dir, $outname, $fh, $outclass );
 				$last_dcid = $dcid;
 				undef(@pwdlines);
 			}
 		} else {
-			$fh = new_mclass_file( $dir, $outname, $fh, 'passwd' );
+			$fh = new_mclass_file( $dir, $outname, $fh, $outclass );
 			$last_dcid = $dcid;
 		}
 		my $userhash = build_userhash($r, \@pwdlines);
@@ -483,8 +484,10 @@ sub generate_passwd_files($$) {
 #
 ###############################################################################
 
-sub generate_group_files($) {
+sub generate_group_files($$) {
 	my $dir = shift;
+	my $style = shift;
+
 	my (
 		$q,	 $sth,   $fh,
 	);
@@ -496,14 +499,47 @@ sub generate_group_files($) {
 		$and .= "and device_collection_id in $q_mclass_ids";
 	}
 
-	$q = qq{
-		SELECT	device_collection_name, map.* 
-		FROM	v_unix_group_mappings map
-				INNER JOIN device_collection USING (device_collection_id)
-		WHERE	device_collection_type = 'mclass'
-				$and
-		ORDER BY device_collection_name, unix_gid
-	};
+	my $outclass = 'group';
+	if($style eq 'mclass') {
+		my $and = "";
+		if ($q_mclass_ids) {
+			$and .= "and device_collection_id in $q_mclass_ids";
+		}
+
+		$q = qq{
+			SELECT	device_collection_name, map.* 
+			FROM	v_unix_group_mappings map
+					INNER JOIN device_collection USING (device_collection_id)
+			WHERE	device_collection_type = 'mclass'
+					$and
+			ORDER BY device_collection_name, unix_gid
+		};
+	} elsif($style eq 'per-host') {
+		$outclass = 'hostgroup';
+		my $and = "";
+		if ($q_mclass_ids) {
+			$and .= qq{and device_id in (
+				select device_id
+				FROM	device_collection_device
+						INNER JOIN device_collection USING (device_collection_id)
+				WHERE   device_collection_id IN $q_mclass_ids
+				)
+			};
+		}
+
+		$q = qq{
+			SELECT  d.device_name, map.*
+			FROM	v_unix_group_mappings map
+					INNER JOIN device_collection USING (device_collection_id)
+					INNER JOIN device_collection_device
+							USING (device_collection_id)
+					INNER JOIN device d USING (device_id)
+			WHERE   device_collection_type = 'per-device'
+					$and
+			ORDER BY device_name, unix_gid
+		};
+	}
+
 
 	$sth = $dbh->prepare($q);
 	$sth->execute;
@@ -517,19 +553,20 @@ sub generate_group_files($) {
 		my $gpwd = $r->{ _dbx('GROUP_PASSWORD') };
 		my $peeps = $r->{ _dbx('MEMBERS') };
 
+		my $outname = ($style eq 'mclass')?
+			$r->{ _dbx('DEVICE_COLLECTION_NAME') }:
+			$r->{ _dbx('DEVICE_NAME') };
 		if ( defined($last_dcid) ) {
 			if ( $last_dcid != $dcid ) {
 				my $json = JSON::PP->new->ascii;
 				print $fh $json->pretty->encode( \@grplines );
 				$fh =
-				  new_mclass_file( $dir, $r->{ _dbx('DEVICE_COLLECTION_NAME') },
-					$fh, 'group' );
+				  new_mclass_file( $dir, $outname, $fh, $outclass );
 				$last_dcid = $dcid;
 				undef(@grplines);
 			}
 		} else {
-			$fh = new_mclass_file( $dir, $r->{ _dbx('DEVICE_COLLECTION_NAME') },
-				$fh, 'group' );
+			$fh = new_mclass_file( $dir, $outname, $fh, $outclass );
 			$last_dcid = $dcid;
 		}
 
@@ -1717,7 +1754,7 @@ sub main {
 	## Generate all the files
 
 	generate_passwd_files($dir, 'mclass');
-	generate_group_files($dir);
+	generate_group_files($dir, 'mclass');
 	retrieve_sudo_data();
 	generate_sudoers_files($dir);
 
@@ -1739,6 +1776,7 @@ sub main {
 
 	## create any per-host files
 	generate_passwd_files("$o_output_dir/hosts", 'per-host');
+	generate_group_files("$o_output_dir/hosts", 'per-host');
 
 	$dbh->disconnect;
 
