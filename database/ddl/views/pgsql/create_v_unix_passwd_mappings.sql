@@ -25,7 +25,22 @@
 --
 --
 create or replace view v_unix_passwd_mappings AS
-WITH accts as (
+WITH  passtype AS (
+	SELECT * FROM
+	(
+		SELECT	dchd.device_collection_id,
+			p.property_value_password_type as password_type,
+				row_number() OVER (partition by
+					dchd.device_collection_id)  as ord
+		FROM	v_property p
+				INNER JOIN v_device_coll_hier_detail dchd
+					ON dchd.parent_device_collection_id =
+						p.device_collection_id
+		WHERE
+				p.property_name = 'UnixPwType'
+		AND		p.property_type = 'MclassUnixProp'
+	) subq WHERE ord = 1
+), accts as (
 	SELECT a.*, aui.unix_uid, aui.unix_group_acct_collection_id,
 		aui.shell, aui.default_home
 	FROM account a
@@ -134,22 +149,8 @@ FROM	accts a
 							o.device_collection_id ))
 			LEFT JOIN v_unix_mclass_settings mcs
 				ON mcs.device_collection_id = dc.device_collection_id
-			LEFT JOIN (
-				SELECT * FROM
-				(
-				SELECT	dchd.device_collection_id,
-						p.property_value_password_type as password_type,
-						row_number() OVER (partition by
-							dchd.device_collection_id)  as ord
-				FROM	v_property p
-						INNER JOIN v_device_coll_hier_detail dchd
-							ON dchd.parent_device_collection_id =
-								p.device_collection_id
-				WHERE
-						p.property_name = 'UnixPwType'
-				AND		p.property_type = 'MclassUnixProp'
-				) subq WHERE ord = 1
-			) pwt ON o.device_collection_id = pwt.device_collection_id
+			LEFT JOIN passtype pwt
+				ON o.device_collection_id = pwt.device_collection_id
 			LEFT JOIN account_password ap
 				ON ap.account_id = a.account_id
 				AND  ap.password_type = pwt.password_type
