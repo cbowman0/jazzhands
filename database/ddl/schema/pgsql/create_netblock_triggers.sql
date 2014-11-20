@@ -13,6 +13,21 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
+-- Copyright (c) 2014 Todd Kover
+-- All rights reserved.
+--
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--       http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+
 CREATE OR REPLACE FUNCTION validate_netblock()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -612,4 +627,37 @@ DROP TRIGGER IF EXISTS trigger_validate_netblock_parentage ON netblock;
 CREATE CONSTRAINT TRIGGER trigger_validate_netblock_parentage
 	AFTER INSERT OR UPDATE ON netblock DEFERRABLE INITIALLY DEFERRED
 	FOR EACH ROW EXECUTE PROCEDURE validate_netblock_parentage();
+
+
+-----------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION netblock_single_address_ni() 
+RETURNS TRIGGER AS $$
+DECLARE
+	_tally	INTEGER;
+BEGIN
+	IF (NEW.is_single_address = 'N' AND OLD.is_single_address = 'Y') OR
+		(NEW.netblock_type != 'default' AND OLD.netblock_type = 'default')
+			THEN
+		select count(*)
+		INTO _tally
+		FROM network_interface
+		WHERE netblock_id = NEW.netblock_id;
+
+		IF _tally > 0 THEN
+			RAISE EXCEPTION 'network interfaces must refer to single ip addresses of type default address (%,%)', NEW.ip_address, NEW.netblock_id
+				USING errcode = 'foreign_key_violation';
+		END IF;
+	END IF;
+	RETURN NEW;
+END;
+$$ 
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trigger_netblock_single_address_ni ON netblock;
+CREATE TRIGGER trigger_netblock_single_address_ni 
+	BEFORE UPDATE OF is_single_address, netblock_type
+	ON netblock 
+	FOR EACH ROW 
+	EXECUTE PROCEDURE netblock_single_address_ni();
 

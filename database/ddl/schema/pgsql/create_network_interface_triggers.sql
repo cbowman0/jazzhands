@@ -30,7 +30,7 @@ BEGIN
 		AND netblock_type = 'default';
 
 		IF _tally = 0 THEN
-			RAISE EXCEPTION 'network interfaces must refer to ip addresses with a single address (%,%)', NEW.network_interface_id, NEW.netblock_id
+			RAISE EXCEPTION 'network interfaces must refer to single ip addresses of type default (%,%)', NEW.network_interface_id, NEW.netblock_id
 				USING errcode = 'foreign_key_violation';
 		END IF;
 	END IF;
@@ -42,7 +42,7 @@ LANGUAGE plpgsql SECURITY DEFINER;
 
 DROP TRIGGER IF EXISTS trigger_net_int_nb_single_address ON network_interface;
 CREATE TRIGGER trigger_net_int_nb_single_address 
-	AFTER INSERT OR UPDATE OF netblock_id
+	BEFORE INSERT OR UPDATE OF netblock_id
 	ON network_interface 
 	FOR EACH ROW 
 	EXECUTE PROCEDURE net_int_nb_single_address();

@@ -93,6 +93,25 @@ BEGIN
 	) RETURNING * INTO _ni;
 	RAISE NOTICE '... it did!';
 
+	RAISE NOTICE 'Testing to see if switching a block to N fails... ';
+	BEGIN
+		UPDATE netblock set ip_address = '172.31.30.0', 
+				is_single_address = 'N'
+			WHERE netblock_id = _nb.netblock_id;
+		RAISE EXCEPTION '... it did not (!)';
+	EXCEPTION WHEN foreign_key_violation THEN
+		RAISE NOTICE '... It did, as expected';
+	END;
+
+	RAISE NOTICE 'Testing to see if switching a block to not default... ';
+	BEGIN
+		UPDATE netblock set netblock_type = 'adhoc'
+			WHERE netblock_id = _nb.netblock_id;
+		RAISE EXCEPTION '... it did not (!)';
+	EXCEPTION WHEN foreign_key_violation THEN
+		RAISE NOTICE '... It did, as expected';
+	END;
+
 	RAISE NOTICE 'Testing to see if is_single_address = N fails...';
 	BEGIN
 		INSERT INTO network_interface (
