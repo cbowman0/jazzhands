@@ -47,3 +47,78 @@ CREATE TRIGGER trigger_net_int_nb_single_address
 	FOR EACH ROW 
 	EXECUTE PROCEDURE net_int_nb_single_address();
 
+---------------------------------------------------------------------------
+-- Transition triggers
+---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION net_int_netblock_to_nbn_compat_before() 
+RETURNS TRIGGER AS $$
+DECLARE
+	_tally	INTEGER;
+BEGIN
+	IF TG_OP = 'DELETE' THEN
+		DELETE from network_interface_netblock
+			WHERE network_interface_id = OLD.network_interface_id
+			AND netblock_id = OLD.netblock_id;
+		RETURN OLD;
+	ELSE -- update
+		IF OLD.netblock_id IS NULL and NEW.netblock_id IS NOT NULL THEN
+			DELETE from network_interface_netblock
+				WHERE network_interface_id = OLD.network_interface_id
+				AND netblock_id = OLD.netblock_id;
+		END IF;
+		RETURN NEW;
+	END IF;
+END;
+$$ 
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trigger_net_int_netblock_to_nbn_compat_before
+ON network_interface;
+CREATE TRIGGER trigger_net_int_netblock_to_nbn_compat_before
+	BEFORE DELETE OR UPDATE OF network_interface_id,  netblock_id
+	ON network_interface 
+	FOR EACH ROW 
+	EXECUTE PROCEDURE net_int_netblock_to_nbn_compat_before();
+
+CREATE OR REPLACE FUNCTION net_int_netblock_to_nbn_compat_after() 
+RETURNS TRIGGER AS $$
+DECLARE
+	_tally	INTEGER;
+BEGIN
+	IF TG_OP = 'INSERT' THEN
+		INSERT INTO network_interface_netblock
+			(network_interface_id, netblock_id)
+		VALUES
+			(NEW.network_interface_id, NEW.netblock_id);
+	ELSIF TG_OP = 'UPDATE'  THEN
+		IF OLD.netblock_id is NULL and NEW.netblock_ID is NOT NULL THEN
+			INSERT INTO network_interface_netblock
+				(network_interface_id, netblock_id)
+			VALUES
+				(NEW.network_interface_id, NEW.netblock_id);
+		ELSIF OLD.netblock_id IS NOT NULL and NEW.netblock_ID is NOT NULL THEN
+			UPDATE network_interface_netblock
+				SET network_interface_id = NEW.network_interface_Id,
+					netblock_id = NEW.netblock_id
+					WHERE network_interface_id = OLD.network_interface_id
+					AND netblock_id = OLD.netblock_id;
+		END IF;
+	END IF;
+	RETURN NEW;
+END;
+$$ 
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trigger_net_int_netblock_to_nbn_compat_after
+ON network_interface;
+CREATE TRIGGER trigger_net_int_netblock_to_nbn_compat_after
+	AFTER INSERT OR UPDATE OF network_interface_id, netblock_id
+	ON network_interface 
+	FOR EACH ROW 
+	EXECUTE PROCEDURE net_int_netblock_to_nbn_compat_after();
+
+---------------------------------------------------------------------------
+-- End of transition triggers
+---------------------------------------------------------------------------

@@ -154,9 +154,138 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- set search_path=public;
 SELECT jazzhands.validate_network_interface_triggers();
--- set search_path=jazzhands;
 DROP FUNCTION validate_network_interface_triggers();
+
+------------------------------ transition tests ----------------------------
+CREATE OR REPLACE FUNCTION validate_network_interface_triggers_transition() 
+RETURNS BOOLEAN AS $$
+DECLARE
+	_tally		integer;
+	_dev1		device%ROWTYPE;
+	_ni			network_interface%ROWTYPE;
+	_blk		netblock%ROWTYPE;
+	_nb1		netblock%ROWTYPE;
+	_nb2		netblock%ROWTYPE;
+	_other		netblock%ROWTYPE;
+BEGIN
+	RAISE NOTICE 'Cleanup Records from Previous Tests';
+	DELETE FROM network_interface where network_interface_name like 'JHTEST%';
+	DELETE FROM network_interface where description like 'JHTEST%';
+	DELETE FROM device where device_name like 'JHTEST%';
+	DELETE from netblock where description like 'JHTEST%';
+	DELETE from site where site_code like 'JHTEST%';
+
+	RAISE NOTICE 'Inserting Test Data for network_interface_netblock transition';
+	INSERT INTO site (site_code,site_status) values ('JHTEST01','ACTIVE');
+
+
+	INSERT INTO device (
+		device_type_id, device_name, device_status, site_code,
+		service_environment_id, operating_system_id,
+		ownership_status, is_monitored
+	) values (
+		1, 'JHTEST one', 'up', 'JHTEST01',
+		(select service_environment_id from service_environment
+		where service_environment_name = 'production'),
+		0,
+		'owned', 'Y'
+	) RETURNING * into _dev1;
+
+
+	INSERT INTO NETBLOCK (ip_address, netblock_type,
+			is_single_address, can_subnet, netblock_status,
+			description
+	) VALUES (
+		'172.31.29.42/24', 'adhoc',
+			'Y', 'N', 'Allocated',
+			'JHTEST _blk'
+	) RETURNING * INTO _other;
+
+	INSERT INTO NETBLOCK (ip_address, netblock_type,
+			is_single_address, can_subnet, netblock_status,
+			description
+	) VALUES (
+		'172.31.30.0/24', 'default',
+			'N', 'N', 'Allocated',
+			'JHTEST _blk'
+	) RETURNING * INTO _blk;
+
+	INSERT INTO NETBLOCK (ip_address, netblock_type,
+			is_single_address, can_subnet, netblock_status,
+			description
+	) VALUES (
+		'172.31.30.1/24', 'default',
+			'Y', 'N', 'Allocated',
+			'JHTEST _nb1'
+	) RETURNING * INTO _nb1;
+
+	INSERT INTO NETBLOCK (ip_address, netblock_type,
+			is_single_address, can_subnet, netblock_status,
+			description
+	) VALUES (
+		'172.31.30.2/24', 'default',
+			'Y', 'N', 'Allocated',
+			'JHTEST _nb2'
+	) RETURNING * INTO _nb2;
+
+	RAISE NOTICE 'Testing to see if inserts work...';
+	INSERT INTO network_interface (
+		device_id, network_interface_name, network_interface_type,
+		description,
+		should_monitor, netblock_id
+	) VALUES (
+		_dev1.device_id, 'JHTEST0', 'broadcast', 'Y',
+		'JHTEST0',
+		_nb1.netblock_id
+	) RETURNING * INTO _ni;
+
+	SELECT count(*)
+		INTO _tally
+		FROM network_interface_netblock
+		WHERE network_interface_id = _ni.network_interface_id
+		AND netblock_id = _ni.netblock_id;
+	IF _tally != 1 THEN
+		RAISE EXCEPTION 'There should be one record.  There are %', _tally;
+	END IF;
+
+	RAISE NOTICE 'Testing to see if updates of netblock_Id works...';
+	UPDATE network_interface
+	SET netblock_id = _nb2.netblock_id
+	WHERE network_interface_id = _ni.network_interface_id;
+
+	SELECT count(*)
+		INTO _tally
+		FROM network_interface_netblock
+		WHERE network_interface_id = _ni.network_interface_id
+		AND netblock_id = _ni.netblock_id;
+	IF _tally != 0 THEN
+		RAISE EXCEPTION 'There should be no records.  There are %', _tally;
+	END IF;
+	RAISE NOTICE '... 0 records where expected';
+
+	SELECT count(*)
+		INTO _tally
+		FROM network_interface_netblock
+		WHERE network_interface_id = _ni.network_interface_id
+		AND netblock_id = _nb2.netblock_id;
+	IF _tally != 1 THEN
+		RAISE EXCEPTION 'There should be one record.  There are %', _tally;
+	END IF;
+	RAISE NOTICE '... One record where expected';
+
+	RAISE NOTICE 'Cleanup Records';
+	DELETE FROM network_interface where network_interface_name like 'JHTEST%';
+	DELETE FROM network_interface where description like 'JHTEST%';
+	DELETE FROM device where device_name like 'JHTEST%';
+	DELETE from netblock where description like 'JHTEST%';
+	DELETE from site where site_code like 'JHTEST%';
+	RAISE NOTICE 'End of network_interface_netblock transition tests...';
+	RETURN true;
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT jazzhands.validate_network_interface_triggers_transition();
+DROP FUNCTION validate_network_interface_triggers_transition();
 
 \t off
