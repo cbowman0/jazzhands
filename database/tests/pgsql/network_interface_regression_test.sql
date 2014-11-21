@@ -167,9 +167,12 @@ DECLARE
 	_blk		netblock%ROWTYPE;
 	_nb1		netblock%ROWTYPE;
 	_nb2		netblock%ROWTYPE;
-	_other		netblock%ROWTYPE;
 BEGIN
 	RAISE NOTICE 'Cleanup Records from Previous Tests';
+	DELETE FROM network_interface_netblock where network_interface_id IN (
+		select network_interface_id from network_interface
+		where network_interface_name like 'JHTEST%'
+	);
 	DELETE FROM network_interface where network_interface_name like 'JHTEST%';
 	DELETE FROM network_interface where description like 'JHTEST%';
 	DELETE FROM device where device_name like 'JHTEST%';
@@ -197,15 +200,6 @@ BEGIN
 			is_single_address, can_subnet, netblock_status,
 			description
 	) VALUES (
-		'172.31.29.42/24', 'adhoc',
-			'Y', 'N', 'Allocated',
-			'JHTEST _blk'
-	) RETURNING * INTO _other;
-
-	INSERT INTO NETBLOCK (ip_address, netblock_type,
-			is_single_address, can_subnet, netblock_status,
-			description
-	) VALUES (
 		'172.31.30.0/24', 'default',
 			'N', 'N', 'Allocated',
 			'JHTEST _blk'
@@ -215,7 +209,7 @@ BEGIN
 			is_single_address, can_subnet, netblock_status,
 			description
 	) VALUES (
-		'172.31.30.1/24', 'default',
+		'172.31.30.3/24', 'default',
 			'Y', 'N', 'Allocated',
 			'JHTEST _nb1'
 	) RETURNING * INTO _nb1;
@@ -224,7 +218,7 @@ BEGIN
 			is_single_address, can_subnet, netblock_status,
 			description
 	) VALUES (
-		'172.31.30.2/24', 'default',
+		'172.31.30.4/24', 'default',
 			'Y', 'N', 'Allocated',
 			'JHTEST _nb2'
 	) RETURNING * INTO _nb2;
@@ -235,9 +229,9 @@ BEGIN
 		description,
 		should_monitor, netblock_id
 	) VALUES (
-		_dev1.device_id, 'JHTEST0', 'broadcast', 'Y',
+		_dev1.device_id, 'JHTEST0', 'broadcast', 
 		'JHTEST0',
-		_nb1.netblock_id
+		'Y', _nb1.netblock_id
 	) RETURNING * INTO _ni;
 
 	SELECT count(*)
@@ -249,18 +243,19 @@ BEGIN
 		RAISE EXCEPTION 'There should be one record.  There are %', _tally;
 	END IF;
 
-	RAISE NOTICE 'Testing to see if updates of netblock_Id works...';
+	RAISE NOTICE 'Testing to see if updates of network_interface.netblock_Id works from another value...';
 	UPDATE network_interface
 	SET netblock_id = _nb2.netblock_id
-	WHERE network_interface_id = _ni.network_interface_id;
+	WHERE network_interface_id = _ni.network_interface_id
+	AND netblock_id = _nb1.netblock_id;
 
 	SELECT count(*)
 		INTO _tally
 		FROM network_interface_netblock
 		WHERE network_interface_id = _ni.network_interface_id
-		AND netblock_id = _ni.netblock_id;
+		AND netblock_id = _nb1.netblock_id;
 	IF _tally != 0 THEN
-		RAISE EXCEPTION 'There should be no records.  There are %', _tally;
+		RAISE EXCEPTION 'There should be none of the old IP in network_interface_netblock.  There are %', _tally;
 	END IF;
 	RAISE NOTICE '... 0 records where expected';
 
@@ -270,11 +265,68 @@ BEGIN
 		WHERE network_interface_id = _ni.network_interface_id
 		AND netblock_id = _nb2.netblock_id;
 	IF _tally != 1 THEN
-		RAISE EXCEPTION 'There should be one record.  There are %', _tally;
+		RAISE EXCEPTION 'There should be one record of the new IP (%) in network_interface_netblock.  There are %', _nb2.netblock_id, _tally;
 	END IF;
 	RAISE NOTICE '... One record where expected';
 
+	RAISE NOTICE 'Cleaning up % % %...', _nb1.netblock_id, _nb2.netblock_id, _ni.network_interface_id;
+	DELETE FROM network_interface_netblock where netblock_id = _nb2.netblock_id;
+	DELETE FROM network_interface_netblock where netblock_id = _nb1.netblock_id;
+	DELETE FROM network_interface where network_interface_id = _ni.network_interface_id;
+
+	RAISE NOTICE 'Now testing to see if network_interface_netblock records show up in network_interface...';
+
+	INSERT INTO network_interface (
+		device_id, network_interface_name, network_interface_type,
+		description,
+		should_monitor, netblock_id
+	) VALUES (
+		_dev1.device_id, 'JHTEST0', 'broadcast', 
+		'JHTEST0',
+		'Y', NULL
+	) RETURNING * INTO _ni;
+
+	RAISE NOTICE 'Testing for any records..';
+	SELECT count(*)
+		INTO _tally
+		FROM network_interface_netblock
+		WHERE network_interface_id = _ni.network_interface_id
+	;
+	IF _tally != 0 THEN
+		RAISE EXCEPTION 'There should be zero records.  There are %', _tally;
+	END IF;
+
+	RAISE NOTICE 'Adding first block (%)...', _nb1.netblock_id;
+	INSERT INTO network_interface_netblock
+		(network_interface_id, netblock_id, network_interface_rank)
+		VALUES
+		(_ni.network_interface_id, _nb1.netblock_id, 10);
+	SELECT count(*) INTO _tally from network_interface
+		WHERE network_interface_id = _ni.network_interface_Id
+		AND netblock_id = _nb1.netblock_id;
+	IF _tally != 1 THEN
+		RAISE EXCEPTION 'First: There should be One record.  There are %', _tally;
+	END IF;
+
+	RAISE NOTICE 'Adding second block (%)...', _nb2.netblock_id;
+	INSERT INTO network_interface_netblock
+		(network_interface_id, netblock_id, network_interface_rank)
+		VALUES
+		(_ni.network_interface_id, _nb2.netblock_id, 5);
+	SELECT count(*) INTO _tally from network_interface
+		WHERE network_interface_id = _ni.network_interface_Id
+		AND netblock_id = _nb2.netblock_id;
+	IF _tally != 1 THEN
+		RAISE EXCEPTION 'There should be One records.  There are %', _tally;
+	END IF;
+
+	RAISE NOTICE 'DONE testing the other way...';
+
 	RAISE NOTICE 'Cleanup Records';
+	DELETE FROM network_interface_netblock where network_interface_id IN (
+		select network_interface_id from network_interface
+		where network_interface_name like 'JHTEST%'
+	);
 	DELETE FROM network_interface where network_interface_name like 'JHTEST%';
 	DELETE FROM network_interface where description like 'JHTEST%';
 	DELETE FROM device where device_name like 'JHTEST%';
