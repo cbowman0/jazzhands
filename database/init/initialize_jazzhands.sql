@@ -735,6 +735,11 @@ values
 ('_rootcompanyid', 'Defaults', 'define the root corporate identity default for commands', 'N', 'company_id',              'PROHIBITED',  'PROHIBITED',  'PROHIBITED',    'PROHIBITED',  'PROHIBITED',   'PROHIBITED',    'PROHIBITED', 'PROHIBITED', 'PROHIBITED');
 
 insert into val_property
+(PROPERTY_NAME, PROPERTY_TYPE, DESCRIPTION, IS_MULTIVALUE, PROPERTY_DATA_TYPE, PERMIT_ACCOUNT_REALM_ID)
+values
+('_root_account_realm_id', 'Defaults', 'define the corporate root identity default', 'N', 'none', 'REQUIRED');
+
+insert into val_property
 (PROPERTY_NAME, PROPERTY_TYPE, DESCRIPTION, IS_MULTIVALUE, PROPERTY_DATA_TYPE)
 values
 ('_defaultdomain', 'Defaults', 'defines domain used for defaultas where necessary', 'N', 'string');
