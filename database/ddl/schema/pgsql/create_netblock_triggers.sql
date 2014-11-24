@@ -249,7 +249,7 @@ DROP TRIGGER IF EXISTS tb_manipulate_netblock_parentage ON netblock;
 
 CREATE TRIGGER tb_manipulate_netblock_parentage
 	BEFORE INSERT OR UPDATE OF
-		ip_address, netmask_bits, netblock_type, ip_universe_id
+		ip_address, netblock_type, ip_universe_id
 	ON netblock
 	FOR EACH ROW EXECUTE PROCEDURE manipulate_netblock_parentage_before();
 
