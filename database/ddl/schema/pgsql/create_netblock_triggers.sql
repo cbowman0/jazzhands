@@ -67,11 +67,14 @@ BEGIN
 					USING ERRCODE = 'JH105';
 			END IF;
 
+/*
 			SELECT masklen(ip_address) INTO NEW.netmask_bits FROM
 				netblock WHERE netblock_id = v_netblock_id;
+*/
 		END IF;
 	END IF;
 
+/*
 	IF NEW.netmask_bits IS NULL THEN
 		NEW.netmask_bits := masklen(NEW.ip_address);
 	ELSIF TG_OP = 'UPDATE' AND NEW.netmask_bits = OLD.netmask_bits AND
@@ -83,6 +86,7 @@ BEGIN
 		/* If none of the above cases pass, then netmask_bits wins.  For now */
 		NEW.ip_address = set_masklen(NEW.ip_address, NEW.netmask_bits);
 	END IF;
+*/
 
 	/* Done with handling of netmasks */
 
@@ -180,7 +184,7 @@ BEGIN
 	RAISE DEBUG 'Setting forced hierarchical netblock %', NEW.netblock_id;
 	NEW.parent_netblock_id := netblock_utils.find_best_parent_id(
 		NEW.ip_address,
-		NEW.netmask_bits,
+		masklen(NEW.ip_address),
 		NEW.netblock_type,
 		NEW.ip_universe_id,
 		NEW.is_single_address,
