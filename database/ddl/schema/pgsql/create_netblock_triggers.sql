@@ -35,12 +35,6 @@ DECLARE
 	v_netblock_id		netblock.netblock_id%TYPE;
 	parent_netblock		RECORD;
 BEGIN
-	/*
-	 * Force netmask_bits to be authoritative.  If netblock_bits is NULL
-	 * and this is a validated hierarchy, then set things to match the best
-	 * parent
-	 */
-
 	IF NEW.ip_address IS NULL THEN
 		RAISE EXCEPTION 'Column ip_address may not be null'
 			USING ERRCODE = 'not_null_violation';
@@ -67,21 +61,7 @@ BEGIN
 					USING ERRCODE = 'JH105';
 			END IF;
 
-			SELECT masklen(ip_address) INTO NEW.netmask_bits FROM
-				netblock WHERE netblock_id = v_netblock_id;
 		END IF;
-	END IF;
-
-	IF NEW.netmask_bits IS NULL THEN
-		NEW.netmask_bits := masklen(NEW.ip_address);
-	ELSIF TG_OP = 'UPDATE' AND NEW.netmask_bits = OLD.netmask_bits AND
-			masklen(NEW.ip_address) != masklen(OLD.ip_address) THEN
-
-		/* masklen changes, but netmask_bits doesn't, so prefer masklen */
-		NEW.netmask_bits := masklen(NEW.ip_address);
-	ELSE
-		/* If none of the above cases pass, then netmask_bits wins.  For now */
-		NEW.ip_address = set_masklen(NEW.ip_address, NEW.netmask_bits);
 	END IF;
 
 	/* Done with handling of netmasks */
@@ -180,7 +160,7 @@ BEGIN
 	RAISE DEBUG 'Setting forced hierarchical netblock %', NEW.netblock_id;
 	NEW.parent_netblock_id := netblock_utils.find_best_parent_id(
 		NEW.ip_address,
-		NEW.netmask_bits,
+		NULL,
 		NEW.netblock_type,
 		NEW.ip_universe_id,
 		NEW.is_single_address,
@@ -439,7 +419,7 @@ BEGIN
 		 */
 		parent_nbid := netblock_utils.find_best_parent_id(
 			realnew.ip_address,
-			masklen(realnew.ip_address),
+			NULL,
 			realnew.netblock_type,
 			realnew.ip_universe_id,
 			realnew.is_single_address,
@@ -507,7 +487,7 @@ BEGIN
 		ELSE
 			parent_nbid := netblock_utils.find_best_parent_id(
 				realnew.ip_address,
-				masklen(realnew.ip_address),
+				NULL,
 				realnew.netblock_type,
 				realnew.ip_universe_id,
 				realnew.is_single_address,
