@@ -100,25 +100,12 @@ CREATE SEQUENCE property_collection_property_collection_id_seq;
 SELECT schema_support.save_grants_for_replay('jazzhands', 'service_environment', 'service_environment');
 
 -- FOREIGN KEYS FROM
--- Skipping this FK since table been dropped
 ALTER TABLE network_service DROP CONSTRAINT IF EXISTS fk_netsvc_csvcenv;
-
--- Skipping this FK since table been dropped
 ALTER TABLE appaal_instance DROP CONSTRAINT IF EXISTS fk_appaal_i_fk_applic_svcenv;
-
--- Skipping this FK since table been dropped
 ALTER TABLE sw_package_release DROP CONSTRAINT IF EXISTS fk_sw_pkg_rel_ref_vsvcenv;
-
--- Skipping this FK since table been dropped
 ALTER TABLE voe DROP CONSTRAINT IF EXISTS fk_voe_ref_v_svcenv;
-
--- Skipping this FK since table been dropped
 ALTER TABLE svc_environment_coll_svc_env DROP CONSTRAINT IF EXISTS fk_svc_env_col_svc_env;
-
--- Skipping this FK since table been dropped
 ALTER TABLE device DROP CONSTRAINT IF EXISTS fk_device_fk_dev_v_svcenv;
-
--- Skipping this FK since table been dropped
 ALTER TABLE sw_package DROP CONSTRAINT IF EXISTS fk_sw_pkg_ref_v_prod_state;
 
 
@@ -1663,143 +1650,120 @@ ALTER TABLE property ADD CONSTRAINT ckc_prop_isenbld
 
 -- FOREIGN KEYS TO
 -- consider FK property and dns_domain
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_pval_dnsdomid
---	FOREIGN KEY (property_value_dns_domain_id) REFERENCES dns_domain(dns_domain_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_pval_dnsdomid
+	FOREIGN KEY (property_value_dns_domain_id) REFERENCES dns_domain(dns_domain_id);
 
 -- consider FK property and netblock_collection
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_pv_nblkcol_id
---	FOREIGN KEY (property_value_nblk_coll_id) REFERENCES netblock_collection(netblock_collection_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_pv_nblkcol_id
+	FOREIGN KEY (property_value_nblk_coll_id) REFERENCES netblock_collection(netblock_collection_id);
 
 -- consider FK property and account_realm
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_acctrealmid
---	FOREIGN KEY (account_realm_id) REFERENCES account_realm(account_realm_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_acctrealmid
+	FOREIGN KEY (account_realm_id) REFERENCES account_realm(account_realm_id);
 
 -- consider FK property and token_collection
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_pval_tokcolid
---	FOREIGN KEY (property_value_token_col_id) REFERENCES token_collection(token_collection_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_pval_tokcolid
+	FOREIGN KEY (property_value_token_col_id) REFERENCES token_collection(token_collection_id);
 
 -- consider FK property and device_collection
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_devcolid
---	FOREIGN KEY (device_collection_id) REFERENCES device_collection(device_collection_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_devcolid
+	FOREIGN KEY (device_collection_id) REFERENCES device_collection(device_collection_id);
 
 -- consider FK property and dns_domain
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_dnsdomid
---	FOREIGN KEY (dns_domain_id) REFERENCES dns_domain(dns_domain_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_dnsdomid
+	FOREIGN KEY (dns_domain_id) REFERENCES dns_domain(dns_domain_id);
 
 -- consider FK property and sw_package
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_pval_swpkgid
---	FOREIGN KEY (property_value_sw_package_id) REFERENCES sw_package(sw_package_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_pval_swpkgid
+	FOREIGN KEY (property_value_sw_package_id) REFERENCES sw_package(sw_package_id);
 
 -- consider FK property and layer2_network
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_prop_l2netid
---	FOREIGN KEY (layer2_network_id) REFERENCES layer2_network(layer2_network_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_prop_l2netid
+	FOREIGN KEY (layer2_network_id) REFERENCES layer2_network(layer2_network_id);
 
 -- consider FK property and val_password_type
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_pval_pwdtyp
---	FOREIGN KEY (property_value_password_type) REFERENCES val_password_type(password_type);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_pval_pwdtyp
+	FOREIGN KEY (property_value_password_type) REFERENCES val_password_type(password_type);
 
 -- consider FK property and val_property
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_nmtyp
---	FOREIGN KEY (property_name, property_type) REFERENCES val_property(property_name, property_type);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_nmtyp
+	FOREIGN KEY (property_name, property_type) REFERENCES val_property(property_name, property_type);
 
 -- consider FK property and person
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_val_prsnid
---	FOREIGN KEY (property_value_person_id) REFERENCES person(person_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_val_prsnid
+	FOREIGN KEY (property_value_person_id) REFERENCES person(person_id);
 
 -- consider FK property and service_environment_collection
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_prop_svc_env_coll_id
---	FOREIGN KEY (service_env_collection_id) REFERENCES service_environment_collection(service_env_collection_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_prop_svc_env_coll_id
+	FOREIGN KEY (service_env_collection_id) REFERENCES service_environment_collection(service_env_collection_id);
 
 -- consider FK property and company
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_compid
---	FOREIGN KEY (company_id) REFERENCES company(company_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_compid
+	FOREIGN KEY (company_id) REFERENCES company(company_id);
 
 -- consider FK property and layer3_network
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_prop_l3netid
---	FOREIGN KEY (layer3_network_id) REFERENCES layer3_network(layer3_network_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_prop_l3netid
+	FOREIGN KEY (layer3_network_id) REFERENCES layer3_network(layer3_network_id);
 
 -- consider FK property and account_collection
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_acct_col
---	FOREIGN KEY (account_collection_id) REFERENCES account_collection(account_collection_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_acct_col
+	FOREIGN KEY (account_collection_id) REFERENCES account_collection(account_collection_id);
 
 -- consider FK property and site
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_site_code
---	FOREIGN KEY (site_code) REFERENCES site(site_code);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_site_code
+	FOREIGN KEY (site_code) REFERENCES site(site_code);
 
 -- consider FK property and property_collection
--- Skipping this FK since table does not exist yet
+-- skipping; does not exist yet
 --ALTER TABLE property
 --	ADD CONSTRAINT fk_property_prop_coll_id
 --	FOREIGN KEY (property_collection_id) REFERENCES property_collection(property_collection_id);
 
 -- consider FK property and person
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_person_id
---	FOREIGN KEY (person_id) REFERENCES person(person_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_person_id
+	FOREIGN KEY (person_id) REFERENCES person(person_id);
 
 -- consider FK property and account
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_acctid
---	FOREIGN KEY (account_id) REFERENCES account(account_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_acctid
+	FOREIGN KEY (account_id) REFERENCES account(account_id);
 
 -- consider FK property and account_collection
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_pval_acct_colid
---	FOREIGN KEY (property_value_account_coll_id) REFERENCES account_collection(account_collection_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_pval_acct_colid
+	FOREIGN KEY (property_value_account_coll_id) REFERENCES account_collection(account_collection_id);
 
 -- consider FK property and netblock_collection
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_nblk_coll_id
---	FOREIGN KEY (netblock_collection_id) REFERENCES netblock_collection(netblock_collection_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_nblk_coll_id
+	FOREIGN KEY (netblock_collection_id) REFERENCES netblock_collection(netblock_collection_id);
 
 -- consider FK property and operating_system
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_osid
---	FOREIGN KEY (operating_system_id) REFERENCES operating_system(operating_system_id);
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_osid
+	FOREIGN KEY (operating_system_id) REFERENCES operating_system(operating_system_id);
 
 -- consider FK property and company
--- Skipping this FK since table does not exist yet
---ALTER TABLE property
---	ADD CONSTRAINT fk_property_pval_compid
---	FOREIGN KEY (property_value_company_id) REFERENCES company(company_id);
-
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_pval_compid
+	FOREIGN KEY (property_value_company_id) REFERENCES company(company_id);
 
 -- TRIGGERS
 CREATE TRIGGER trigger_validate_property BEFORE INSERT OR UPDATE ON property FOR EACH ROW EXECUTE PROCEDURE validate_property();
