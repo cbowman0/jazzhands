@@ -19,6 +19,92 @@
 \set ON_ERROR_STOP
 SELECT schema_support.begin_maintenance();
 
+/*
+	Invoked:
+	--suffix=v58
+	schema_support.get_columns
+	schema_support.get_pk_columns
+	schema_support.quote_ident_array
+	schema_support.retrieve_functions
+	schema_support.save_dependant_objects_for_replay
+	schema_support.undo_audit_row
+	service_environment
+	netblock_single_address_ni
+	network_interface_netblock_to_ni
+	network_interface_drop_tt
+	netblock
+	svc_environment_coll_svc_env
+	network_interface_netblock
+	device
+	property
+	property_collection
+	property_collection_hier
+	property_collection_property
+	val_property_collection_type
+	val_property
+	sw_package
+	sw_package_release
+	network_service
+	appaal_instance
+	voe
+	device_utils.monitoring_off_in_rack
+	device_utils.purge_l1_connection_from_port
+	device_utils.purge_physical_path
+	device_utils.purge_physical_ports
+	device_utils.purge_power_ports
+	device_utils.retire_device
+	device_utils.retire_rack
+	del_v_corp_family_account
+	dns_record_cname_checker
+	ins_v_corp_family_account
+	net_int_nb_single_address
+	net_int_netblock_to_nbn_compat_after
+	net_int_netblock_to_nbn_compat_before
+	netblock_collection_hier_enforce
+	netblock_complain_on_mismatch
+	netblock_single_address_ni
+	retire_netblock_columns
+	upd_v_corp_family_account
+	netblock_utils.calculate_intermediate_netblocks
+	netblock_utils.delete_netblock
+	netblock_utils.find_free_netblocks
+	netblock_utils.find_rvs_zone_from_netblock_id
+	netblock_utils.list_unallocated_netblocks
+	netblock_utils.list_unallocated_netblocks
+	person_manip.add_account_non_person
+	check_svcenv_colllection_hier_loop
+	check_token_colllection_hier_loop
+	delete_per_svc_env_svc_env_collection
+	update_per_svc_env_svc_env_collection
+	delete_peruser_account_collection
+	update_peruser_account_collection
+	person_manip.add_person
+	person_manip.add_user
+	person_manip.purge_person
+	person_manip.purge_account
+	create_new_unix_account
+	validate_property
+	netblock_manip.allocate_netblock
+	netblock_manip.delete_netblock
+	person_manip.add_user_non_person
+	v_account_collection_expanded
+	v_acct_coll_expanded
+	v_company_hier
+	v_device_coll_hier_detail
+	v_nblk_coll_netblock_expanded
+	v_netblock_hier
+	v_person_company_expanded
+	v_physical_connection
+	check_device_colllection_hier_loop
+	manipulate_netblock_parentage_before
+	validate_netblock
+	netblock_utils.find_free_netblock
+	v_department_company_expanded
+	v_application_role
+	v_property
+	v_acct_coll_prop_expanded
+*/
+
 DO $$
 	-- deal with _root_account_realm_id 
 	DECLARE x INTEGER;
@@ -65,34 +151,418 @@ from network_interface where
 and netblock_id is not NULL
 ;
 
--- SELECT schema_support.end_maintenance();
-/*
-Invoked:
-
-	--suffix=v58
-	service_environment
-	netblock_single_address_ni
-	network_interface_netblock_to_ni
-	network_interface_drop_tt
-	netblock
-	svc_environment_coll_svc_env
-	network_interface_netblock
-	device
-	property
-	property_collection
-	property_collection_hier
-	property_collection_property
-	val_property_collection_type
-	val_property
-	sw_package
-	sw_package_release
-	network_service
-	appaal_instance
-*/
-
 CREATE SEQUENCE service_environment_service_environment_id_seq;
 CREATE SEQUENCE property_collection_property_collection_id_seq;
 
+--------------------------------------------------------------------
+-- DEALING WITH proc schema_support.get_columns -> get_columns 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 401169
+CREATE OR REPLACE FUNCTION schema_support.get_columns(_schema text, _table text)
+ RETURNS text[]
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	cols		text[];
+	_r			record;
+BEGIN
+	FOR _r IN SELECT  a.attname as colname,
+            pg_catalog.format_type(a.atttypid, a.atttypmod) as coltype,
+            a.attnotnull, a.attnum
+        FROM    pg_catalog.pg_attribute a
+				INNER JOIN pg_class c on a.attrelid = c.oid
+				INNER JOIN pg_namespace n on n.oid = c.relnamespace
+        WHERE   c.relname = _table
+		  AND	n.nspname = _schema
+          AND   a.attnum > 0
+          AND   NOT a.attisdropped
+		  AND	lower(a.attname) not like 'data_%'
+        ORDER BY a.attnum
+	LOOP
+		SELECT array_append(cols, _r.colname::text) INTO cols;
+	END LOOP;
+	RETURN cols;
+END;
+$function$
+;
+
+-- DONE WITH proc schema_support.get_columns -> get_columns 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc schema_support.get_pk_columns -> get_pk_columns 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 401168
+CREATE OR REPLACE FUNCTION schema_support.get_pk_columns(_schema text, _table text)
+ RETURNS text[]
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	cols		text[];
+	_r			RECORD;
+BEGIN
+	for _r IN SELECT a.attname
+  			FROM pg_class c
+				INNER JOIN pg_namespace n on n.oid = c.relnamespace
+				INNER JOIN pg_index i ON i.indrelid = c.oid
+				INNER JOIN pg_attribute  a ON   a.attrelid = c.oid AND
+								a.attnum = any(i.indkey)
+			WHERE	c.relname = _table
+			AND		n.nspname = _schema
+			AND		indisprimary
+	LOOP
+		SELECT array_append(cols, _r.attname::text) INTO cols;
+	END LOOP;
+	RETURN cols;
+END;
+$function$
+;
+
+-- DONE WITH proc schema_support.get_pk_columns -> get_pk_columns 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc schema_support.quote_ident_array -> quote_ident_array 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 401170
+CREATE OR REPLACE FUNCTION schema_support.quote_ident_array(_input text[])
+ RETURNS text[]
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	_rv		text[];
+	x		text;
+BEGIN
+	FOREACH x IN ARRAY _input
+	LOOP
+		SELECT array_append(_rv, quote_ident(x)) INTO _rv;
+	END LOOP;
+	RETURN _rv;
+END;
+$function$
+;
+
+-- DONE WITH proc schema_support.quote_ident_array -> quote_ident_array 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc schema_support.retrieve_functions -> retrieve_functions 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 401173
+CREATE OR REPLACE FUNCTION schema_support.retrieve_functions(schema character varying, object character varying, dropit boolean DEFAULT false)
+ RETURNS text[]
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	_r		RECORD;
+	_fn		TEXT;
+	_cmd	TEXT;
+	_rv		TEXT[];
+BEGIN
+	FOR _r IN SELECT n.nspname, p.proname, 
+				coalesce(u.usename, 'public') as owner,
+				pg_get_functiondef(p.oid) as funcdef,
+				pg_get_function_identity_arguments(p.oid) as idargs
+		FROM    pg_catalog.pg_proc  p
+				INNER JOIN pg_catalog.pg_namespace n on n.oid = p.pronamespace
+				INNER JOIN pg_catalog.pg_language l on l.oid = p.prolang
+				INNER JOIN pg_catalog.pg_user u on u.usesysid = p.proowner
+		WHERE   n.nspname = schema
+		  AND	p.proname = object
+	LOOP
+		_fn = _r.nspname || '.' || _r.proname || '(' || _r.idargs || ')';
+		_rv = _rv || _fn;
+
+		IF dropit  THEN
+			_cmd = 'DROP FUNCTION ' || _fn || ';';
+			EXECUTE _cmd;
+		END IF;
+	END LOOP;
+	RETURN _rv;
+END;
+$function$
+;
+
+-- DONE WITH proc schema_support.retrieve_functions -> retrieve_functions 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc schema_support.save_dependant_objects_for_replay -> save_dependant_objects_for_replay 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('schema_support', 'save_dependant_objects_for_replay', 'save_dependant_objects_for_replay');
+
+-- DROP OLD FUNCTION
+-- consider old oid 438958
+DROP FUNCTION IF EXISTS schema_support.save_dependant_objects_for_replay(schema character varying, object character varying, dropit boolean);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 438958
+DROP FUNCTION IF EXISTS schema_support.save_dependant_objects_for_replay(schema character varying, object character varying, dropit boolean);
+-- consider NEW oid 401163
+CREATE OR REPLACE FUNCTION schema_support.save_dependant_objects_for_replay(schema character varying, object character varying, dropit boolean DEFAULT true, doobjectdeps boolean DEFAULT false)
+ RETURNS void
+ LANGUAGE plpgsql
+ SET search_path TO schema_support
+AS $function$
+DECLARE
+	_r		RECORD;
+	_cmd	TEXT;
+	_ddl	TEXT;
+BEGIN
+	RAISE NOTICE 'processing %.%', schema, object;
+	-- process stored procedures
+	FOR _r in SELECT  distinct np.nspname::text, dependent.proname::text
+		FROM   pg_depend dep
+			INNER join pg_type dependee on dependee.oid = dep.refobjid
+			INNER join pg_namespace n on n.oid = dependee.typnamespace
+			INNER join pg_proc dependent on dependent.oid = dep.objid
+			INNER join pg_namespace np on np.oid = dependent.pronamespace
+			WHERE   dependee.typname = object
+			  AND	  n.nspname = schema
+	LOOP
+		RAISE NOTICE '1 dealing with  %.%', _r.nspname, _r.proname;
+		PERFORM schema_support.save_constraint_for_replay(_r.nspname, _r.proname, dropit);
+		PERFORM schema_support.save_dependant_objects_for_replay(_r.nspname, _r.proname, dropit);
+		PERFORM schema_support.save_function_for_replay(_r.nspname, _r.proname, dropit);
+	END LOOP;
+
+	-- save any triggers on the view
+	FOR _r in SELECT distinct n.nspname::text, dependee.relname::text, dependee.relkind
+		FROM pg_depend
+		JOIN pg_rewrite ON pg_depend.objid = pg_rewrite.oid
+		JOIN pg_class as dependee ON pg_rewrite.ev_class = dependee.oid
+		JOIN pg_class as dependent ON pg_depend.refobjid = dependent.oid
+		JOIN pg_namespace n on n.oid = dependee.relnamespace
+		JOIN pg_namespace sn on sn.oid = dependent.relnamespace
+		JOIN pg_attribute ON pg_depend.refobjid = pg_attribute.attrelid
+   			AND pg_depend.refobjsubid = pg_attribute.attnum
+		WHERE dependent.relname = object
+  		AND sn.nspname = schema
+	LOOP
+		IF _r.relkind = 'v' THEN
+			RAISE NOTICE '2 dealing with  %.%', _r.nspname, _r.relname;
+			PERFORM * FROM save_dependant_objects_for_replay(_r.nspname, _r.relname, dropit);
+			PERFORM schema_support.save_view_for_replay(_r.nspname, _r.relname, dropit);
+		END IF;
+	END LOOP;
+	IF doobjectdeps THEN
+		PERFORM schema_support.save_trigger_for_replay(schema, object, dropit);
+		PERFORM schema_support.save_constraint_for_replay('jazzhands', 'table');
+	END IF;
+END;
+$function$
+;
+
+-- DONE WITH proc schema_support.save_dependant_objects_for_replay -> save_dependant_objects_for_replay 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc schema_support.undo_audit_row -> undo_audit_row 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 401171
+CREATE OR REPLACE FUNCTION schema_support.undo_audit_row(in_table text, in_audit_schema text DEFAULT 'audit'::text, in_schema text DEFAULT 'jazzhands'::text, in_start_time timestamp without time zone DEFAULT NULL::timestamp without time zone, in_end_time timestamp without time zone DEFAULT NULL::timestamp without time zone, in_aud_user text DEFAULT NULL::text, in_audit_ids integer[] DEFAULT NULL::integer[])
+ RETURNS integer
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	tally	integer;
+	pks		text[];
+	cols	text[];
+	q		text;
+	val		text;
+	x		text;
+	_whcl	text;
+	_eq		text;
+	setstr	text;
+	_r		record;
+	_c		record;
+	_br		record;
+	_vals	text[];
+BEGIN
+	tally := 0;
+	pks := schema_support.get_pk_columns(in_schema, in_table);
+	cols := schema_support.get_columns(in_schema, in_table);
+	q = '';
+	IF in_start_time is not NULL THEN
+		IF q = '' THEN
+			q := q || 'WHERE ';
+		ELSE
+			q := q || 'AND ';
+		END IF;
+		q := q || quote_ident('aud#timestamp') || ' >= ' || quote_literal(in_start_time);
+	END IF;
+	IF in_end_time is not NULL THEN
+		IF q = '' THEN
+			q := q || 'WHERE ';
+		ELSE
+			q := q || 'AND ';
+		END IF;
+		q := q || quote_ident('aud#timestamp') || ' <= ' || quote_literal(in_end_time);
+	END IF;
+	IF in_aud_user is not NULL THEN
+		IF q = '' THEN
+			q := q || 'WHERE ';
+		ELSE
+			q := q || 'AND ';
+		END IF;
+		q := q || quote_ident('aud#user') || ' = ' || quote_literal(in_aud_user);
+	END IF;
+	IF in_audit_ids is not NULL THEN
+		IF q = '' THEN
+			q := q || 'WHERE ';
+		ELSE
+			q := q || 'AND ';
+		END IF;
+		q := q || quote_ident('aud#seq') || ' IN ( ' ||
+			array_to_string(in_audit_ids, ',') || ')';
+	END IF;
+
+	-- Iterate over all the rows that need to be replayed
+	q := 'SELECT * from ' || quote_ident(in_audit_schema) || '.' ||
+			quote_ident(in_table) || ' ' || q || ' ORDER BY "aud#seq" desc';
+	FOR _r IN EXECUTE q
+	LOOP
+		IF _r."aud#action" = 'DEL' THEN
+			-- Build up a list of rows that need to be inserted
+			_vals = NULL;
+			FOR _c IN SELECT * FROM json_each_text( row_to_json(_r) )
+			LOOP
+				IF _c.key !~ 'data|aud' THEN
+					IF _c.value IS NULL THEN
+						SELECT array_append(_vals, 'NULL') INTO _vals;
+					ELSE
+						SELECT array_append(_vals, quote_literal(_c.value)) INTO _vals;
+					END IF;
+				END IF;
+			END LOOP;
+			_eq := 'INSERT INTO ' || quote_ident(in_schema) || '.' ||
+				quote_ident(in_table) || ' ( ' ||
+				array_to_string(
+					schema_support.quote_ident_array(cols), ',') || 
+					') VALUES (' ||  array_to_string(_vals, ',', NULL) || ')';
+		ELSIF _r."aud#action" in ('INS', 'UPD') THEN
+			-- Build up a where clause for this table to get a unique row
+			-- based on the primary key
+			FOREACH x IN ARRAY pks
+			LOOP
+				_whcl := '';
+				FOR _c IN SELECT * FROM json_each_text( row_to_json(_r) )
+				LOOP
+					IF _c.key = x THEN
+						IF _whcl != '' THEN
+							_whcl := _whcl || ', ';
+						END IF;
+						IF _c.value IS NULL THEN
+							_whcl = _whcl || quote_ident(_c.key) || ' = NULL ';
+						ELSE
+							_whcl = _whcl || quote_ident(_c.key) || ' =  ' ||
+								quote_nullable(_c.value);
+						END IF;
+					END IF;
+				END LOOP;
+			END LOOP;
+
+			IF _r."aud#action" = 'INS' THEN
+				_eq := 'DELETE FROM ' || quote_ident(in_schema) || '.' ||
+					quote_ident(in_table) || ' WHERE ' || _whcl;
+			ELSIF _r."aud#action" = 'UPD' THEN
+				-- figure out what rows have changed and do an update if
+				-- they have.  NOTE:  This may result in no change being
+				-- replayed if a row did not actually change
+				setstr = '';
+				FOR _c IN SELECT * FROM json_each_text( row_to_json(_r) )
+				LOOP
+					--
+					-- Iterate over all the columns and if they have changed,
+					-- then build an update statement
+					--
+					IF _c.key !~ 'aud#|data_(ins|upd)_(user|date)' THEN
+						EXECUTE 'SELECT ' || _c.key || ' FROM ' ||
+							quote_ident(in_schema) || '.' ||
+								quote_ident(in_table)  ||
+							' WHERE ' || _whcl
+							INTO val;
+						IF ( _c.value IS NULL  AND val IS NOT NULL) OR
+							( _c.value IS NOT NULL AND val IS NULL) OR
+							(_c.value::text NOT SIMILAR TO val::text) THEN
+							IF char_length(setstr) > 0 THEN
+								setstr = setstr || ',
+								';
+							END IF;
+							IF _c.value IS NOT  NULL THEN
+								setstr = setstr || _c.key || ' = ' ||  
+									quote_nullable(_c.value) || ' ' ;
+							ELSE
+								setstr = setstr || _c.key || ' = ' ||  
+									' NULL ' ;
+							END IF;
+						END IF;
+					END IF;
+				END LOOP;
+				IF char_length(setstr) > 0 THEN
+					_eq := 'UPDATE ' || quote_ident(in_schema) || '.' ||
+						quote_ident(in_table) || 
+						' SET ' || setstr || ' WHERE ' || _whcl;
+				END IF;
+			END IF;
+		END IF;
+		IF _eq IS NOT NULL THEN
+			tally := tally + 1;
+			RAISE NOTICE '%', _eq;
+			EXECUTE _eq;
+		END IF;
+	END LOOP;
+	RETURN tally;
+END;
+$function$
+;
+
+-- DONE WITH proc schema_support.undo_audit_row -> undo_audit_row 
+--------------------------------------------------------------------
+
+-- Dropping obsoleted sequences....
+
+
+-- Dropping obsoleted audit sequences....
+
+
+-- Processing tables with no structural changes
+-- Some of these may be redundant
+-- fk constraints
+-- triggers
+
+
+-- Clean Up
+SELECT schema_support.replay_saved_grants();
+SELECT schema_support.replay_object_recreates();
 
 --------------------------------------------------------------------
 -- DEALING WITH TABLE service_environment [280382]
@@ -234,16 +704,6 @@ CREATE INDEX xif1service_environment ON service_environment USING btree (product
 --ALTER TABLE svc_environment_coll_svc_env
 --	ADD CONSTRAINT fk_svc_env_col_svc_env
 --	FOREIGN KEY (service_environment_id) REFERENCES service_environment(service_environment_id);
-
--- consider FK service_environment and voe
--- ALTER TABLE voe
--- 	ADD CONSTRAINT fk_voe_ref_v_svcenv
--- 	FOREIGN KEY (service_environment_id) REFERENCES service_environment(service_environment_id);
-
--- consider FK service_environment and sw_package_release
--- ALTER TABLE sw_package_release
--- 	ADD CONSTRAINT fk_sw_pkg_rel_ref_vsvcenv
--- 	FOREIGN KEY (service_environment_id) REFERENCES service_environment(service_environment_id);
 
 -- consider FK service_environment and network_service
 -- ALTER TABLE network_service
@@ -621,8 +1081,7 @@ $function$
 --------------------------------------------------------------------
 -- DEALING WITH TABLE netblock [279932]
 
-SELECT schema_support.save_grants_for_replay('jazzhands', 'v_netblock_hier');
-drop view v_netblock_hier;
+SELECT schema_support.save_view_for_replay('jazzhands', 'v_netblock_hier');
 
 DROP TRIGGER IF EXISTS trigger_validate_netblock_parentage ON jazzhands.netblock;
 DROP TRIGGER IF EXISTS zzzz_trigger_retire_netblock_columns ON jazzhands.netblock;
@@ -763,10 +1222,9 @@ ALTER TABLE svc_environment_coll_svc_env
 	ADD CONSTRAINT fk_svc_env_col_svc_env
 	FOREIGN KEY (service_environment_id) REFERENCES service_environment(service_environment_id);
 -- consider FK svc_environment_coll_svc_env and service_environment_collection
--- Skipping this FK since table does not exist yet
---ALTER TABLE svc_environment_coll_svc_env
---	ADD CONSTRAINT fk_svc_env_coll_svc_coll_id
---	FOREIGN KEY (service_env_collection_id) REFERENCES service_environment_collection(service_env_collection_id);
+ALTER TABLE svc_environment_coll_svc_env
+	ADD CONSTRAINT fk_svc_env_coll_svc_coll_id
+	FOREIGN KEY (service_env_collection_id) REFERENCES service_environment_collection(service_env_collection_id);
 
 
 -- TRIGGERS
@@ -2506,10 +2964,9 @@ ALTER TABLE property
 	ADD CONSTRAINT fk_property_pval_swpkgid
 	FOREIGN KEY (property_value_sw_package_id) REFERENCES sw_package(sw_package_id);
 -- consider FK sw_package and sw_package_relation
--- Skipping this FK since table does not exist yet
---ALTER TABLE sw_package_relation
---	ADD CONSTRAINT fk_sw_pkgrel_ref_sw_pkg
---	FOREIGN KEY (related_sw_package_id) REFERENCES sw_package(sw_package_id);
+ALTER TABLE sw_package_relation
+	ADD CONSTRAINT fk_sw_pkgrel_ref_sw_pkg
+	FOREIGN KEY (related_sw_package_id) REFERENCES sw_package(sw_package_id);
 
 
 -- FOREIGN KEYS TO
@@ -2518,10 +2975,9 @@ ALTER TABLE sw_package
 	ADD CONSTRAINT fk_sw_pkg_ref_v_prod_state
 	FOREIGN KEY (service_environment_id) REFERENCES service_environment(service_environment_id);
 -- consider FK sw_package and val_sw_package_type
--- Skipping this FK since table does not exist yet
---ALTER TABLE sw_package
---	ADD CONSTRAINT fk_swpkg_ref_vswpkgtype
---	FOREIGN KEY (sw_package_type) REFERENCES val_sw_package_type(sw_package_type);
+ALTER TABLE sw_package
+	ADD CONSTRAINT fk_swpkg_ref_vswpkgtype
+	FOREIGN KEY (sw_package_type) REFERENCES val_sw_package_type(sw_package_type);
 
 
 -- TRIGGERS
@@ -2755,6 +3211,10 @@ ALTER TABLE sw_package_release
 	ADD CONSTRAINT fk_sw_pkg_rel_ref_vdevarch
 	FOREIGN KEY (processor_architecture) REFERENCES val_processor_architecture(processor_architecture);
 
+ALTER TABLE SW_PACKAGE_RELEASE
+        ADD CONSTRAINT FK_SW_PACKAGE_TYPE 
+	FOREIGN KEY (SW_PACKAGE_TYPE) 
+	REFERENCES VAL_SW_PACKAGE_TYPE (SW_PACKAGE_TYPE)  ;
 
 -- TRIGGERS
 SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'sw_package_release');
@@ -2933,22 +3393,20 @@ ALTER TABLE network_service
 	ADD CONSTRAINT fk_netsvc_csvcenv
 	FOREIGN KEY (service_environment_id) REFERENCES service_environment(service_environment_id);
 -- consider FK network_service and val_network_service_type
--- Skipping this FK since table does not exist yet
---ALTER TABLE network_service
---	ADD CONSTRAINT fk_netsvc_netsvctyp_id
---	FOREIGN KEY (network_service_type) REFERENCES val_network_service_type(network_service_type);
+ALTER TABLE network_service
+	ADD CONSTRAINT fk_netsvc_netsvctyp_id
+	FOREIGN KEY (network_service_type) REFERENCES val_network_service_type(network_service_type);
 
 -- consider FK network_service and network_interface
--- Skipping this FK since table does not exist yet
---ALTER TABLE network_service
---	ADD CONSTRAINT fk_netsvc_netint_id
---	FOREIGN KEY (network_interface_id) REFERENCES network_interface(network_interface_id);
+ALTER TABLE network_service
+	ADD CONSTRAINT fk_netsvc_netint_id
+	FOREIGN KEY (network_interface_id) REFERENCES network_interface(network_interface_id);
 
 -- consider FK network_service and dns_record
 -- Skipping this FK since table does not exist yet
---ALTER TABLE network_service
---	ADD CONSTRAINT fk_netsvc_dnsid_id
---	FOREIGN KEY (dns_record_id) REFERENCES dns_record(dns_record_id);
+ALTER TABLE network_service
+	ADD CONSTRAINT fk_netsvc_dnsid_id
+	FOREIGN KEY (dns_record_id) REFERENCES dns_record(dns_record_id);
 
 
 -- TRIGGERS
@@ -3137,6 +3595,194 @@ DROP TABLE IF EXISTS audit.appaal_instance_v58;
 --------------------------------------------------------------------
 
 --------------------------------------------------------------------
+-- DEALING WITH TABLE voe [422124]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'voe', 'voe');
+
+-- FOREIGN KEYS FROM
+ALTER TABLE voe_relation DROP CONSTRAINT IF EXISTS fk_voe_ref_voe_rel_voe;
+ALTER TABLE voe_symbolic_track DROP CONSTRAINT IF EXISTS fk_voe_symbtrk_ref_pendvoe;
+ALTER TABLE voe_sw_package DROP CONSTRAINT IF EXISTS fk_voe_swpkg_ref_voe;
+ALTER TABLE voe_relation DROP CONSTRAINT IF EXISTS fk_voe_ref_voe_rel_rltdvoe;
+ALTER TABLE voe_symbolic_track DROP CONSTRAINT IF EXISTS fk_voe_symbtrk_ref_actvvoe;
+ALTER TABLE device DROP CONSTRAINT IF EXISTS fk_device_fk_voe;
+
+
+-- FOREIGN KEYS TO
+ALTER TABLE jazzhands.voe DROP CONSTRAINT IF EXISTS fk_voe_ref_vvoestate;
+ALTER TABLE jazzhands.voe DROP CONSTRAINT IF EXISTS fk_voe_ref_v_svcenv;
+ALTER TABLE jazzhands.voe DROP CONSTRAINT IF EXISTS ak_uq_voe_voe_name_sw_vonage_o;
+ALTER TABLE jazzhands.voe DROP CONSTRAINT IF EXISTS pk_vonage_operating_env;
+-- INDEXES
+-- CHECK CONSTRAINTS, etc
+ALTER TABLE jazzhands.voe DROP CONSTRAINT IF EXISTS sys_c0033905;
+ALTER TABLE jazzhands.voe DROP CONSTRAINT IF EXISTS sys_c0033906;
+ALTER TABLE jazzhands.voe DROP CONSTRAINT IF EXISTS sys_c0033904;
+-- TRIGGERS, etc
+DROP TRIGGER IF EXISTS trigger_audit_voe ON jazzhands.voe;
+DROP TRIGGER IF EXISTS trig_userlog_voe ON jazzhands.voe;
+SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'voe');
+---- BEGIN audit.voe TEARDOWN
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+-- INDEXES
+DROP INDEX IF EXISTS "audit"."voe_aud#timestamp_idx";
+-- CHECK CONSTRAINTS, etc
+-- TRIGGERS, etc
+SELECT schema_support.save_dependant_objects_for_replay('audit', 'voe');
+---- DONE audit.voe TEARDOWN
+
+
+ALTER TABLE voe RENAME TO voe_v58;
+ALTER TABLE audit.voe RENAME TO voe_v58;
+
+CREATE TABLE voe
+(
+	voe_id	integer NOT NULL,
+	voe_name	varchar(50) NOT NULL,
+	voe_state	varchar(50) NOT NULL,
+	sw_package_repository_id	integer NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL,
+	service_environment_id	integer NOT NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'voe', false);
+ALTER TABLE voe
+	ALTER voe_id
+	SET DEFAULT nextval('voe_voe_id_seq'::regclass);
+INSERT INTO voe (
+	voe_id,
+	voe_name,
+	voe_state,
+	sw_package_repository_id,
+	service_environment_id,		-- new column (service_environment_id)
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+) SELECT
+	v.voe_id,
+	v.voe_name,
+	v.voe_state,
+	v.sw_package_repository_id,
+	se.service_environment_id,	-- new column (service_environment_id)
+	v.data_ins_user,
+	v.data_ins_date,
+	v.data_upd_user,
+	v.data_upd_date
+FROM voe_v58 v
+	inner join service_environment se on
+		v.service_environment = se.service_environment_name;
+
+INSERT INTO audit.voe (
+	voe_id,
+	voe_name,
+	voe_state,
+	sw_package_repository_id,
+	service_environment_id,		-- new column (service_environment_id)
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+) SELECT
+	v.voe_id,
+	v.voe_name,
+	v.voe_state,
+	v.sw_package_repository_id,
+	se.service_environment_id,	-- new column (service_environment_id)
+	v.data_ins_user,
+	v.data_ins_date,
+	v.data_upd_user,
+	v.data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+FROM audit.voe_v58 v
+	inner join service_environment se on
+		v.service_environment = se.service_environment_name;
+
+ALTER TABLE voe
+	ALTER voe_id
+	SET DEFAULT nextval('voe_voe_id_seq'::regclass);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE voe ADD CONSTRAINT ak_uq_voe_voe_name_sw_vonage_o UNIQUE (voe_name, sw_package_repository_id);
+ALTER TABLE voe ADD CONSTRAINT pk_vonage_operating_env PRIMARY KEY (voe_id);
+
+-- Table/Column Comments
+-- INDEXES
+
+-- CHECK CONSTRAINTS
+ALTER TABLE voe ADD CONSTRAINT sys_c0033904
+	CHECK (voe_id IS NOT NULL);
+ALTER TABLE voe ADD CONSTRAINT sys_c0033906
+	CHECK (voe_state IS NOT NULL);
+ALTER TABLE voe ADD CONSTRAINT sys_c0033905
+	CHECK (voe_name IS NOT NULL);
+
+-- FOREIGN KEYS FROM
+-- consider FK voe and voe_sw_package
+ALTER TABLE voe_sw_package
+	ADD CONSTRAINT fk_voe_swpkg_ref_voe
+	FOREIGN KEY (voe_id) REFERENCES voe(voe_id);
+
+-- consider FK voe and voe_relation
+ALTER TABLE voe_relation
+	ADD CONSTRAINT fk_voe_ref_voe_rel_rltdvoe
+	FOREIGN KEY (related_voe_id) REFERENCES voe(voe_id);
+
+-- consider FK voe and voe_symbolic_track
+ALTER TABLE voe_symbolic_track
+	ADD CONSTRAINT fk_voe_symbtrk_ref_actvvoe
+	FOREIGN KEY (active_voe_id) REFERENCES voe(voe_id);
+
+-- consider FK voe and voe_relation
+ALTER TABLE voe_relation
+	ADD CONSTRAINT fk_voe_ref_voe_rel_voe
+	FOREIGN KEY (voe_id) REFERENCES voe(voe_id);
+
+-- consider FK voe and voe_symbolic_track
+ALTER TABLE voe_symbolic_track
+	ADD CONSTRAINT fk_voe_symbtrk_ref_pendvoe
+	FOREIGN KEY (pending_voe_id) REFERENCES voe(voe_id);
+
+-- consider FK voe and device
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_fk_voe
+	FOREIGN KEY (voe_id) REFERENCES voe(voe_id);
+
+
+-- FOREIGN KEYS TO
+-- consider FK voe and service_environment
+ALTER TABLE voe
+	ADD CONSTRAINT fk_voe_ref_v_svcenv
+	FOREIGN KEY (service_environment_id) REFERENCES service_environment(service_environment_id);
+
+-- consider FK voe and val_voe_state
+ALTER TABLE voe
+	ADD CONSTRAINT fk_voe_ref_vvoestate
+	FOREIGN KEY (voe_state) REFERENCES val_voe_state(voe_state);
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'voe');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'voe');
+ALTER SEQUENCE voe_voe_id_seq
+	 OWNED BY voe.voe_id;
+DROP TABLE IF EXISTS voe_v58;
+DROP TABLE IF EXISTS audit.voe_v58;
+-- DONE DEALING WITH TABLE voe [403478]
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
 -- DEALING WITH property collection triggers
 
 
@@ -3254,6 +3900,3915 @@ CREATE CONSTRAINT TRIGGER trigger_property_collection_member_enforce
 -- DONE DEALING WITH property collection triggers
 --------------------------------------------------------------------
 
+
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc device_utils.monitoring_off_in_rack -> monitoring_off_in_rack 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408441
+CREATE OR REPLACE FUNCTION device_utils.monitoring_off_in_rack(_in_rack_id integer)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+BEGIN
+	BEGIN
+		PERFORM local_hooks.monitoring_off_in_rack_early(
+			_in_rack_id, false);
+	EXCEPTION WHEN invalid_schema_name OR undefined_function THEN
+		PERFORM 1;
+	END;
+
+	UPDATE device
+	  SET	is_monitored = 'N'
+	 WHERE	is_monitored = 'Y'
+	 AND	device_id in (
+	 		SELECT device_id
+			 FROM	device
+			 	INNER JOIN rack_location 
+					USING (rack_location_id)
+			WHERE	rack_id = 67
+	);
+
+	BEGIN
+		PERFORM local_hooks.monitoring_off_in_rack_late(
+			_in_rack_id, false);
+	EXCEPTION WHEN invalid_schema_name OR undefined_function THEN
+		PERFORM 1;
+	END;
+
+	RETURN true;
+END;
+$function$
+;
+
+-- DONE WITH proc device_utils.monitoring_off_in_rack -> monitoring_off_in_rack 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc device_utils.purge_l1_connection_from_port -> purge_l1_connection_from_port 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408435
+CREATE OR REPLACE FUNCTION device_utils.purge_l1_connection_from_port(_in_portid integer)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	_r	RECORD;
+BEGIN
+	FOR _r IN 
+		SELECT * FROM layer1_connection WHERE
+			physical_port1_id = _in_portid or physical_port2_id = _in_portid
+	LOOP
+		PERFORM device_utils.purge_physical_path(
+			_r.layer1_connection_id
+		);
+		DELETE from layer1_connection WHERE layer1_connection_id =
+			_r.layer1_connection_id;
+	END LOOP;
+END;
+$function$
+;
+
+-- DONE WITH proc device_utils.purge_l1_connection_from_port -> purge_l1_connection_from_port 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc device_utils.purge_physical_path -> purge_physical_path 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408434
+CREATE OR REPLACE FUNCTION device_utils.purge_physical_path(_in_l1c integer)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	_r	RECORD;
+BEGIN
+	FOR _r IN 
+	      SELECT  pc.physical_connection_id,
+			pc.cable_type,
+			p1.physical_port_id as pc_p1_physical_port_id,
+			p1.port_name as pc_p1_physical_port_name,
+			d1.device_id as pc_p1_device_id,
+			d1.device_name as pc_p1_device_name,
+			p2.physical_port_id as pc_p2_physical_port_id,
+			p2.port_name as pc_p2_physical_port_name,
+			d2.device_id as pc_p2_device_id,
+			d2.device_name as pc_p2_device_name
+		  FROM  v_physical_connection vpc
+			INNER JOIN physical_connection pc
+				USING (physical_connection_id)
+			INNER JOIN physical_port p1
+				ON p1.physical_port_id = pc.physical_port1_id
+			INNER JOIN device d1
+				ON d1.device_id = p1.device_id
+			INNER JOIN physical_port p2
+				ON p2.physical_port_id = pc.physical_port2_id
+			INNER JOIN device d2
+				ON d2.device_id = p2.device_id
+		WHERE   vpc.layer1_connection_id = _in_l1c
+		ORDER BY level
+	LOOP
+		DELETE from physical_connecion where physical_connection_id =
+			_r.physical_connection_id;
+	END LOOP;
+END;
+$function$
+;
+
+-- DONE WITH proc device_utils.purge_physical_path -> purge_physical_path 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc device_utils.purge_physical_ports -> purge_physical_ports 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408436
+CREATE OR REPLACE FUNCTION device_utils.purge_physical_ports(_in_devid integer)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	_r	RECORD;
+BEGIN
+	FOR _r IN 
+		SELECT * FROM physical_port WHERE device_id = _in_devid
+	LOOP
+		PERFORM device_utils.purge_l1_connection_from_port(
+			_r.physical_port_id
+		);
+		DELETE from physical_port WHERE physical_port_id =
+			_r.physical_port_id;
+	END LOOP;
+END;
+$function$
+;
+
+-- DONE WITH proc device_utils.purge_physical_ports -> purge_physical_ports 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc device_utils.purge_power_ports -> purge_power_ports 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408437
+CREATE OR REPLACE FUNCTION device_utils.purge_power_ports(_in_devid integer)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	_r	RECORD;
+BEGIN
+	DELETE FROM device_power_connection
+	 WHERE  ( device_id = _in_devid AND
+				power_interface_port IN
+				(SELECT power_interface_port
+				   FROM device_power_interface
+				  WHERE device_id = _in_devid
+				)
+			)
+	 OR	     ( rpc_device_id = _in_devid AND
+			rpc_power_interface_port IN
+				(SELECT power_interface_port
+				   FROM device_power_interface
+				  WHERE device_id = _in_devid
+				)
+			);
+
+	DELETE FROM device_power_interface
+	 WHERE  device_id = _in_devid;
+END;
+$function$
+;
+
+-- DONE WITH proc device_utils.purge_power_ports -> purge_power_ports 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc device_utils.retire_device -> retire_device 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408438
+CREATE OR REPLACE FUNCTION device_utils.retire_device(in_device_id integer, retire_modules boolean DEFAULT false)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	tally		INTEGER;
+	_r			RECORD;
+	_d			DEVICE%ROWTYPE;
+	_mgrid		DEVICE.DEVICE_ID%TYPE;
+	_purgedev	boolean;
+BEGIN
+	_purgedev := false;
+
+	BEGIN
+		PERFORM local_hooks.device_retire_early(in_Device_Id, false);
+	EXCEPTION WHEN invalid_schema_name OR undefined_function THEN
+		PERFORM 1;
+	END;
+
+	SELECT * INTO _d FROM device WHERE device_id = in_Device_id;
+	delete from dns_record where netblock_id in (
+		select netblock_id 
+		from network_interface where device_id = in_Device_id
+	);
+
+	delete from network_interface_purpose where device_id = in_Device_id;
+	delete from network_interface where device_id = in_Device_id;
+
+	PERFORM device_utils.purge_physical_ports( in_Device_id);
+	PERFORM device_utils.purge_power_ports( in_Device_id);
+
+	delete from property where device_collection_id in (
+		SELECT	dc.device_collection_id 
+		  FROM	device_collection dc
+				INNER JOIN device_collection_device dcd
+		 			USING (device_collection_id)
+		WHERE	dc.device_collection_type = 'per-device'
+		  AND	dcd.device_id = in_Device_id
+	);
+
+	delete from device_collection_device where device_id = in_Device_id;
+	delete from snmp_commstr where device_id = in_Device_id;
+
+		
+	IF _d.rack_location_id IS NOT NULL  THEN
+		UPDATE device SET rack_location_id = NULL 
+		WHERE device_id = in_Device_id;
+
+		-- This should not be permitted based on constraints, but in case
+		-- that constraint had to be disabled...
+		SELECT	count(*)
+		  INTO	tally
+		  FROM	device
+		 WHERE	rack_location_id = _d.RACK_LOCATION_ID;
+
+		IF tally = 0 THEN
+			DELETE FROM rack_location 
+			WHERE rack_location_id = _d.RACK_LOCATION_ID;
+		END IF;
+	END IF;
+
+	IF _d.chassis_location_id IS NOT NULL THEN
+		RAISE EXCEPTION 'Retiring modules is not supported yet.';
+	END IF;
+
+	SELECT	manager_device_id
+	INTO	_mgrid
+	 FROM	device_management_controller
+	WHERE	device_id = in_Device_id AND device_mgmt_control_type = 'bmc'
+	LIMIT 1;
+
+	IF _mgrid IS NOT NULL THEN
+		DELETE FROM device_management_controller
+		WHERE	device_id = in_Device_id AND device_mgmt_control_type = 'bmc'
+			AND manager_device_id = _mgrid;
+
+		PERFORM device_utils.retire_device( manager_device_id)
+		  FROM	device_management_controller
+		WHERE	device_id = in_Device_id AND device_mgmt_control_type = 'bmc';
+	END IF;
+
+	BEGIN
+		PERFORM local_hooks.device_retire_late(in_Device_Id, false);
+	EXCEPTION WHEN invalid_schema_name OR undefined_function THEN
+		PERFORM 1;
+	END;
+
+	SELECT count(*)
+	INTO tally
+	FROM device_note
+	WHERE device_id = in_Device_id;
+
+	--
+	-- If there is no notes or serial number its save to remove
+	-- 
+	IF tally = 0 AND _d.SERIAL_NUMBER is NULL THEN
+		_purgedev := true;
+	END IF;
+
+	IF _purgedev THEN
+		--
+		-- If there is an fk violation, we just preserve the record but
+		-- delete all the identifying characteristics
+		--
+		BEGIN
+			DELETE FROM device where device_id = in_Device_Id;
+			return false;
+		EXCEPTION WHEN foreign_key_violation THEN
+			PERFORM 1;
+		END;
+	END IF;
+
+	UPDATE device SET 
+		device_name =NULL,
+		service_environment = 'unallocated',
+		device_status = 'removed',
+		voe_symbolic_track_id = NULL,
+		is_monitored = 'N',
+		should_fetch_config = 'N',
+		description = NULL
+	WHERE device_id = in_Device_id;
+
+	return true;
+END;
+$function$
+;
+
+-- DONE WITH proc device_utils.retire_device -> retire_device 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc device_utils.retire_rack -> retire_rack 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408440
+CREATE OR REPLACE FUNCTION device_utils.retire_rack(_in_rack_id integer)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	_r	RECORD;
+BEGIN
+
+	BEGIN
+		PERFORM local_hooks.rack_retire_early(_in_rack_id, false);
+	EXCEPTION WHEN invalid_schema_name OR undefined_function THEN
+		PERFORM 1;
+	END;
+
+	FOR _r IN SELECT device_id
+			FROM device 
+				INNER JOIN rack_location using (rack_location_id)
+				INNER JOIN rack using (rack_id)
+			WHERE rack_id = _in_rack_id
+	LOOP
+		PERFORM device_utils.retire_device( _r.device_id, true );
+	END LOOP;
+
+	BEGIN
+		PERFORM local_hooks.racK_retire_late(_in_rack_id, false);
+	EXCEPTION WHEN invalid_schema_name OR undefined_function THEN
+		PERFORM 1;
+	END;
+
+	BEGIN
+		DELETE FROM RACK where rack_id = _in_rack_id;
+		RETURN false;
+	EXCEPTION WHEN foreign_key_violation THEN
+		UPDATE rack SET
+			room = NULL,
+			sub_room = NULL,
+			rack_row = NULL,
+			rack_name = 'none',
+			description = 'retired'
+		WHERE	rack_id = _in_rack_id;
+	END;
+	RETURN true;
+END;
+$function$
+;
+
+-- DONE WITH proc device_utils.retire_rack -> retire_rack 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc del_v_corp_family_account -> del_v_corp_family_account 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408608
+CREATE OR REPLACE FUNCTION jazzhands.del_v_corp_family_account()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+	acct_realm_id	account_realm.account_realm_id%TYPE;
+BEGIN
+	SELECT	account_realm_id
+	INTO	acct_realm_id
+	FROM	property
+	WHERE	property_name = '_root_account_realm_id'
+	AND	property_type = 'Defaults';
+
+	IF acct_realm_id != OLD.account_realm_id THEN
+		RAISE EXCEPTION 'Invalid account_realm_id'
+		USING ERRCODE = 'foreign_key_violation';
+	END IF;
+
+	DELETE FROM account where account_id = OLD.account_id;
+END;
+$function$
+;
+
+-- DONE WITH proc del_v_corp_family_account -> del_v_corp_family_account 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc dns_record_cname_checker -> dns_record_cname_checker 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408537
+CREATE OR REPLACE FUNCTION jazzhands.dns_record_cname_checker()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+	_tally	INTEGER;	
+	_dom	TEXT;
+BEGIN
+	_tally := 0;
+	IF TG_OP = 'INSERT' OR NEW.DNS_TYPE != OLD.DNS_TYPE THEN
+		IF NEW.DNS_TYPE = 'CNAME' THEN
+			IF TG_OP = 'UPDATE' THEN
+			SELECT	COUNT(*)
+				  INTO	_tally
+				  FROM	dns_record x
+				 WHERE	
+				 		NEW.dns_domain_id = x.dns_domain_id
+				 AND	OLD.dns_record_id != x.dns_record_id
+				 AND	(
+				 			NEW.dns_name IS NULL and x.DNS_NAME is NULL
+							or
+							NEW.dns_name = x.DNS_NAME
+						)
+				;
+			ELSE
+				-- only difference between above and this is the use of OLD
+				SELECT	COUNT(*)
+				  INTO	_tally
+				  FROM	dns_record x
+				 WHERE	
+				 		NEW.dns_domain_id = x.dns_domain_id
+				 AND	(
+				 			NEW.dns_name IS NULL and x.DNS_NAME is NULL
+							or
+							NEW.dns_name = x.DNS_NAME
+						)
+				;
+			END IF;
+		-- this clause is basically the same as above except = 'CANME'
+		ELSIF NEW.DNS_TYPE != 'CNAME' THEN
+			IF TG_OP = 'UPDATE' THEN
+				SELECT	COUNT(*)
+				  INTO	_tally
+				  FROM	dns_record x
+				 WHERE	x.dns_type = 'CNAME'
+				 AND	NEW.dns_domain_id = x.dns_domain_id
+				 AND	OLD.dns_record_id != x.dns_record_id
+				 AND	(
+				 			NEW.dns_name IS NULL and x.DNS_NAME is NULL
+							or
+							NEW.dns_name = x.DNS_NAME
+						)
+				;
+			ELSE
+				-- only difference between above and this is the use of OLD
+				SELECT	COUNT(*)
+				  INTO	_tally
+				  FROM	dns_record x
+				 WHERE	x.dns_type = 'CNAME'
+				 AND	NEW.dns_domain_id = x.dns_domain_id
+				 AND	(
+				 			NEW.dns_name IS NULL and x.DNS_NAME is NULL
+							or
+							NEW.dns_name = x.DNS_NAME
+						)
+				;
+			END IF;
+		END IF;
+	END IF;
+
+	IF _tally > 0 THEN
+		SELECT soa_name INTO _dom FROM dns_domain
+		WHERE dns_domain_id = NEW.dns_domain_id ;
+
+		if NEW.DNS_NAME IS NULL THEN
+			RAISE EXCEPTION '% may not have CNAME and other records (%)', 
+				_dom, _tally
+				USING ERRCODE = 'unique_violation';
+		ELSE
+			RAISE EXCEPTION '%.% may not have CNAME and other records (%)', 
+				NEW.dns_name, _dom, _tally
+				USING ERRCODE = 'unique_violation';
+		END IF;
+	END IF;
+	RETURN NEW;
+END;
+$function$
+;
+
+-- DONE WITH proc dns_record_cname_checker -> dns_record_cname_checker 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc ins_v_corp_family_account -> ins_v_corp_family_account 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408606
+CREATE OR REPLACE FUNCTION jazzhands.ins_v_corp_family_account()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+	acct_realm_id	account_realm.account_realm_id%TYPE;
+BEGIN
+	SELECT	account_realm_id
+	INTO	acct_realm_id
+	FROM	property
+	WHERE	property_name = '_root_account_realm_id'
+	AND	property_type = 'Defaults';
+
+	IF acct_realm_id != NEW.account_realm_id THEN
+		RAISE EXCEPTION 'Invalid account_realm_id'
+		USING ERRCODE = 'foreign_key_violation';
+	END IF;
+
+	INSERT INTO account VALUES (NEW.*);
+
+END;
+$function$
+;
+
+-- DONE WITH proc ins_v_corp_family_account -> ins_v_corp_family_account 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc net_int_nb_single_address -> net_int_nb_single_address 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408543
+CREATE OR REPLACE FUNCTION jazzhands.net_int_nb_single_address()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	_tally	INTEGER;
+BEGIN
+	IF NEW.netblock_id IS NOT NULL THEN
+		select count(*)
+		INTO _tally
+		FROM netblock
+		WHERE netblock_id = NEW.netblock_id
+		AND is_single_address = 'Y'
+		AND netblock_type = 'default';
+
+		IF _tally = 0 THEN
+			RAISE EXCEPTION 'network interfaces must refer to single ip addresses of type default (%,%)', NEW.network_interface_id, NEW.netblock_id
+				USING errcode = 'foreign_key_violation';
+		END IF;
+	END IF;
+	RETURN NEW;
+END;
+$function$
+;
+
+-- DONE WITH proc net_int_nb_single_address -> net_int_nb_single_address 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc net_int_netblock_to_nbn_compat_after -> net_int_netblock_to_nbn_compat_after 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408547
+CREATE OR REPLACE FUNCTION jazzhands.net_int_netblock_to_nbn_compat_after()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	_tally	INTEGER;
+BEGIN
+	SELECT  count(*)
+	  INTO  _tally
+	  FROM  pg_catalog.pg_class
+	 WHERE  relname = '__network_interface_netblocks'
+	   AND  relpersistence = 't';
+
+	IF _tally = 0 THEN
+		CREATE TEMPORARY TABLE IF NOT EXISTS __network_interface_netblocks (
+			network_interface_id INTEGER, netblock_id INTEGER
+		);
+	END IF;
+	IF TG_OP = 'INSERT' OR TG_OP = 'UPDATE' THEN
+		SELECT count(*) INTO _tally FROM __network_interface_netblocks
+		WHERE network_interface_id = NEW.network_interface_id
+		AND netblock_id IS NOT DISTINCT FROM ( NEW.netblock_id );
+		if _tally >  0 THEN
+			RETURN NEW;
+		END IF;
+		INSERT INTO __network_interface_netblocks
+			(network_interface_id, netblock_id)
+		VALUES (NEW.network_interface_id,NEW.netblock_id);
+	ELSIF TG_OP = 'DELETE' THEN
+		SELECT count(*) INTO _tally FROM __network_interface_netblocks
+		WHERE network_interface_id = OLD.network_interface_id
+		AND netblock_id IS NOT DISTINCT FROM ( OLD.netblock_id );
+		if _tally >  0 THEN
+			RETURN OLD;
+		END IF;
+		INSERT INTO __network_interface_netblocks
+			(network_interface_id, netblock_id)
+		VALUES (OLD.network_interface_id,OLD.netblock_id);
+	END IF;
+
+	IF TG_OP = 'INSERT' THEN
+		IF NEW.netblock_id IS NOT NULL THEN
+			SELECT COUNT(*)
+			INTO _tally
+			FROM	network_interface_netblock
+			WHERE	network_interface_id = NEW.network_interface_id
+			AND		netblock_id = NEW.netblock_id;
+
+			IF _tally = 0 THEN
+				INSERT INTO network_interface_netblock
+					(network_interface_id, netblock_id)
+				VALUES
+					(NEW.network_interface_id, NEW.netblock_id);
+			END IF;
+		END IF;
+	ELSIF TG_OP = 'UPDATE'  THEN
+		IF OLD.netblock_id is NULL and NEW.netblock_ID is NOT NULL THEN
+			SELECT COUNT(*)
+			INTO _tally
+			FROM	network_interface_netblock
+			WHERE	network_interface_id = NEW.network_interface_id
+			AND		netblock_id = NEW.netblock_id;
+
+			IF _tally = 0 THEN
+				INSERT INTO network_interface_netblock
+					(network_interface_id, netblock_id)
+				VALUES
+					(NEW.network_interface_id, NEW.netblock_id);
+			END IF;
+		ELSIF OLD.netblock_id IS NOT NULL and NEW.netblock_id is NOT NULL THEN
+			IF OLD.netblock_id != NEW.netblock_id THEN
+				UPDATE network_interface_netblock
+					SET network_interface_id = NEW.network_interface_Id,
+						netblock_id = NEW.netblock_id
+						WHERE network_interface_id = OLD.network_interface_id
+						AND netblock_id = OLD.netblock_id
+						AND netblock_id != NEW.netblock_id
+				;
+			END IF;
+		END IF;
+		SET CONSTRAINTS FK_NETINT_NB_NETINT_ID IMMEDIATE;
+		SET CONSTRAINTS FK_NETINT_NB_NBLK_ID IMMEDIATE;
+	ELSIF TG_OP = 'DELETE' THEN
+		IF OLD.netblock_id IS NOT NULL THEN
+			DELETE from network_interface_netblock
+				WHERE network_interface_id = OLD.network_interface_id
+				AND netblock_id = OLD.netblock_id;
+		END IF;
+		SET CONSTRAINTS FK_NETINT_NB_NETINT_ID IMMEDIATE;
+		SET CONSTRAINTS FK_NETINT_NB_NBLK_ID IMMEDIATE;
+		RETURN OLD;
+	END IF;
+	RETURN NEW;
+END;
+$function$
+;
+
+-- DONE WITH proc net_int_netblock_to_nbn_compat_after -> net_int_netblock_to_nbn_compat_after 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc net_int_netblock_to_nbn_compat_before -> net_int_netblock_to_nbn_compat_before 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408545
+CREATE OR REPLACE FUNCTION jazzhands.net_int_netblock_to_nbn_compat_before()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	_tally	INTEGER;
+BEGIN
+	SET CONSTRAINTS FK_NETINT_NB_NETINT_ID DEFERRED;
+	SET CONSTRAINTS FK_NETINT_NB_NBLK_ID DEFERRED;
+	RETURN OLD;
+END;
+$function$
+;
+
+-- DONE WITH proc net_int_netblock_to_nbn_compat_before -> net_int_netblock_to_nbn_compat_before 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_collection_hier_enforce -> netblock_collection_hier_enforce 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'netblock_collection_hier_enforce', 'netblock_collection_hier_enforce');
+
+DROP TRIGGER IF EXISTS trigger_netblock_collection_hier_enforce
+         ON netblock_collection_hier;
+
+-- DROP OLD FUNCTION
+-- consider old oid 396926
+DROP FUNCTION IF EXISTS netblock_collection_hier_enforce();
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 396926
+DROP FUNCTION IF EXISTS netblock_collection_hier_enforce();
+-- consider NEW oid 408588
+CREATE OR REPLACE FUNCTION jazzhands.netblock_collection_hier_enforce()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+	nct	val_netblock_collection_type%ROWTYPE;
+BEGIN
+	SELECT *
+	INTO	nct
+	FROM	val_netblock_collection_type
+	WHERE	netblock_collection_type =
+		(select netblock_collection_type from netblock_collection
+			where netblock_collection_id = NEW.netblock_collection_id);
+
+	IF nct.can_have_hierarchy = 'N' THEN
+		RAISE EXCEPTION 'Device Collections of type % may not be hierarcical',
+			nct.netblock_collection_type
+			USING ERRCODE= 'unique_violation';
+	END IF;
+	RETURN NEW;
+END;
+$function$
+;
+
+-- DONE WITH proc netblock_collection_hier_enforce -> netblock_collection_hier_enforce 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_complain_on_mismatch -> netblock_complain_on_mismatch 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'netblock_complain_on_mismatch', 'netblock_complain_on_mismatch');
+
+-- DROP OLD FUNCTION
+-- consider old oid 396866
+DROP FUNCTION IF EXISTS netblock_complain_on_mismatch();
+
+-- DONE WITH proc netblock_complain_on_mismatch -> netblock_complain_on_mismatch 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_single_address_ni -> netblock_single_address_ni 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'netblock_single_address_ni', 'netblock_single_address_ni');
+
+DROP TRIGGER IF EXISTS trigger_netblock_single_address_ni ON netblock;
+
+
+-- DROP OLD FUNCTION
+-- consider old oid 400274
+DROP FUNCTION IF EXISTS netblock_single_address_ni();
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 400274
+DROP FUNCTION IF EXISTS netblock_single_address_ni();
+-- consider NEW oid 408509
+CREATE OR REPLACE FUNCTION jazzhands.netblock_single_address_ni()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	_tally	INTEGER;
+BEGIN
+	IF (NEW.is_single_address = 'N' AND OLD.is_single_address = 'Y') OR
+		(NEW.netblock_type != 'default' AND OLD.netblock_type = 'default')
+			THEN
+		select count(*)
+		INTO _tally
+		FROM network_interface
+		WHERE netblock_id = NEW.netblock_id;
+
+		IF _tally > 0 THEN
+			RAISE EXCEPTION 'network interfaces must refer to single ip addresses of type default address (%,%)', NEW.ip_address, NEW.netblock_id
+				USING errcode = 'foreign_key_violation';
+		END IF;
+	END IF;
+	RETURN NEW;
+END;
+$function$
+;
+
+CREATE CONSTRAINT TRIGGER trigger_netblock_collection_hier_enforce
+        AFTER INSERT OR UPDATE
+        ON netblock_collection_hier
+                DEFERRABLE INITIALLY IMMEDIATE
+        FOR EACH ROW
+        EXECUTE PROCEDURE netblock_collection_hier_enforce();
+
+-- DONE WITH proc netblock_single_address_ni -> netblock_single_address_ni 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc retire_netblock_columns -> retire_netblock_columns 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'retire_netblock_columns', 'retire_netblock_columns');
+
+-- DROP OLD FUNCTION
+-- consider old oid 396864
+DROP FUNCTION IF EXISTS retire_netblock_columns();
+
+-- DONE WITH proc retire_netblock_columns -> retire_netblock_columns 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc upd_v_corp_family_account -> upd_v_corp_family_account 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408610
+CREATE OR REPLACE FUNCTION jazzhands.upd_v_corp_family_account()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+	acct_realm_id	account_realm.account_realm_id%TYPE;
+	setstr		TEXT;
+	_r		RECORD;
+	val		TEXT;
+BEGIN
+	SELECT	account_realm_id
+	INTO	acct_realm_id
+	FROM	property
+	WHERE	property_name = '_root_account_realm_id'
+	AND	property_type = 'Defaults';
+
+	IF acct_realm_id != OLD.account_realm_id OR
+			acct_realm_id != NEW.account_realm_id THEN
+		RAISE EXCEPTION 'Invalid account_realm_id'
+		USING ERRCODE = 'foreign_key_violation';
+	END IF;
+
+	setstr = '';
+	FOR _r IN SELECT * FROM json_each_text( row_to_json(NEW) )
+	LOOP
+		IF _r.key NOT SIMILAR TO 'data_(ins|upd)_(user|date)' THEN
+			EXECUTE 'SELECT ' || _r.key ||' FROM account
+				WHERE account_id = ' || OLD.account_id
+				INTO val;
+			IF ( _r.value IS NULL  AND val IS NOT NULL) OR
+				( _r.value IS NOT NULL AND val IS NULL) OR
+				(_r.value::text NOT SIMILAR TO val::text) THEN
+				-- RAISE NOTICE 'Changing %: "%" to "%"', _r.key, val, _r.value;
+				IF char_length(setstr) > 0 THEN
+					setstr = setstr || ',
+					';
+				END IF;
+				IF _r.value IS NOT  NULL THEN
+					setstr = setstr || _r.key || ' = ' ||  
+						quote_nullable(_r.value) || ' ' ;
+				ELSE
+					setstr = setstr || _r.key || ' = ' ||  
+						' NULL ' ;
+				END IF;
+			END IF;
+		END IF;
+	END LOOP;
+
+
+	IF char_length(setstr) > 0 THEN
+		setstr = 'UPDATE account SET ' || setstr || '
+			WHERE	account_id = ' || OLD.account_id;
+		-- RAISE NOTICE 'executing %', setstr;
+		EXECUTE setstr;
+	END IF;
+	RETURN NEW;
+
+END;
+$function$
+;
+
+-- DONE WITH proc upd_v_corp_family_account -> upd_v_corp_family_account 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_utils.calculate_intermediate_netblocks -> calculate_intermediate_netblocks 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408453
+CREATE OR REPLACE FUNCTION netblock_utils.calculate_intermediate_netblocks(ip_block_1 inet DEFAULT NULL::inet, ip_block_2 inet DEFAULT NULL::inet)
+ RETURNS TABLE(ip_addr inet)
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	current_nb		inet;
+	new_nb			inet;
+	min_addr		inet;
+	max_addr		inet;
+BEGIN
+	IF ip_block_1 IS NULL OR ip_block_2 IS NULL THEN
+		RAISE EXCEPTION 'Must specify both ip_block_1 and ip_block_2';
+	END IF;
+
+	IF family(ip_block_1) != family(ip_block_2) THEN
+		RAISE EXCEPTION 'families of ip_block_1 and ip_block_2 must match';
+	END IF;
+
+	-- Make sure these are network blocks
+	ip_block_1 := network(ip_block_1);
+	ip_block_2 := network(ip_block_2);
+
+	-- If the blocks are subsets of each other, then error
+
+	IF ip_block_1 <<= ip_block_2 OR ip_block_2 <<= ip_block_1 THEN
+		RAISE EXCEPTION 'netblocks intersect each other';
+	END IF;
+
+	-- Order the blocks correctly
+
+	IF ip_block_1 > ip_block_2 THEN
+		new_nb := ip_block_1;
+		ip_block_1 := ip_block_2;
+		ip_block_2 := new_nb;
+	END IF;
+
+	current_nb := ip_block_1;
+	max_addr := broadcast(ip_block_1);
+
+	-- Loop through bumping the netmask up and seeing if the destination block is in the new block
+	LOOP
+		new_nb := network(set_masklen(current_nb, masklen(current_nb) - 1));
+
+		-- If the block is in our new larger netblock, then exit this loop
+		IF (new_nb >>= ip_block_2) THEN
+			current_nb := broadcast(current_nb) + 1;
+			EXIT;
+		END IF;
+	
+		-- If the max address of the new netblock is larger than the last one, then it's empty
+		IF set_masklen(broadcast(new_nb), 32) > set_masklen(max_addr, 32) THEN
+			ip_addr := set_masklen(max_addr + 1, masklen(current_nb));
+			RETURN NEXT;
+			max_addr := broadcast(new_nb);
+		END IF;
+		current_nb := new_nb;
+	END LOOP;
+
+	-- Now loop through there to find the unused blocks at the front
+
+	LOOP
+		IF host(current_nb) = host(ip_block_2) THEN
+			RETURN;
+		END IF;
+		current_nb := set_masklen(current_nb, masklen(current_nb) + 1);
+		IF NOT (current_nb >>= ip_block_2) THEN
+			ip_addr := current_nb;
+			RETURN NEXT;
+			current_nb := broadcast(current_nb) + 1;
+			CONTINUE;
+		END IF;
+	END LOOP;
+	RETURN;
+END;
+$function$
+;
+
+-- DONE WITH proc netblock_utils.calculate_intermediate_netblocks -> calculate_intermediate_netblocks 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_utils.delete_netblock -> delete_netblock 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('netblock_utils', 'delete_netblock', 'delete_netblock');
+
+-- DROP OLD FUNCTION
+-- consider old oid 396810
+DROP FUNCTION IF EXISTS netblock_utils.delete_netblock(in_netblock_id integer);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 396810
+DROP FUNCTION IF EXISTS netblock_utils.delete_netblock(in_netblock_id integer);
+-- consider NEW oid 408445
+CREATE OR REPLACE FUNCTION netblock_utils.delete_netblock(in_netblock_id integer)
+ RETURNS void
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	par_nbid	jazzhands.netblock.netblock_id%type;
+BEGIN
+	/*
+	 * Update netblocks that use this as a parent to point to my parent
+	 */
+	SELECT
+		netblock_id INTO par_nbid
+	FROM
+		jazzhands.netblock
+	WHERE 
+		netblock_id = in_netblock_id;
+	
+	UPDATE
+		jazzhands.netblock
+	SET
+		parent_netblock_id = par_nbid
+	WHERE
+		parent_netblock_id = in_netblock_id;
+	
+	/*
+	 * Now delete the record
+	 */
+	DELETE FROM jazzhands.netblock WHERE netblock_id = in_netblock_id;
+END;
+$function$
+;
+
+-- DONE WITH proc netblock_utils.delete_netblock -> delete_netblock 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_utils.find_free_netblocks -> find_free_netblocks 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('netblock_utils', 'find_free_netblocks', 'find_free_netblocks');
+
+-- DROP OLD FUNCTION
+-- consider old oid 396814
+DROP FUNCTION IF EXISTS netblock_utils.find_free_netblocks(parent_netblock_id integer, netmask_bits integer, single_address boolean, allocate_from_bottom boolean, max_addresses integer);
+-- consider old oid 396815
+DROP FUNCTION IF EXISTS netblock_utils.find_free_netblocks(parent_netblock_list integer[], netmask_bits integer, single_address boolean, allocate_from_bottom boolean, max_addresses integer);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 396814
+DROP FUNCTION IF EXISTS netblock_utils.find_free_netblocks(parent_netblock_id integer, netmask_bits integer, single_address boolean, allocate_from_bottom boolean, max_addresses integer);
+-- consider old oid 396815
+DROP FUNCTION IF EXISTS netblock_utils.find_free_netblocks(parent_netblock_list integer[], netmask_bits integer, single_address boolean, allocate_from_bottom boolean, max_addresses integer);
+-- consider NEW oid 408449
+CREATE OR REPLACE FUNCTION netblock_utils.find_free_netblocks(parent_netblock_id integer, netmask_bits integer DEFAULT NULL::integer, single_address boolean DEFAULT false, allocation_method text DEFAULT NULL::text, max_addresses integer DEFAULT 1024, desired_ip_address inet DEFAULT NULL::inet, rnd_masklen_threshold integer DEFAULT 110, rnd_max_count integer DEFAULT 1024)
+ RETURNS TABLE(ip_address inet, netblock_type character varying, ip_universe_id integer)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+	RETURN QUERY SELECT * FROM netblock_utils.find_free_netblocks(
+		parent_netblock_list := ARRAY[parent_netblock_id],
+		netmask_bits := netmask_bits,
+		single_address := single_address,
+		allocation_method := allocation_method,
+		desired_ip_address := desired_ip_address,
+		max_addresses := max_addresses);
+END;
+$function$
+;
+-- consider NEW oid 408450
+CREATE OR REPLACE FUNCTION netblock_utils.find_free_netblocks(parent_netblock_list integer[], netmask_bits integer DEFAULT NULL::integer, single_address boolean DEFAULT false, allocation_method text DEFAULT NULL::text, max_addresses integer DEFAULT 1024, desired_ip_address inet DEFAULT NULL::inet, rnd_masklen_threshold integer DEFAULT 110, rnd_max_count integer DEFAULT 1024)
+ RETURNS TABLE(ip_address inet, netblock_type character varying, ip_universe_id integer)
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	parent_nbid		jazzhands.netblock.netblock_id%TYPE;
+	netblock_rec	jazzhands.netblock%ROWTYPE;
+	inet_list		inet[];
+	current_ip		inet;
+	saved_method	text;
+	min_ip			inet;
+	max_ip			inet;
+	matches			integer;
+	rnd_matches		integer;
+	max_rnd_value	bigint;
+	rnd_value		bigint;
+	family_bits		integer;
+BEGIN
+	matches := 0;
+	saved_method = allocation_method;
+
+	IF allocation_method IS NOT NULL AND allocation_method
+			NOT IN ('top', 'bottom', 'random', 'default') THEN
+		RAISE 'address_type must be one of top, bottom, random, or default'
+		USING ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	--
+	-- Sanitize masklen input.  This is a little complicated.
+	--
+	-- If a single address is desired, we always use a /32 or /128
+	-- in the parent loop and everything else is ignored
+	--
+	-- Otherwise, if netmask_bits is passed, that wins, otherwise
+	-- the netmask of whatever is passed with desired_ip_address wins
+	--
+	-- If none of these are the case, then things are wrong and we
+	-- bail
+	--
+
+	IF NOT single_address THEN 
+		IF desired_ip_address IS NOT NULL AND netmask_bits IS NULL THEN
+			netmask_bits := masklen(desired_ip_address);
+		ELSIF desired_ip_address IS NOT NULL AND 
+				netmask_bits IS NOT NULL THEN
+			desired_ip_address := set_masklen(desired_ip_address,
+				netmask_bits);
+		END IF;
+		IF netmask_bits IS NULL THEN
+			RAISE EXCEPTION 'netmask_bits must be set'
+			USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+		IF allocation_method = 'random' THEN
+			RAISE EXCEPTION 'random netblocks may only be returned for single addresses'
+			USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	FOREACH parent_nbid IN ARRAY parent_netblock_list LOOP
+		rnd_matches := 0;
+		--
+		-- Restore this, because we may have overrridden it for a previous
+		-- block
+		--
+		allocation_method = saved_method;
+		SELECT 
+			* INTO netblock_rec
+		FROM
+			jazzhands.netblock n
+		WHERE
+			n.netblock_id = parent_nbid;
+
+		IF NOT FOUND THEN
+			RAISE EXCEPTION 'Netblock % does not exist', parent_nbid;
+		END IF;
+
+		family_bits := 
+			(CASE family(netblock_rec.ip_address) WHEN 4 THEN 32 ELSE 128 END);
+
+		-- If desired_ip_address is passed, then allocation_method is
+		-- irrelevant
+
+		IF desired_ip_address IS NOT NULL THEN
+			--
+			-- If the IP address is not the same family as the parent block,
+			-- we aren't going to find it
+			--
+			IF family(desired_ip_address) != 
+					family(netblock_rec.ip_address) THEN
+				CONTINUE;
+			END IF;
+			allocation_method := 'bottom';
+		END IF;
+
+		--
+		-- If allocation_method is 'default' or NULL, then use 'bottom'
+		-- unless it's for a single IPv6 address in a netblock larger than 
+		-- rnd_masklen_threshold
+		--
+		IF allocation_method IS NULL OR allocation_method = 'default' THEN
+			allocation_method := 
+				CASE WHEN 
+					single_address AND 
+					family(netblock_rec.ip_address) = 6 AND
+					masklen(netblock_rec.ip_address) <= rnd_masklen_threshold
+				THEN
+					'random'
+				ELSE
+					'bottom'
+				END;
+		END IF;
+
+		IF allocation_method = 'random' AND 
+				family_bits - masklen(netblock_rec.ip_address) < 2 THEN
+			-- Random allocation doesn't work if we don't have enough
+			-- bits to play with, so just do sequential.
+			allocation_method := 'bottom';
+		END IF;
+
+		IF single_address THEN 
+			netmask_bits := family_bits;
+			IF desired_ip_address IS NOT NULL THEN
+				desired_ip_address := set_masklen(desired_ip_address,
+					masklen(netblock_rec.ip_address));
+			END IF;
+		ELSIF netmask_bits <= masklen(netblock_rec.ip_address) THEN
+			-- If the netmask is not for a smaller netblock than this parent,
+			-- then bounce to the next one, because maybe it's larger
+			RAISE DEBUG
+				'netblock (%) is not larger than netmask_bits of % - skipping',
+				masklen(netblock_rec.ip_address),
+				netmask_bits;
+			CONTINUE;
+		END IF;
+
+		IF netmask_bits > family_bits THEN
+			RAISE EXCEPTION 'netmask_bits must be no more than % for netblock %',
+				family_bits,
+				netblock_rec.ip_address;
+		END IF;
+
+		--
+		-- Short circuit the check if we're looking for a specific address
+		-- and it's not in this netblock
+		--
+
+		IF desired_ip_address IS NOT NULL AND
+				NOT (desired_ip_address <<= netblock_rec.ip_address) THEN
+			RAISE DEBUG 'desired_ip_address % is not in netblock %',
+				desired_ip_address,
+				netblock_rec.ip_address;
+			CONTINUE;
+		END IF;
+
+		IF single_address AND netblock_rec.can_subnet = 'Y' THEN
+			RAISE EXCEPTION 'single addresses may not be assigned to to a block where can_subnet is Y';
+		END IF;
+
+		IF (NOT single_address) AND netblock_rec.can_subnet = 'N' THEN
+			RAISE EXCEPTION 'Netblock % (%) may not be subnetted',
+				netblock_rec.ip_address,
+				netblock_rec.netblock_id;
+		END IF;
+
+		RAISE DEBUG 'Searching netblock % (%) using the % allocation method',
+			netblock_rec.netblock_id,
+			netblock_rec.ip_address,
+			allocation_method;
+
+		IF desired_ip_address IS NOT NULL THEN
+			min_ip := desired_ip_address;
+			max_ip := desired_ip_address + 1;
+		ELSE
+			min_ip := netblock_rec.ip_address;
+			max_ip := broadcast(min_ip) + 1;
+		END IF;
+
+		IF allocation_method = 'top' THEN
+			current_ip := network(set_masklen(max_ip - 1, netmask_bits));
+		ELSIF allocation_method = 'random' THEN
+			max_rnd_value := (x'7fffffffffffffff'::bigint >> CASE 
+				WHEN family_bits - masklen(netblock_rec.ip_address) >= 63
+				THEN 0
+				ELSE 63 - (family_bits - masklen(netblock_rec.ip_address))
+				END) - 2;
+			-- random() appears to only do 32-bits, which is dumb
+			-- I'm pretty sure that all of the casts are not required here,
+			-- but better to make sure
+			current_ip := min_ip + 
+					((((random() * x'7fffffff'::bigint)::bigint << 32) + 
+					(random() * x'ffffffff'::bigint)::bigint + 1)
+					% max_rnd_value) + 1;
+		ELSE -- it's 'bottom'
+			current_ip := set_masklen(min_ip, netmask_bits);
+		END IF;
+
+		-- For single addresses, make the netmask match the netblock of the
+		-- containing block, and skip the network and broadcast addresses
+		-- We shouldn't need to skip for IPv6 addresses, but some things
+		-- apparently suck
+
+		IF single_address THEN
+			current_ip := set_masklen(current_ip, 
+				masklen(netblock_rec.ip_address));
+			--
+			-- If we're not allocating a single /31 or /32 for IPv4 or
+			-- /127 or /128 for IPv6, then we want to skip the all-zeros
+			-- and all-ones addresses
+			--
+			IF masklen(netblock_rec.ip_address) < (family_bits - 1) AND
+					desired_ip_address IS NULL THEN
+				current_ip := current_ip + 
+					CASE WHEN allocation_method = 'top' THEN -1 ELSE 1 END;
+				min_ip := min_ip + 1;
+				max_ip := max_ip - 1;
+			END IF;
+		END IF;
+
+		RAISE DEBUG 'Starting with IP address % with step masklen of %',
+			current_ip,
+			netmask_bits;
+
+		WHILE (
+				current_ip >= min_ip AND
+				current_ip < max_ip AND
+				matches < max_addresses AND
+				rnd_matches < rnd_max_count
+		) LOOP
+			RAISE DEBUG '   Checking netblock %', current_ip;
+
+			PERFORM * FROM jazzhands.netblock n WHERE
+				n.ip_universe_id = netblock_rec.ip_universe_id AND
+				n.netblock_type = netblock_rec.netblock_type AND
+				-- A block with the parent either contains or is contained
+				-- by this block
+				n.parent_netblock_id = netblock_rec.netblock_id AND
+				CASE WHEN single_address THEN
+					n.ip_address = current_ip
+				ELSE
+					(n.ip_address >>= current_ip OR current_ip >>= n.ip_address)
+				END;
+			IF NOT FOUND AND (inet_list IS NULL OR
+					NOT (current_ip = ANY(inet_list))) THEN
+				find_free_netblocks.netblock_type :=
+					netblock_rec.netblock_type;
+				find_free_netblocks.ip_universe_id :=
+					netblock_rec.ip_universe_id;
+				find_free_netblocks.ip_address := current_ip;
+				RETURN NEXT;
+				inet_list := array_append(inet_list, current_ip);
+				matches := matches + 1;
+				-- Reset random counter if we found something
+				rnd_matches := 0;
+			ELSIF allocation_method = 'random' THEN
+				-- Increase random counter if we didn't find something
+				rnd_matches := rnd_matches + 1;
+			END IF;
+
+			-- Select the next IP address
+			current_ip := 
+				CASE WHEN single_address THEN
+					CASE 
+						WHEN allocation_method = 'bottom' THEN current_ip + 1
+						WHEN allocation_method = 'top' THEN current_ip - 1
+						ELSE min_ip + ((
+							((random() * x'7fffffff'::bigint)::bigint << 32) 
+							+ 
+							(random() * x'ffffffff'::bigint)::bigint + 1
+							) % max_rnd_value) + 1 
+					END
+				ELSE
+					CASE WHEN allocation_method = 'bottom' THEN 
+						network(broadcast(current_ip) + 1)
+					ELSE 
+						network(current_ip - 1)
+					END
+				END;
+		END LOOP;
+	END LOOP;
+	RETURN;
+END;
+$function$
+;
+
+-- DONE WITH proc netblock_utils.find_free_netblocks -> find_free_netblocks 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_utils.find_rvs_zone_from_netblock_id -> find_rvs_zone_from_netblock_id 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('netblock_utils', 'find_rvs_zone_from_netblock_id', 'find_rvs_zone_from_netblock_id');
+
+-- DROP OLD FUNCTION
+-- consider old oid 396812
+DROP FUNCTION IF EXISTS netblock_utils.find_rvs_zone_from_netblock_id(in_netblock_id integer);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 396812
+DROP FUNCTION IF EXISTS netblock_utils.find_rvs_zone_from_netblock_id(in_netblock_id integer);
+-- consider NEW oid 408447
+CREATE OR REPLACE FUNCTION netblock_utils.find_rvs_zone_from_netblock_id(in_netblock_id integer)
+ RETURNS integer
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	v_rv	jazzhands.dns_domain.dns_domain_id%type;
+	v_domid	jazzhands.dns_domain.dns_domain_id%type;
+	v_lhsip	jazzhands.netblock.ip_address%type;
+	v_rhsip	jazzhands.netblock.ip_address%type;
+	nb_match CURSOR ( in_nb_id jazzhands.netblock.netblock_id%type) FOR
+		select  rootd.dns_domain_id,
+				 network(set_masklen(nb.ip_address, masklen(root.ip_address))),
+				 network(root.ip_address)
+		  from  jazzhands.netblock nb,
+			jazzhands.netblock root
+				inner join jazzhands.dns_record rootd
+					on rootd.netblock_id = root.netblock_id
+					and rootd.dns_type = 'REVERSE_ZONE_BLOCK_PTR'
+		 where
+		  	nb.netblock_id = in_nb_id;
+BEGIN
+	v_rv := NULL;
+	OPEN nb_match(in_netblock_id);
+	LOOP
+		FETCH  nb_match INTO v_domid, v_lhsip, v_rhsip;
+		if NOT FOUND THEN
+			EXIT;
+		END IF;
+
+		if v_lhsip = v_rhsip THEN
+			v_rv := v_domid;
+			EXIT;
+		END IF;
+	END LOOP;
+	CLOSE nb_match;
+	return v_rv;
+END;
+$function$
+;
+
+-- DONE WITH proc netblock_utils.find_rvs_zone_from_netblock_id -> find_rvs_zone_from_netblock_id 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_utils.list_unallocated_netblocks -> list_unallocated_netblocks 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408452
+CREATE OR REPLACE FUNCTION netblock_utils.list_unallocated_netblocks(netblock_id integer DEFAULT NULL::integer, ip_address inet DEFAULT NULL::inet, ip_universe_id integer DEFAULT 0, netblock_type text DEFAULT 'default'::text)
+ RETURNS TABLE(ip_addr inet)
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	ip_array		inet[];
+	netblock_rec	RECORD;
+	parent_nbid		jazzhands.netblock.netblock_id%TYPE;
+	family_bits		integer;
+	idx				integer;
+BEGIN
+	IF netblock_id IS NOT NULL THEN
+		SELECT * INTO netblock_rec FROM jazzhands.netblock n WHERE n.netblock_id = 
+			list_unallocated_netblocks.netblock_id;
+		IF NOT FOUND THEN
+			RAISE EXCEPTION 'netblock_id % not found', netblock_id;
+		END IF;
+		IF netblock_rec.is_single_address = 'Y' THEN
+			RETURN;
+		END IF;
+		ip_address := netblock_rec.ip_address;
+		ip_universe_id := netblock_rec.ip_universe_id;
+		netblock_type := netblock_rec.netblock_type;
+	ELSIF ip_address IS NULL THEN
+		RAISE EXCEPTION 'netblock_id or ip_address must be passed';
+	END IF;
+	SELECT ARRAY(
+		SELECT 
+			n.ip_address
+		FROM
+			netblock n
+		WHERE
+			n.ip_address <<= list_unallocated_netblocks.ip_address AND
+			n.ip_universe_id = list_unallocated_netblocks.ip_universe_id AND
+			n.netblock_type = list_unallocated_netblocks.netblock_type AND
+			is_single_address = 'N' AND
+			can_subnet = 'N'
+		ORDER BY
+			n.ip_address
+	) INTO ip_array;
+
+	IF array_length(ip_array, 1) IS NULL THEN
+		ip_addr := ip_address;
+		RETURN NEXT;
+		RETURN;
+	END IF;
+
+	ip_array := array_prepend(
+		list_unallocated_netblocks.ip_address - 1, 
+		array_append(
+			ip_array, 
+			broadcast(list_unallocated_netblocks.ip_address) + 1
+			));
+
+	idx := 1;
+	WHILE idx < array_length(ip_array, 1) LOOP
+		RETURN QUERY SELECT cin.ip_addr FROM
+			netblock_utils.calculate_intermediate_netblocks(ip_array[idx], ip_array[idx + 1]) cin;
+		idx := idx + 1;
+	END LOOP;
+
+	RETURN;
+END;
+$function$
+;
+
+-- DONE WITH proc netblock_utils.list_unallocated_netblocks -> list_unallocated_netblocks 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_utils.list_unallocated_netblocks -> list_unallocated_netblocks 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408452
+CREATE OR REPLACE FUNCTION netblock_utils.list_unallocated_netblocks(netblock_id integer DEFAULT NULL::integer, ip_address inet DEFAULT NULL::inet, ip_universe_id integer DEFAULT 0, netblock_type text DEFAULT 'default'::text)
+ RETURNS TABLE(ip_addr inet)
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	ip_array		inet[];
+	netblock_rec	RECORD;
+	parent_nbid		jazzhands.netblock.netblock_id%TYPE;
+	family_bits		integer;
+	idx				integer;
+BEGIN
+	IF netblock_id IS NOT NULL THEN
+		SELECT * INTO netblock_rec FROM jazzhands.netblock n WHERE n.netblock_id = 
+			list_unallocated_netblocks.netblock_id;
+		IF NOT FOUND THEN
+			RAISE EXCEPTION 'netblock_id % not found', netblock_id;
+		END IF;
+		IF netblock_rec.is_single_address = 'Y' THEN
+			RETURN;
+		END IF;
+		ip_address := netblock_rec.ip_address;
+		ip_universe_id := netblock_rec.ip_universe_id;
+		netblock_type := netblock_rec.netblock_type;
+	ELSIF ip_address IS NULL THEN
+		RAISE EXCEPTION 'netblock_id or ip_address must be passed';
+	END IF;
+	SELECT ARRAY(
+		SELECT 
+			n.ip_address
+		FROM
+			netblock n
+		WHERE
+			n.ip_address <<= list_unallocated_netblocks.ip_address AND
+			n.ip_universe_id = list_unallocated_netblocks.ip_universe_id AND
+			n.netblock_type = list_unallocated_netblocks.netblock_type AND
+			is_single_address = 'N' AND
+			can_subnet = 'N'
+		ORDER BY
+			n.ip_address
+	) INTO ip_array;
+
+	IF array_length(ip_array, 1) IS NULL THEN
+		ip_addr := ip_address;
+		RETURN NEXT;
+		RETURN;
+	END IF;
+
+	ip_array := array_prepend(
+		list_unallocated_netblocks.ip_address - 1, 
+		array_append(
+			ip_array, 
+			broadcast(list_unallocated_netblocks.ip_address) + 1
+			));
+
+	idx := 1;
+	WHILE idx < array_length(ip_array, 1) LOOP
+		RETURN QUERY SELECT cin.ip_addr FROM
+			netblock_utils.calculate_intermediate_netblocks(ip_array[idx], ip_array[idx + 1]) cin;
+		idx := idx + 1;
+	END LOOP;
+
+	RETURN;
+END;
+$function$
+;
+
+-- DONE WITH proc netblock_utils.list_unallocated_netblocks -> list_unallocated_netblocks 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc person_manip.add_account_non_person -> add_account_non_person 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('person_manip', 'add_account_non_person', 'add_account_non_person');
+
+-- DROP OLD FUNCTION
+-- consider old oid 396774
+DROP FUNCTION IF EXISTS person_manip.add_account_non_person(_company_id integer, _account_status character varying, _login character varying, _description character varying);
+
+-- DONE WITH proc person_manip.add_account_non_person -> add_account_non_person 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc person_manip.add_person -> add_person 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('person_manip', 'add_person', 'add_person');
+
+-- DROP OLD FUNCTION
+-- consider old oid 396773
+DROP FUNCTION IF EXISTS person_manip.add_person(__person_id integer, first_name character varying, middle_name character varying, last_name character varying, name_suffix character varying, gender character varying, preferred_last_name character varying, preferred_first_name character varying, birth_date date, _company_id integer, external_hr_id character varying, person_company_status character varying, is_manager character varying, is_exempt character varying, is_full_time character varying, employee_id integer, hire_date date, termination_date date, person_company_relation character varying, job_title character varying, department character varying, login character varying, OUT _person_id integer, OUT _account_collection_id integer, OUT _account_id integer);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 396773
+DROP FUNCTION IF EXISTS person_manip.add_person(__person_id integer, first_name character varying, middle_name character varying, last_name character varying, name_suffix character varying, gender character varying, preferred_last_name character varying, preferred_first_name character varying, birth_date date, _company_id integer, external_hr_id character varying, person_company_status character varying, is_manager character varying, is_exempt character varying, is_full_time character varying, employee_id integer, hire_date date, termination_date date, person_company_relation character varying, job_title character varying, department character varying, login character varying, OUT _person_id integer, OUT _account_collection_id integer, OUT _account_id integer);
+-- consider NEW oid 408400
+CREATE OR REPLACE FUNCTION person_manip.add_person(__person_id integer, first_name character varying, middle_name character varying, last_name character varying, name_suffix character varying, gender character varying, preferred_last_name character varying, preferred_first_name character varying, birth_date date, _company_id integer, external_hr_id character varying, person_company_status character varying, is_manager character varying, is_exempt character varying, is_full_time character varying, employee_id character varying, hire_date date, termination_date date, person_company_relation character varying, job_title character varying, department character varying, login character varying, OUT _person_id integer, OUT _account_collection_id integer, OUT _account_id integer)
+ RETURNS record
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+	_account_realm_id INTEGER;
+BEGIN
+	SELECT	
+		xxx.person_id,
+		xxx.dept_account_collection_id,
+		xxx.account_id
+	INTO
+		_person_id,
+		_account_collection_id,
+		_account_id
+	FROM	person_manip.add_user (
+			person_id := __person_id,
+			first_name := first_name,
+			middle_name := middle_name,
+			last_name := last_name,
+			name_suffix := name_suffix,
+			gender := gender,
+			preferred_last_name := preferred_last_name,
+			preferred_first_name := preferred_first_name,
+			birth_date := birth_date,
+			company_id := _company_id,
+			external_hr_id := external_hr_id,
+			person_company_status := person_company_status,
+			is_manager := is_manager,
+			is_exempt := is_exempt,
+			is_full_time := is_full_time,
+			employee_id := employee_id,
+			hire_date := hire_date,
+			termination_date := termination_date,
+			person_company_relation := person_company_relation,
+			job_title := job_title,
+			department_name := department,
+			login := login
+		) xxx; 
+END;
+$function$
+;
+
+-- DONE WITH proc person_manip.add_person -> add_person 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc person_manip.add_user -> add_user 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('person_manip', 'add_user', 'add_user');
+
+-- DROP OLD FUNCTION
+-- consider old oid 396771
+DROP FUNCTION IF EXISTS person_manip.add_user(company_id integer, person_company_relation character varying, login character varying, first_name character varying, middle_name character varying, last_name character varying, name_suffix character varying, gender character varying, preferred_last_name character varying, preferred_first_name character varying, birth_date date, external_hr_id character varying, person_company_status character varying, is_manager character varying, is_exempt character varying, is_full_time character varying, employee_id integer, hire_date date, termination_date date, job_title character varying, department_name character varying, description character varying, unix_uid character varying, INOUT person_id integer, OUT dept_account_collection_id integer, OUT account_id integer);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 396771
+DROP FUNCTION IF EXISTS person_manip.add_user(company_id integer, person_company_relation character varying, login character varying, first_name character varying, middle_name character varying, last_name character varying, name_suffix character varying, gender character varying, preferred_last_name character varying, preferred_first_name character varying, birth_date date, external_hr_id character varying, person_company_status character varying, is_manager character varying, is_exempt character varying, is_full_time character varying, employee_id integer, hire_date date, termination_date date, job_title character varying, department_name character varying, description character varying, unix_uid character varying, INOUT person_id integer, OUT dept_account_collection_id integer, OUT account_id integer);
+-- consider NEW oid 408398
+CREATE OR REPLACE FUNCTION person_manip.add_user(company_id integer, person_company_relation character varying, login character varying DEFAULT NULL::character varying, first_name character varying DEFAULT NULL::character varying, middle_name character varying DEFAULT NULL::character varying, last_name character varying DEFAULT NULL::character varying, name_suffix character varying DEFAULT NULL::character varying, gender character varying DEFAULT NULL::character varying, preferred_last_name character varying DEFAULT NULL::character varying, preferred_first_name character varying DEFAULT NULL::character varying, birth_date date DEFAULT NULL::date, external_hr_id character varying DEFAULT NULL::character varying, person_company_status character varying DEFAULT 'enabled'::character varying, is_manager character varying DEFAULT 'N'::character varying, is_exempt character varying DEFAULT 'Y'::character varying, is_full_time character varying DEFAULT 'Y'::character varying, employee_id text DEFAULT NULL::text, hire_date date DEFAULT NULL::date, termination_date date DEFAULT NULL::date, job_title character varying DEFAULT NULL::character varying, department_name character varying DEFAULT NULL::character varying, description character varying DEFAULT NULL::character varying, unix_uid character varying DEFAULT NULL::character varying, INOUT person_id integer DEFAULT NULL::integer, OUT dept_account_collection_id integer, OUT account_id integer)
+ RETURNS record
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+	_account_realm_id INTEGER;
+	_account_type VARCHAR;
+	_uid INTEGER;
+	_uxaccountid INTEGER;
+	_companyid INTEGER;
+	_personid INTEGER;
+	_accountid INTEGER;
+BEGIN
+	IF company_id is NULL THEN
+		RAISE EXCEPTION 'Must specify company id';
+	END IF;
+	_companyid := company_id;
+
+	SELECT arc.account_realm_id 
+	  INTO _account_realm_id 
+	  FROM account_realm_company arc
+	 WHERE arc.company_id = _companyid;
+	IF NOT FOUND THEN
+		RAISE EXCEPTION 'Cannot find account_realm_id with company id %', company_id;
+	END IF;
+
+	IF login is NULL THEN
+		IF first_name IS NULL or last_name IS NULL THEN 
+			RAISE EXCEPTION 'Must specify login name or first name+last name';
+		ELSE 
+			login := person_manip.pick_login(
+				in_account_realm_id	:= _account_realm_id,
+				in_first_name := coalesce(preferred_first_name, first_name),
+				in_middle_name := middle_name,
+				in_last_name := coalesce(preferred_last_name, last_name)
+			);
+		END IF;
+	END IF;
+
+	IF person_company_relation = 'pseudouser' THEN
+		person_id := 0;
+		_account_type := 'pseudouser';
+	ELSE
+		_account_type := 'person';
+		IF person_id IS NULL THEN
+			INSERT INTO person (first_name, middle_name, last_name, name_suffix, gender, preferred_first_name, preferred_last_name, birth_date)
+				VALUES (first_name, middle_name, last_name, name_suffix, gender, preferred_first_name, preferred_last_name, birth_date)
+			RETURNING person.person_id into _personid;
+			person_id = _personid;
+		ELSE
+			INSERT INTO person (person_id, first_name, middle_name, last_name, name_suffix, gender, preferred_first_name, preferred_last_name, birth_date)
+				VALUES (person_id, first_name, middle_name, last_name, name_suffix, gender, preferred_first_name, preferred_last_name, birth_date);
+		END IF;
+		INSERT INTO person_company
+			(person_id,company_id,external_hr_id,person_company_status,is_management, is_exempt, is_full_time, employee_id,hire_date,termination_date,person_company_relation, position_title)
+			VALUES
+			(person_id, company_id, external_hr_id, person_company_status, is_manager, is_exempt, is_full_time, employee_id, hire_date, termination_date, person_company_relation, job_title);
+		INSERT INTO person_account_realm_company ( person_id, company_id, account_realm_id) VALUES ( person_id, company_id, _account_realm_id);
+	END IF;
+
+	INSERT INTO account ( login, person_id, company_id, account_realm_id, account_status, description, account_role, account_type)
+		VALUES (login, person_id, company_id, _account_realm_id, person_company_status, description, 'primary', _account_type)
+	RETURNING account.account_id INTO account_id;
+
+	IF department_name IS NOT NULL THEN
+		dept_account_collection_id = person_manip.get_account_collection_id(department_name, 'department');
+		INSERT INTO account_collection_account (account_collection_id, account_id) VALUES ( dept_account_collection_id, account_id);
+	END IF;
+
+	IF unix_uid IS NOT NULL THEN
+		_accountid = account_id;
+		SELECT	aui.account_id
+		  INTO	_uxaccountid
+		  FROM	account_unix_info aui
+		 WHERE	aui.account_id = _accountid;
+
+		--
+		-- This is creatd by trigger for non-pseudousers, which will
+		-- eventually change, so this is here once it goes away.
+		--
+		IF _uxaccountid IS NULL THEN
+			IF unix_uid = 'auto' THEN
+				_uid :=  person_manip.get_unix_uid(_account_type);
+			ELSE
+				_uid := unix_uid::int;
+			END IF;
+
+			PERFORM person_manip.setup_unix_account(
+				in_account_id := account_id,
+				in_account_type := _account_type,
+				in_uid := _uid
+			);
+		END IF;
+	END IF;
+END;
+$function$
+;
+
+-- DONE WITH proc person_manip.add_user -> add_user 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc person_manip.purge_person -> purge_person 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408406
+CREATE OR REPLACE FUNCTION person_manip.purge_person(in_person_id integer)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+	aid	INTEGER;
+BEGIN
+	FOR aid IN select account_id 
+			FROM account 
+			WHERE person_id = in_person_id
+	LOOP
+		PERFORM person_manip.purge_account ( aid );
+	END LOOP; 
+
+	DELETE FROM person_contact WHERE person_id = in_person_id;
+	DELETE FROM person_location WHERE person_id = in_person_id;
+	DELETE FROM person_company WHERE person_id = in_person_id;
+	DELETE FROM person_account_realm_company WHERE person_id = in_person_id;
+	DELETE FROM person WHERE person_id = in_person_id;
+END;
+$function$
+;
+
+-- DONE WITH proc person_manip.purge_person -> purge_person 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc person_manip.purge_account -> purge_account 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('person_manip', 'purge_account', 'purge_account');
+
+-- DROP OLD FUNCTION
+-- consider old oid 396778
+DROP FUNCTION IF EXISTS person_manip.purge_account(in_account_id integer);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 396778
+DROP FUNCTION IF EXISTS person_manip.purge_account(in_account_id integer);
+-- consider NEW oid 408405
+CREATE OR REPLACE FUNCTION person_manip.purge_account(in_account_id integer)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+	-- note the per-user account collection is removed in triggers
+
+	DELETE FROM account_assignd_cert where ACCOUNT_ID = in_account_id;
+	DELETE FROM account_token where ACCOUNT_ID = in_account_id;
+	DELETE FROM account_unix_info where ACCOUNT_ID = in_account_id;
+	DELETE FROM klogin where ACCOUNT_ID = in_account_id;
+	DELETE FROM property where ACCOUNT_ID = in_account_id;
+	DELETE FROM account_password where ACCOUNT_ID = in_account_id;
+	DELETE FROM unix_group where account_collection_id in
+		(select account_collection_id from account_collection 
+			where account_collection_name in
+				(select login from account where account_id = in_account_id)
+				and account_collection_type in ('unix-group')
+		);
+	DELETE FROM account_collection_account where ACCOUNT_ID = in_account_id;
+
+	DELETE FROM account_collection where account_collection_name in
+		(select login from account where account_id = in_account_id)
+		and account_collection_type in ('per-user', 'unix-group');
+
+	DELETE FROM account where ACCOUNT_ID = in_account_id;
+END;
+$function$
+;
+
+-- DONE WITH proc person_manip.purge_account -> purge_account 
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- DEALING WITH proc create_new_unix_account -> create_new_unix_account 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'create_new_unix_account', 'create_new_unix_account');
+
+-- DROP OLD FUNCTION
+-- consider old oid 415872
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 415872
+-- consider NEW oid 408496
+CREATE OR REPLACE FUNCTION jazzhands.create_new_unix_account()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	unix_id INTEGER;
+	_account_collection_id integer;
+BEGIN
+	IF NEW.person_id != 0 THEN
+		PERFORM person_manip.setup_unix_account(
+			in_account_id := NEW.account_id,
+			in_account_type := NEW.account_type
+		);
+	END IF;
+	RETURN NEW;	
+END;
+$function$
+;
+
+DROP TRIGGER trigger_create_new_unix_account on account;
+CREATE TRIGGER trigger_create_new_unix_account
+AFTER INSERT
+    ON account
+    FOR EACH ROW
+    EXECUTE PROCEDURE create_new_unix_account();
+
+-- DONE WITH proc create_new_unix_account -> create_new_unix_account 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc validate_property -> validate_property 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'validate_property', 'validate_property');
+
+-- DROP OLD FUNCTION
+-- consider old oid 415853
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 415853
+-- DROP FUNCTION IF EXISTS validate_property();
+-- consider NEW oid 408471
+CREATE OR REPLACE FUNCTION jazzhands.validate_property()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	tally			integer;
+	v_prop			VAL_Property%ROWTYPE;
+	v_proptype		VAL_Property_Type%ROWTYPE;
+	v_account_collection	account_collection%ROWTYPE;
+	v_netblock_collection	netblock_collection%ROWTYPE;
+	v_num			integer;
+	v_listvalue		Property.Property_Value%TYPE;
+BEGIN
+
+	-- Pull in the data from the property and property_type so we can
+	-- figure out what is and is not valid
+
+	BEGIN
+		SELECT * INTO STRICT v_prop FROM VAL_Property WHERE
+			Property_Name = NEW.Property_Name AND
+			Property_Type = NEW.Property_Type;
+
+		SELECT * INTO STRICT v_proptype FROM VAL_Property_Type WHERE
+			Property_Type = NEW.Property_Type;
+	EXCEPTION
+		WHEN NO_DATA_FOUND THEN
+			RAISE EXCEPTION 
+				'Property name or type does not exist'
+				USING ERRCODE = 'foreign_key_violation';
+			RETURN NULL;
+	END;
+
+	-- Check to see if the property itself is multivalue.  That is, if only
+	-- one value can be set for this property for a specific property LHS
+
+	IF (v_prop.is_multivalue = 'N') THEN
+		PERFORM 1 FROM Property WHERE
+			Property_Id != NEW.Property_Id AND
+			Property_Name = NEW.Property_Name AND
+			Property_Type = NEW.Property_Type AND
+			((Company_Id IS NULL AND NEW.Company_Id IS NULL) OR
+				(Company_Id = NEW.Company_Id)) AND
+			((Device_Collection_Id IS NULL AND NEW.Device_Collection_Id IS NULL) OR
+				(Device_Collection_Id = NEW.Device_Collection_Id)) AND
+			((DNS_Domain_Id IS NULL AND NEW.DNS_Domain_Id IS NULL) OR
+				(DNS_Domain_Id = NEW.DNS_Domain_Id)) AND
+			((Operating_System_Id IS NULL AND NEW.Operating_System_Id IS NULL) OR
+				(Operating_System_Id = NEW.Operating_System_Id)) AND
+			((service_env_collection_id IS NULL AND NEW.service_env_collection_id IS NULL) OR
+				(service_env_collection_id = NEW.service_env_collection_id)) AND
+			((Site_Code IS NULL AND NEW.Site_Code IS NULL) OR
+				(Site_Code = NEW.Site_Code)) AND
+			((Account_Id IS NULL AND NEW.Account_Id IS NULL) OR
+				(Account_Id = NEW.Account_Id)) AND
+			((Account_Realm_Id IS NULL AND NEW.Account_Realm_Id IS NULL) OR
+				(Account_Realm_Id = NEW.Account_Realm_Id)) AND
+			((account_collection_Id IS NULL AND NEW.account_collection_Id IS NULL) OR
+				(account_collection_Id = NEW.account_collection_Id)) AND
+			((netblock_collection_Id IS NULL AND NEW.netblock_collection_Id IS NULL) OR
+				(netblock_collection_Id = NEW.netblock_collection_Id)) AND
+			((layer2_network_id IS NULL AND NEW.layer2_network_id IS NULL) OR
+				(layer2_network_id = NEW.layer2_network_id)) AND
+			((layer3_network_id IS NULL AND NEW.layer3_network_id IS NULL) OR
+				(layer3_network_id = NEW.layer3_network_id)) AND
+			((person_id IS NULL AND NEW.Person_id IS NULL) OR
+				(Person_Id = NEW.person_id)) AND
+			((property_collection_id IS NULL AND NEW.property_collection_id IS NULL) OR
+				(property_collection_id = NEW.property_collection_id))
+			;
+
+		IF FOUND THEN
+			RAISE EXCEPTION 
+				'Property of type % already exists for given LHS and property is not multivalue',
+				NEW.Property_Type
+				USING ERRCODE = 'unique_violation';
+			RETURN NULL;
+		END IF;
+	END IF;
+
+	-- Check to see if the property type is multivalue.  That is, if only
+	-- one property and value can be set for any properties with this type
+	-- for a specific property LHS
+
+	IF (v_proptype.is_multivalue = 'N') THEN
+		PERFORM 1 FROM Property WHERE
+			Property_Id != NEW.Property_Id AND
+			Property_Type = NEW.Property_Type AND
+			((Company_Id IS NULL AND NEW.Company_Id IS NULL) OR
+				(Company_Id = NEW.Company_Id)) AND
+			((Device_Collection_Id IS NULL AND NEW.Device_Collection_Id IS NULL) OR
+				(Device_Collection_Id = NEW.Device_Collection_Id)) AND
+			((DNS_Domain_Id IS NULL AND NEW.DNS_Domain_Id IS NULL) OR
+				(DNS_Domain_Id = NEW.DNS_Domain_Id)) AND
+			((Operating_System_Id IS NULL AND NEW.Operating_System_Id IS NULL) OR
+				(Operating_System_Id = NEW.Operating_System_Id)) AND
+			((service_env_collection_id IS NULL AND NEW.service_env_collection_id IS NULL) OR
+				(service_env_collection_id = NEW.service_env_collection_id)) AND
+			((Site_Code IS NULL AND NEW.Site_Code IS NULL) OR
+				(Site_Code = NEW.Site_Code)) AND
+			((Person_id IS NULL AND NEW.Person_id IS NULL) OR
+				(Person_Id = NEW.Person_Id)) AND
+			((Account_Id IS NULL AND NEW.Account_Id IS NULL) OR
+				(Account_Id = NEW.Account_Id)) AND
+			((Account_Id IS NULL AND NEW.Account_Id IS NULL) OR
+				(Account_Id = NEW.Account_Id)) AND
+			((Account_Realm_id IS NULL AND NEW.Account_Realm_id IS NULL) OR
+				(Account_Realm_id = NEW.Account_Realm_id)) AND
+			((account_collection_Id IS NULL AND NEW.account_collection_Id IS NULL) OR
+				(account_collection_Id = NEW.account_collection_Id)) AND
+			((layer2_network_id IS NULL AND NEW.layer2_network_id IS NULL) OR
+				(layer2_network_id = NEW.layer2_network_id)) AND
+			((layer3_network_id IS NULL AND NEW.layer3_network_id IS NULL) OR
+				(layer3_network_id = NEW.layer3_network_id)) AND
+			((netblock_collection_Id IS NULL AND NEW.netblock_collection_Id IS NULL) OR
+				(netblock_collection_Id = NEW.netblock_collection_Id)) AND
+			((property_collection_Id IS NULL AND NEW.property_collection_Id IS NULL) OR
+				(property_collection_Id = NEW.property_collection_Id))
+		;
+
+		IF FOUND THEN
+			RAISE EXCEPTION 
+				'Property % of type % already exists for given LHS and property type is not multivalue',
+				NEW.Property_Name, NEW.Property_Type
+				USING ERRCODE = 'unique_violation';
+			RETURN NULL;
+		END IF;
+	END IF;
+
+	-- now validate the property_value columns.
+	tally := 0;
+
+	--
+	-- first determine if the property_value is set properly.
+	--
+
+	-- iterate over each of fk PROPERTY_VALUE columns and if a valid
+	-- value is set, increment tally, otherwise raise an exception.
+	IF NEW.Property_Value_Company_Id IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'company_id' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be Company_Id' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_Password_Type IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'password_type' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be Password_Type' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_Token_Col_Id IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'token_collection_id' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be Token_Collection_Id' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_SW_Package_Id IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'sw_package_id' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be SW_Package_Id' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_Account_Coll_Id IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'account_collection_id' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be account_collection_id' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_nblk_Coll_Id IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'netblock_collection_id' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be nblk_collection_id' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_Timestamp IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'timestamp' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be Timestamp' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_DNS_Domain_Id IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'dns_domain_id' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be DNS_Domain_Id' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_Person_Id IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'Person_Id' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be Person_Id' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	-- at this point, tally will be set to 1 if one of the other property
+	-- values is set to something valid.  Now, check the various options for
+	-- PROPERTY_VALUE itself.  If a new type is added to the val table, this
+	-- trigger needs to be updated or it will be considered invalid.  If a
+	-- new PROPERTY_VALUE_* column is added, then it will pass through without
+	-- trigger modification.  This should be considered bad.
+
+	IF NEW.Property_Value IS NOT NULL THEN
+		tally := tally + 1;
+		IF v_prop.Property_Data_Type = 'boolean' THEN
+			IF NEW.Property_Value != 'Y' AND NEW.Property_Value != 'N' THEN
+				RAISE 'Boolean Property_Value must be Y or N' USING
+					ERRCODE = 'invalid_parameter_value';
+			END IF;
+		ELSIF v_prop.Property_Data_Type = 'number' THEN
+			BEGIN
+				v_num := to_number(NEW.property_value, '9');
+			EXCEPTION
+				WHEN OTHERS THEN
+					RAISE 'Property_Value must be numeric' USING
+						ERRCODE = 'invalid_parameter_value';
+			END;
+		ELSIF v_prop.Property_Data_Type = 'list' THEN
+			BEGIN
+				SELECT Valid_Property_Value INTO STRICT v_listvalue FROM 
+					VAL_Property_Value WHERE
+						Property_Name = NEW.Property_Name AND
+						Property_Type = NEW.Property_Type AND
+						Valid_Property_Value = NEW.Property_Value;
+			EXCEPTION
+				WHEN NO_DATA_FOUND THEN
+					RAISE 'Property_Value must be a valid value' USING
+						ERRCODE = 'invalid_parameter_value';
+			END;
+		ELSIF v_prop.Property_Data_Type != 'string' THEN
+			RAISE 'Property_Data_Type is not a known type' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF v_prop.Property_Data_Type != 'none' AND tally = 0 THEN
+		RAISE 'One of the PROPERTY_VALUE fields must be set.' USING
+			ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	IF tally > 1 THEN
+		RAISE 'Only one of the PROPERTY_VALUE fields may be set.' USING
+			ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	-- If the RHS contains a account_collection_ID, check to see if it must be a
+	-- specific type (e.g. per-user), and verify that if so
+	IF NEW.Property_Value_Account_Coll_Id IS NOT NULL THEN
+		IF v_prop.prop_val_acct_coll_type_rstrct IS NOT NULL THEN
+			BEGIN
+				SELECT * INTO STRICT v_account_collection 
+					FROM account_collection WHERE
+					account_collection_Id = NEW.Property_Value_Account_Coll_Id;
+				IF v_account_collection.account_collection_Type != v_prop.prop_val_acct_coll_type_rstrct
+				THEN
+					RAISE 'Property_Value_Account_Coll_Id must be of type %',
+					v_prop.prop_val_acct_coll_type_rstrct
+					USING ERRCODE = 'invalid_parameter_value';
+				END IF;
+			EXCEPTION
+				WHEN NO_DATA_FOUND THEN
+					-- let the database deal with the fk exception later
+					NULL;
+			END;
+		END IF;
+	END IF;
+
+	-- If the RHS contains a netblock_collection_ID, check to see if it must be a
+	-- specific type and verify that if so
+	IF NEW.Property_Value_nblk_Coll_Id IS NOT NULL THEN
+		IF v_prop.prop_val_acct_coll_type_rstrct IS NOT NULL THEN
+			BEGIN
+				SELECT * INTO STRICT v_netblock_collection 
+					FROM netblock_collection WHERE
+					netblock_collection_Id = NEW.Property_Value_nblk_Coll_Id;
+				IF v_netblock_collection.netblock_collection_Type != v_prop.prop_val_acct_coll_type_rstrct
+				THEN
+					RAISE 'Property_Value_nblk_Coll_Id must be of type %',
+					v_prop.prop_val_acct_coll_type_rstrct
+					USING ERRCODE = 'invalid_parameter_value';
+				END IF;
+			EXCEPTION
+				WHEN NO_DATA_FOUND THEN
+					-- let the database deal with the fk exception later
+					NULL;
+			END;
+		END IF;
+	END IF;
+
+	-- At this point, the RHS has been checked, so now we verify data
+	-- set on the LHS
+
+	-- There needs to be a stanza here for every "lhs".  If a new column is
+	-- added to the property table, a new stanza needs to be added here,
+	-- otherwise it will not be validated.  This should be considered bad.
+
+	IF v_prop.Permit_Company_Id = 'REQUIRED' THEN
+			IF NEW.Company_Id IS NULL THEN
+				RAISE 'Company_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_Company_Id = 'PROHIBITED' THEN
+			IF NEW.Company_Id IS NOT NULL THEN
+				RAISE 'Company_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_Device_Collection_Id = 'REQUIRED' THEN
+			IF NEW.Device_Collection_Id IS NULL THEN
+				RAISE 'Device_Collection_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+
+	ELSIF v_prop.Permit_Device_Collection_Id = 'PROHIBITED' THEN
+			IF NEW.Device_Collection_Id IS NOT NULL THEN
+				RAISE 'Device_Collection_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_DNS_Domain_Id = 'REQUIRED' THEN
+			IF NEW.DNS_Domain_Id IS NULL THEN
+				RAISE 'DNS_Domain_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_DNS_Domain_Id = 'PROHIBITED' THEN
+			IF NEW.DNS_Domain_Id IS NOT NULL THEN
+				RAISE 'DNS_Domain_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.permit_service_env_collection = 'REQUIRED' THEN
+			IF NEW.service_env_collection_id IS NULL THEN
+				RAISE 'service_env_collection_id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.permit_service_env_collection = 'PROHIBITED' THEN
+			IF NEW.service_env_collection_id IS NOT NULL THEN
+				RAISE 'service_environment is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_Operating_System_Id = 'REQUIRED' THEN
+			IF NEW.Operating_System_Id IS NULL THEN
+				RAISE 'Operating_System_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_Operating_System_Id = 'PROHIBITED' THEN
+			IF NEW.Operating_System_Id IS NOT NULL THEN
+				RAISE 'Operating_System_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_Site_Code = 'REQUIRED' THEN
+			IF NEW.Site_Code IS NULL THEN
+				RAISE 'Site_Code is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_Site_Code = 'PROHIBITED' THEN
+			IF NEW.Site_Code IS NOT NULL THEN
+				RAISE 'Site_Code is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_Account_Id = 'REQUIRED' THEN
+			IF NEW.Account_Id IS NULL THEN
+				RAISE 'Account_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_Account_Id = 'PROHIBITED' THEN
+			IF NEW.Account_Id IS NOT NULL THEN
+				RAISE 'Account_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_Account_Realm_Id = 'REQUIRED' THEN
+			IF NEW.Account_Realm_Id IS NULL THEN
+				RAISE 'Account_Realm_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_Account_Realm_Id = 'PROHIBITED' THEN
+			IF NEW.Account_Realm_Id IS NOT NULL THEN
+				RAISE 'Account_Realm_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_account_collection_Id = 'REQUIRED' THEN
+			IF NEW.account_collection_Id IS NULL THEN
+				RAISE 'account_collection_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_account_collection_Id = 'PROHIBITED' THEN
+			IF NEW.account_collection_Id IS NOT NULL THEN
+				RAISE 'account_collection_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_layer2_network_id = 'REQUIRED' THEN
+			IF NEW.layer2_network_id IS NULL THEN
+				RAISE 'layer2_network_id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_layer2_network_id = 'PROHIBITED' THEN
+			IF NEW.layer2_network_id IS NOT NULL THEN
+				RAISE 'layer2_network_id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_layer3_network_id = 'REQUIRED' THEN
+			IF NEW.layer3_network_id IS NULL THEN
+				RAISE 'layer3_network_id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_layer3_network_id = 'PROHIBITED' THEN
+			IF NEW.layer3_network_id IS NOT NULL THEN
+				RAISE 'layer3_network_id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_netblock_collection_Id = 'REQUIRED' THEN
+			IF NEW.netblock_collection_Id IS NULL THEN
+				RAISE 'netblock_collection_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_netblock_collection_Id = 'PROHIBITED' THEN
+			IF NEW.netblock_collection_Id IS NOT NULL THEN
+				RAISE 'netblock_collection_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_property_collection_Id = 'REQUIRED' THEN
+			IF NEW.property_collection_Id IS NULL THEN
+				RAISE 'property_collection_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_property_collection_Id = 'PROHIBITED' THEN
+			IF NEW.property_collection_Id IS NOT NULL THEN
+				RAISE 'property_collection_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_Person_Id = 'REQUIRED' THEN
+			IF NEW.Person_Id IS NULL THEN
+				RAISE 'Person_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_Person_Id = 'PROHIBITED' THEN
+			IF NEW.Person_Id IS NOT NULL THEN
+				RAISE 'Person_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_Property_Rank = 'REQUIRED' THEN
+			IF NEW.property_rank IS NULL THEN
+				RAISE 'property_rank is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_Property_Rank = 'PROHIBITED' THEN
+			IF NEW.property_rank IS NOT NULL THEN
+				RAISE 'property_rank is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	RETURN NEW;
+END;
+$function$
+;
+
+-- DONE WITH proc validate_property -> validate_property 
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_manip.allocate_netblock -> allocate_netblock 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('netblock_manip', 'allocate_netblock', 'allocate_netblock');
+
+-- DROP OLD FUNCTION
+-- consider old oid 446106
+DROP FUNCTION IF EXISTS netblock_manip.allocate_netblock(parent_netblock_id integer, netmask_bits integer, address_type text, can_subnet boolean, allocate_from_bottom boolean, description character varying, netblock_status character varying);
+-- consider old oid 446107
+DROP FUNCTION IF EXISTS netblock_manip.allocate_netblock(parent_netblock_list integer[], netmask_bits integer, address_type text, can_subnet boolean, allocate_from_bottom boolean, description character varying, netblock_status character varying);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 446106
+DROP FUNCTION IF EXISTS netblock_manip.allocate_netblock(parent_netblock_id integer, netmask_bits integer, address_type text, can_subnet boolean, allocate_from_bottom boolean, description character varying, netblock_status character varying);
+-- consider old oid 446107
+DROP FUNCTION IF EXISTS netblock_manip.allocate_netblock(parent_netblock_list integer[], netmask_bits integer, address_type text, can_subnet boolean, allocate_from_bottom boolean, description character varying, netblock_status character varying);
+-- consider NEW oid 408458
+CREATE OR REPLACE FUNCTION netblock_manip.allocate_netblock(parent_netblock_id integer, netmask_bits integer DEFAULT NULL::integer, address_type text DEFAULT 'netblock'::text, can_subnet boolean DEFAULT true, allocation_method text DEFAULT NULL::text, rnd_masklen_threshold integer DEFAULT 110, rnd_max_count integer DEFAULT 1024, ip_address inet DEFAULT NULL::inet, description character varying DEFAULT NULL::character varying, netblock_status character varying DEFAULT 'Allocated'::character varying)
+ RETURNS netblock
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	netblock_rec	RECORD;
+BEGIN
+	SELECT * into netblock_rec FROM netblock_manip.allocate_netblock(
+		parent_netblock_list := ARRAY[parent_netblock_id],
+		netmask_bits := netmask_bits,
+		address_type := address_type,
+		can_subnet := can_subnet,
+		description := description,
+		allocation_method := allocation_method,
+		ip_address := ip_address,
+		rnd_masklen_threshold := rnd_masklen_threshold,
+		rnd_max_count := rnd_max_count,
+		netblock_status := netblock_status
+	);
+	RETURN netblock_rec;
+END;
+$function$
+;
+-- consider NEW oid 408459
+CREATE OR REPLACE FUNCTION netblock_manip.allocate_netblock(parent_netblock_list integer[], netmask_bits integer DEFAULT NULL::integer, address_type text DEFAULT 'netblock'::text, can_subnet boolean DEFAULT true, allocation_method text DEFAULT NULL::text, rnd_masklen_threshold integer DEFAULT 110, rnd_max_count integer DEFAULT 1024, ip_address inet DEFAULT NULL::inet, description character varying DEFAULT NULL::character varying, netblock_status character varying DEFAULT 'Allocated'::character varying)
+ RETURNS netblock
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	parent_rec		RECORD;
+	netblock_rec	RECORD;
+	inet_rec		RECORD;
+	loopback_bits	integer;
+	inet_family		integer;
+BEGIN
+	IF parent_netblock_list IS NULL THEN
+		RAISE 'parent_netblock_list must be specified'
+		USING ERRCODE = 'null_value_not_allowed';
+	END IF;
+
+	IF address_type NOT IN ('netblock', 'single', 'loopback') THEN
+		RAISE 'address_type must be one of netblock, single, or loopback'
+		USING ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	IF netmask_bits IS NULL AND address_type = 'netblock' THEN
+		RAISE EXCEPTION
+			'You must specify a netmask when address_type is netblock'
+			USING ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	-- Lock the parent row, which should keep parallel processes from
+	-- trying to obtain the same address
+
+	FOR parent_rec IN SELECT * FROM jazzhands.netblock WHERE netblock_id = 
+			ANY(allocate_netblock.parent_netblock_list) FOR UPDATE LOOP
+
+		IF parent_rec.is_single_address = 'Y' THEN
+			RAISE EXCEPTION 'parent_netblock_id refers to a single_address netblock'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+
+		IF inet_family IS NULL THEN
+			inet_family := family(parent_rec.ip_address);
+		ELSIF inet_family != family(parent_rec.ip_address) 
+				AND ip_address IS NULL THEN
+			RAISE EXCEPTION 'Allocation may not mix IPv4 and IPv6 addresses'
+			USING ERRCODE = 'JH10F';
+		END IF;
+
+		IF address_type = 'loopback' THEN
+			loopback_bits := 
+				CASE WHEN 
+					family(parent_rec.ip_address) = 4 THEN 32 ELSE 128 END;
+
+			IF parent_rec.can_subnet = 'N' THEN
+				RAISE EXCEPTION 'parent subnet must have can_subnet set to Y'
+					USING ERRCODE = 'JH10B';
+			END IF;
+		ELSIF address_type = 'single' THEN
+			IF parent_rec.can_subnet = 'Y' THEN
+				RAISE EXCEPTION
+					'parent subnet for single address must have can_subnet set to N'
+					USING ERRCODE = 'JH10B';
+			END IF;
+		ELSIF address_type = 'netblock' THEN
+			IF parent_rec.can_subnet = 'N' THEN
+				RAISE EXCEPTION 'parent subnet must have can_subnet set to Y'
+					USING ERRCODE = 'JH10B';
+			END IF;
+		END IF;
+	END LOOP;
+
+ 	IF NOT FOUND THEN
+ 		RETURN NULL;
+ 	END IF;
+
+	IF address_type = 'loopback' THEN
+		-- If we're allocating a loopback address, then we need to create
+		-- a new parent to hold the single loopback address
+
+		SELECT * INTO inet_rec FROM netblock_utils.find_free_netblocks(
+			parent_netblock_list := parent_netblock_list,
+			netmask_bits := loopback_bits,
+			single_address := false,
+			allocation_method := allocation_method,
+			desired_ip_address := ip_address,
+			max_addresses := 1
+			);
+
+		IF NOT FOUND THEN
+			RETURN NULL;
+		END IF;
+
+		INSERT INTO jazzhands.netblock (
+			ip_address,
+			netblock_type,
+			is_single_address,
+			can_subnet,
+			ip_universe_id,
+			description,
+			netblock_status
+		) VALUES (
+			inet_rec.ip_address,
+			loopback_bits,
+			inet_rec.netblock_type,
+			'N',
+			'N',
+			inet_rec.ip_universe_id,
+			allocate_netblock.description,
+			allocate_netblock.netblock_status
+		) RETURNING * INTO parent_rec;
+
+		INSERT INTO jazzhands.netblock (
+			ip_address,
+			netblock_type,
+			is_single_address,
+			can_subnet,
+			ip_universe_id,
+			description,
+			netblock_status
+		) VALUES (
+			inet_rec,
+			masklen(inet_rec),
+			parent_rec.netblock_type,
+			'Y',
+			'N',
+			parent_rec.ip_universe_id,
+			allocate_netblock.description,
+			allocate_netblock.netblock_status
+		) RETURNING * INTO netblock_rec;
+
+		RETURN netblock_rec;
+	END IF;
+
+	IF address_type = 'single' THEN
+		SELECT * INTO inet_rec FROM netblock_utils.find_free_netblocks(
+			parent_netblock_list := parent_netblock_list,
+			single_address := true,
+			allocation_method := allocation_method,
+			desired_ip_address := ip_address,
+			rnd_masklen_threshold := rnd_masklen_threshold,
+			rnd_max_count := rnd_max_count,
+			max_addresses := 1
+			);
+
+		IF NOT FOUND THEN
+			RETURN NULL;
+		END IF;
+
+		RAISE DEBUG 'ip_address is %', inet_rec.ip_address;
+
+		INSERT INTO jazzhands.netblock (
+			ip_address,
+			netblock_type,
+			is_single_address,
+			can_subnet,
+			ip_universe_id,
+			description,
+			netblock_status
+		) VALUES (
+			inet_rec.ip_address,
+			inet_rec.netblock_type,
+			'Y',
+			'N',
+			inet_rec.ip_universe_id,
+			allocate_netblock.description,
+			allocate_netblock.netblock_status
+		) RETURNING * INTO netblock_rec;
+
+		RETURN netblock_rec;
+	END IF;
+	IF address_type = 'netblock' THEN
+		SELECT * INTO inet_rec FROM netblock_utils.find_free_netblocks(
+			parent_netblock_list := parent_netblock_list,
+			netmask_bits := netmask_bits,
+			single_address := false,
+			allocation_method := allocation_method,
+			desired_ip_address := ip_address,
+			max_addresses := 1);
+
+		IF NOT FOUND THEN
+			RETURN NULL;
+		END IF;
+
+		INSERT INTO jazzhands.netblock (
+			ip_address,
+			netblock_type,
+			is_single_address,
+			can_subnet,
+			ip_universe_id,
+			description,
+			netblock_status
+		) VALUES (
+			inet_rec.ip_address,
+			inet_rec.netblock_type,
+			'N',
+			CASE WHEN can_subnet THEN 'Y' ELSE 'N' END,
+			inet_rec.ip_universe_id,
+			allocate_netblock.description,
+			allocate_netblock.netblock_status
+		) RETURNING * INTO netblock_rec;
+
+		RETURN netblock_rec;
+	END IF;
+END;
+$function$
+;
+
+-- DONE WITH proc netblock_manip.allocate_netblock -> allocate_netblock 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_manip.delete_netblock -> delete_netblock 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('netblock_manip', 'delete_netblock', 'delete_netblock');
+
+-- DROP OLD FUNCTION
+-- consider old oid 446104
+DROP FUNCTION IF EXISTS netblock_manip.delete_netblock(in_netblock_id integer);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 446104
+DROP FUNCTION IF EXISTS netblock_manip.delete_netblock(in_netblock_id integer);
+-- consider NEW oid 408456
+CREATE OR REPLACE FUNCTION netblock_manip.delete_netblock(in_netblock_id integer)
+ RETURNS void
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	par_nbid	jazzhands.netblock.netblock_id%type;
+BEGIN
+	/*
+	 * Update netblocks that use this as a parent to point to my parent
+	 */
+	SELECT
+		netblock_id INTO par_nbid
+	FROM
+		jazzhands.netblock
+	WHERE 
+		netblock_id = in_netblock_id;
+	
+	UPDATE
+		jazzhands.netblock
+	SET
+		parent_netblock_id = par_nbid
+	WHERE
+		parent_netblock_id = in_netblock_id;
+	
+	/*
+	 * Now delete the record
+	 */
+	DELETE FROM jazzhands.netblock WHERE netblock_id = in_netblock_id;
+END;
+$function$
+;
+
+-- DONE WITH proc netblock_manip.delete_netblock -> delete_netblock 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc person_manip.add_user_non_person -> add_user_non_person 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408401
+CREATE OR REPLACE FUNCTION person_manip.add_user_non_person(_company_id integer, _account_status character varying, _login character varying, _description character varying)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+	__account_id INTEGER;
+BEGIN
+    SELECT account_id
+     INTO  __account_id
+     FROM  person_manip.add_user(
+        company_id := _company_id,
+        person_company_relation := 'pseudouser',
+        login := _login,
+        description := _description,
+        person_company_status := 'enabled'
+    );
+	RETURN __account_id;
+END;
+$function$
+;
+
+-- DONE WITH proc person_manip.add_user_non_person -> add_user_non_person 
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH proc check_svcenv_colllection_hier_loop -> check_svcenv_colllection_hier_loop 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408490
+CREATE OR REPLACE FUNCTION jazzhands.check_svcenv_colllection_hier_loop()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+	IF NEW.service_env_collection_id = 
+		NEW.child_service_env_coll_id THEN
+			RAISE EXCEPTION 'svcenv Collection Loops Not Pernitted '
+			USING ERRCODE = 20704;	/* XXX */
+	END IF;
+	RETURN NEW;
+END;
+$function$
+;
+
+-- DONE WITH proc check_svcenv_colllection_hier_loop -> check_svcenv_colllection_hier_loop 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc check_token_colllection_hier_loop -> check_token_colllection_hier_loop 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408488
+CREATE OR REPLACE FUNCTION jazzhands.check_token_colllection_hier_loop()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+	IF NEW.token_collection_id = NEW.child_token_collection_id THEN
+		RAISE EXCEPTION 'token Collection Loops Not Pernitted '
+			USING ERRCODE = 20704;	/* XXX */
+	END IF;
+	RETURN NEW;
+END;
+$function$
+;
+
+-- DONE WITH proc check_token_colllection_hier_loop -> check_token_colllection_hier_loop 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc delete_per_svc_env_svc_env_collection -> delete_per_svc_env_svc_env_collection 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'delete_per_svc_env_svc_env_collection', 'delete_per_svc_env_svc_env_collection');
+
+-- DROP OLD FUNCTION
+-- consider old oid 454596
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 454596
+-- consider NEW oid 408525
+CREATE OR REPLACE FUNCTION jazzhands.delete_per_svc_env_svc_env_collection()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	secid	service_environment_collection.service_env_collection_id%TYPE;
+BEGIN
+	SELECT	service_env_collection_id
+	  FROM  service_environment_collection
+	  INTO	secid
+	 WHERE	service_env_collection_type = 'per-environment'
+	   AND	service_env_collection_id in
+		(select service_env_collection_id
+		 from svc_environment_coll_svc_env
+		where service_environment_id = OLD.service_environment_id
+		)
+	ORDER BY service_env_collection_id
+	LIMIT 1;
+
+	IF secid IS NOT NULL THEN
+		DELETE FROM svc_environment_coll_svc_env
+		WHERE service_env_collection_id = secid;
+
+		DELETE from service_environment_collection
+		WHERE service_env_collection_id = secid;
+	END IF;
+
+	RETURN OLD;
+END;
+$function$
+;
+
+-- DONE WITH proc delete_per_svc_env_svc_env_collection -> delete_per_svc_env_svc_env_collection 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc update_per_svc_env_svc_env_collection -> update_per_svc_env_svc_env_collection 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'update_per_svc_env_svc_env_collection', 'update_per_svc_env_svc_env_collection');
+
+-- DROP OLD FUNCTION
+-- consider old oid 454598
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 454598
+-- consider NEW oid 408527
+CREATE OR REPLACE FUNCTION jazzhands.update_per_svc_env_svc_env_collection()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	secid		service_environment_collection.service_env_collection_id%TYPE;
+BEGIN
+	IF TG_OP = 'INSERT' THEN
+		insert into service_environment_collection
+			(service_env_collection_name, service_env_collection_type)
+		values
+			(NEW.service_environment_name, 'per-environment')
+		RETURNING service_env_collection_id INTO secid;
+		insert into svc_environment_coll_svc_env
+			(service_env_collection_id, service_environment_id)
+		VALUES
+			(secid, NEW.service_environment_id);
+	ELSIF TG_OP = 'UPDATE'  AND OLD.service_environment_id != NEW.service_environment_id THEN
+		UPDATE	service_environment_collection
+		   SET	service_env_collection_name = NEW.service_environment_name
+		 WHERE	service_env_collection_name != NEW.service_environment_name
+		   AND	service_env_collection_type = 'per-environment'
+		   AND	service_environment_id in (
+			SELECT	service_environment_id
+			  FROM	svc_environment_coll_svc_env
+			 WHERE	service_environment_id = 
+				NEW.service_environment_id
+			);
+	END IF;
+	RETURN NEW;
+END;
+$function$
+;
+
+-- DONE WITH proc update_per_svc_env_svc_env_collection -> update_per_svc_env_svc_env_collection 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc delete_peruser_account_collection -> delete_peruser_account_collection 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'delete_peruser_account_collection', 'delete_peruser_account_collection');
+
+-- DROP OLD FUNCTION
+-- consider old oid 454549
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 454549
+-- consider NEW oid 408474
+CREATE OR REPLACE FUNCTION jazzhands.delete_peruser_account_collection()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	def_acct_rlm	account_realm.account_realm_id%TYPE;
+	acid			account_collection.account_collection_id%TYPE;
+BEGIN
+	IF TG_OP = 'DELETE' THEN
+		SELECT	account_realm_id
+		  INTO	def_acct_rlm
+		  FROM	property
+		 WHERE	property_name = '_root_account_realm_id'
+		    and	property_type = 'Defaults';
+
+		IF def_acct_rlm is not NULL AND OLD.account_realm_id = def_acct_rlm THEN
+				SELECT	account_collection_id
+				  INTO	acid
+				  FROM	account_collection ac
+						INNER JOIN account_collection_account aca
+							USING (account_collection_id)
+				 WHERE	aca.account_id = OLD.account_Id
+				   AND	ac.account_collection_type = 'per-user';
+
+				 DELETE from account_collection_account
+				  where account_collection_id = acid;
+
+				 DELETE from account_collection
+				  where account_collection_id = acid;
+		END IF;
+	END IF;
+	RETURN OLD;
+END;
+$function$
+;
+
+-- DONE WITH proc delete_peruser_account_collection -> delete_peruser_account_collection 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc update_peruser_account_collection -> update_peruser_account_collection 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'update_peruser_account_collection', 'update_peruser_account_collection');
+
+-- DROP OLD FUNCTION
+-- consider old oid 454551
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 454551
+-- consider NEW oid 408476
+CREATE OR REPLACE FUNCTION jazzhands.update_peruser_account_collection()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	def_acct_rlm	account_realm.account_realm_id%TYPE;
+	acid			account_collection.account_collection_id%TYPE;
+BEGIN
+	SELECT	account_realm_id
+	  INTO	def_acct_rlm
+	  FROM	property
+	 WHERE	property_name = '_root_account_realm_id'
+	    and	property_type = 'Defaults';
+
+	IF def_acct_rlm is not NULL AND NEW.account_realm_id = def_acct_rlm THEN
+		if TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND OLD.account_realm_id != NEW.account_realm_id) THEN
+			insert into account_collection 
+				(account_collection_name, account_collection_type)
+			values
+				(NEW.login, 'per-user')
+			RETURNING account_collection_id INTO acid;
+			insert into account_collection_account 
+				(account_collection_id, account_id)
+			VALUES
+				(acid, NEW.account_id);
+		END IF;
+
+		IF TG_OP = 'UPDATE' AND OLD.login != NEW.login THEN
+			IF OLD.account_realm_id = NEW.account_realm_id THEN
+				update	account_collection
+				    set	account_collection_name = NEW.login
+				  where	account_collection_type = 'per-user'
+				    and	account_collection_name = OLD.login;
+			END IF;
+		END IF;
+	END IF;
+
+	-- remove the per-user entry if the new account realm is not the default
+	IF TG_OP = 'UPDATE'  THEN
+		IF def_acct_rlm is not NULL AND OLD.account_realm_id = def_acct_rlm AND NEW.account_realm_id != OLD.account_realm_id THEN
+		    SELECT  account_collection_id
+		INTO    acid
+		FROM    account_collection ac
+			INNER JOIN account_collection_account aca
+					USING (account_collection_id)
+		WHERE  aca.account_id = NEW.account_Id
+		AND     ac.account_collection_type = 'per-user';
+
+			DELETE from account_collection_account
+				WHERE account_collection_id = acid;
+
+			DELETE from account_collection
+				WHERE account_collection_id = acid;
+		END IF;
+	END IF;
+	RETURN NEW;
+END;
+$function$
+;
+
+-- DONE WITH proc update_peruser_account_collection -> update_peruser_account_collection 
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_account_collection_expanded [454434]
+-- Save grants for later reapplication
+SELECT schema_support.save_view_for_replay('jazzhands', 'v_account_collection_expanded');
+
+CREATE VIEW v_account_collection_expanded AS
+ WITH RECURSIVE var_recurse(level, root_account_collection_id, account_collection_id, array_path, cycle) AS (
+         SELECT 0 AS level,
+            a.account_collection_id AS root_account_collection_id,
+            a.account_collection_id,
+            ARRAY[a.account_collection_id] AS array_path,
+            false AS cycle
+           FROM account_collection a
+        UNION ALL
+         SELECT x.level + 1 AS level,
+            x.root_account_collection_id,
+            ach.child_account_collection_id AS account_collection_id,
+            ach.child_account_collection_id || x.array_path AS array_path,
+            ach.child_account_collection_id = ANY (x.array_path) AS cycle
+           FROM var_recurse x
+             JOIN account_collection_hier ach ON x.account_collection_id = ach.account_collection_id
+          WHERE NOT x.cycle
+        )
+ SELECT var_recurse.level,
+    var_recurse.root_account_collection_id,
+    var_recurse.account_collection_id
+   FROM var_recurse;
+
+delete from __recreate where type = 'view' and object = 'v_account_collection_expanded';
+-- DONE DEALING WITH TABLE v_account_collection_expanded [408317]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_acct_coll_expanded [454410]
+-- Save grants for later reapplication
+SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'v_acct_coll_expanded');
+SELECT schema_support.save_view_for_replay('jazzhands', 'v_acct_coll_expanded');
+CREATE VIEW v_acct_coll_expanded AS
+ WITH RECURSIVE acct_coll_recurse(level, root_account_collection_id, account_collection_id, array_path, rvs_array_path, cycle) AS (
+         SELECT 0 AS level,
+            ac.account_collection_id AS root_account_collection_id,
+            ac.account_collection_id,
+            ARRAY[ac.account_collection_id] AS array_path,
+            ARRAY[ac.account_collection_id] AS rvs_array_path,
+            false AS bool
+           FROM account_collection ac
+        UNION ALL
+         SELECT x.level + 1 AS level,
+            x.root_account_collection_id,
+            ach.account_collection_id,
+            x.array_path || ach.account_collection_id AS array_path,
+            ach.account_collection_id || x.rvs_array_path AS rvs_array_path,
+            ach.account_collection_id = ANY (x.array_path) AS cycle
+           FROM acct_coll_recurse x
+             JOIN account_collection_hier ach ON x.account_collection_id = ach.child_account_collection_id
+          WHERE NOT x.cycle
+        )
+ SELECT acct_coll_recurse.level,
+    acct_coll_recurse.account_collection_id,
+    acct_coll_recurse.root_account_collection_id,
+    array_to_string(acct_coll_recurse.array_path, '/'::text) AS text_path,
+    acct_coll_recurse.array_path,
+    acct_coll_recurse.rvs_array_path
+   FROM acct_coll_recurse;
+
+delete from __recreate where type = 'view' and object = 'v_acct_coll_expanded';
+-- DONE DEALING WITH TABLE v_acct_coll_expanded [408327]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_company_hier [454448]
+-- Save grants for later reapplication
+SELECT schema_support.save_view_for_replay('jazzhands', 'v_company_hier');
+CREATE VIEW v_company_hier AS
+ WITH RECURSIVE var_recurse(level, root_company_id, company_id, person_id, array_path, cycle) AS (
+         SELECT 0 AS level,
+            c.company_id AS root_company_id,
+            c.company_id,
+            pc.person_id,
+            ARRAY[c.company_id] AS array_path,
+            false AS cycle
+           FROM company c
+             JOIN person_company pc USING (company_id)
+        UNION ALL
+         SELECT x.level + 1 AS level,
+            x.company_id AS root_company_id,
+            c.company_id,
+            pc.person_id,
+            c.company_id || x.array_path AS array_path,
+            c.company_id = ANY (x.array_path) AS cycle
+           FROM var_recurse x
+             JOIN company c ON c.parent_company_id = x.company_id
+             JOIN person_company pc ON c.company_id = pc.company_id
+          WHERE NOT x.cycle
+        )
+ SELECT DISTINCT var_recurse.root_company_id,
+    var_recurse.company_id
+   FROM var_recurse;
+
+delete from __recreate where type = 'view' and object = 'v_company_hier';
+-- DONE DEALING WITH TABLE v_company_hier [408361]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_device_coll_hier_detail [454391]
+-- Save grants for later reapplication
+SELECT schema_support.save_view_for_replay('jazzhands', 'v_device_coll_hier_detail');
+CREATE VIEW v_device_coll_hier_detail AS
+ WITH RECURSIVE var_recurse(root_device_collection_id, device_collection_id, parent_device_collection_id, device_collection_level, array_path, cycle) AS (
+         SELECT device_collection.device_collection_id AS root_device_collection_id,
+            device_collection.device_collection_id,
+            device_collection.device_collection_id AS parent_device_collection_id,
+            0 AS device_collection_level,
+            ARRAY[device_collection.device_collection_id] AS "array",
+            false AS bool
+           FROM device_collection
+        UNION ALL
+         SELECT x.root_device_collection_id,
+            dch.device_collection_id,
+            dch.parent_device_collection_id,
+            x.device_collection_level + 1 AS device_collection_level,
+            dch.parent_device_collection_id || x.array_path AS array_path,
+            dch.parent_device_collection_id = ANY (x.array_path)
+           FROM var_recurse x
+             JOIN device_collection_hier dch ON x.parent_device_collection_id = dch.device_collection_id
+          WHERE NOT x.cycle
+        )
+ SELECT var_recurse.root_device_collection_id AS device_collection_id,
+    var_recurse.parent_device_collection_id,
+    var_recurse.device_collection_level
+   FROM var_recurse;
+
+delete from __recreate where type = 'view' and object = 'v_device_coll_hier_detail';
+-- DONE DEALING WITH TABLE v_device_coll_hier_detail [408308]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_nblk_coll_netblock_expanded [454366]
+-- Save grants for later reapplication
+SELECT schema_support.save_view_for_replay('jazzhands', 'v_nblk_coll_netblock_expanded');
+CREATE VIEW v_nblk_coll_netblock_expanded AS
+ WITH RECURSIVE var_recurse(level, root_collection_id, netblock_collection_id, child_netblock_collection_id, array_path, cycle) AS (
+         SELECT 0 AS level,
+            u.netblock_collection_id AS root_collection_id,
+            u.netblock_collection_id,
+            u.netblock_collection_id AS child_netblock_collection_id,
+            ARRAY[u.netblock_collection_id] AS array_path,
+            false AS cycle
+           FROM netblock_collection u
+        UNION ALL
+         SELECT x.level + 1 AS level,
+            x.netblock_collection_id AS root_netblock_collection_id,
+            uch.netblock_collection_id,
+            uch.child_netblock_collection_id,
+            uch.child_netblock_collection_id || x.array_path AS array_path,
+            uch.child_netblock_collection_id = ANY (x.array_path) AS cycle
+           FROM var_recurse x
+             JOIN netblock_collection_hier uch ON x.child_netblock_collection_id = uch.netblock_collection_id
+          WHERE NOT x.cycle
+        )
+ SELECT DISTINCT var_recurse.root_collection_id AS netblock_collection_id,
+    netblock_collection_netblock.netblock_id
+   FROM var_recurse
+     JOIN netblock_collection_netblock USING (netblock_collection_id);
+
+delete from __recreate where type = 'view' and object = 'v_nblk_coll_netblock_expanded';
+-- DONE DEALING WITH TABLE v_nblk_coll_netblock_expanded [408283]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_netblock_hier [454356]
+-- Save grants for later reapplication
+SELECT schema_support.save_view_for_replay('jazzhands', 'v_netblock_hier');
+CREATE VIEW v_netblock_hier AS
+ WITH RECURSIVE var_recurse(netblock_level, root_netblock_id, ip, netblock_id, ip_address, netblock_status, is_single_address, description, parent_netblock_id, site_code, array_path, array_ip_path, cycle) AS (
+         SELECT 0 AS netblock_level,
+            nb.netblock_id AS root_netblock_id,
+            net_manip.inet_dbtop(nb.ip_address) AS ip,
+            nb.netblock_id,
+            nb.ip_address,
+            nb.netblock_status,
+            nb.is_single_address,
+            nb.description,
+            nb.parent_netblock_id,
+            snb.site_code,
+            ARRAY[nb.netblock_id] AS "array",
+            ARRAY[nb.ip_address] AS "array",
+            false AS bool
+           FROM netblock nb
+             LEFT JOIN site_netblock snb ON snb.netblock_id = nb.netblock_id
+          WHERE nb.is_single_address = 'N'::bpchar
+        UNION ALL
+         SELECT x.netblock_level + 1 AS netblock_level,
+            x.root_netblock_id,
+            net_manip.inet_dbtop(nb.ip_address) AS ip,
+            nb.netblock_id,
+            nb.ip_address,
+            nb.netblock_status,
+            nb.is_single_address,
+            nb.description,
+            nb.parent_netblock_id,
+            snb.site_code,
+            x.array_path || nb.netblock_id AS array_path,
+            x.array_ip_path || nb.ip_address AS array_ip_path,
+            nb.netblock_id = ANY (x.array_path)
+           FROM var_recurse x
+             JOIN netblock nb ON x.netblock_id = nb.parent_netblock_id
+             LEFT JOIN site_netblock snb ON snb.netblock_id = nb.netblock_id
+          WHERE nb.is_single_address = 'N'::bpchar AND NOT x.cycle
+        )
+ SELECT var_recurse.netblock_level,
+    var_recurse.root_netblock_id,
+    var_recurse.ip,
+    var_recurse.netblock_id,
+    var_recurse.ip_address,
+    var_recurse.netblock_status,
+    var_recurse.is_single_address,
+    var_recurse.description,
+    var_recurse.parent_netblock_id,
+    var_recurse.site_code,
+    array_to_string(var_recurse.array_path, '/'::text) AS text_path,
+    var_recurse.array_path,
+    var_recurse.array_ip_path
+   FROM var_recurse;
+
+delete from __recreate where type = 'view' and object = 'v_netblock_hier';
+-- DONE DEALING WITH TABLE v_netblock_hier [408271]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_person_company_expanded [454371]
+-- Save grants for later reapplication
+SELECT schema_support.save_view_for_replay('jazzhands', 'v_person_company_expanded');
+CREATE VIEW v_person_company_expanded AS
+ WITH RECURSIVE var_recurse(level, root_company_id, company_id, person_id, array_path, cycle) AS (
+         SELECT 0 AS level,
+            c.company_id AS root_company_id,
+            c.company_id,
+            pc.person_id,
+            ARRAY[c.company_id] AS array_path,
+            false AS bool
+           FROM company c
+             JOIN person_company pc USING (company_id)
+        UNION ALL
+         SELECT x.level + 1 AS level,
+            x.company_id AS root_company_id,
+            c.company_id,
+            pc.person_id,
+            c.company_id || x.array_path AS array_path,
+            c.company_id = ANY (x.array_path) AS cycle
+           FROM var_recurse x
+             JOIN company c ON c.parent_company_id = x.company_id
+             JOIN person_company pc ON c.company_id = pc.company_id
+          WHERE NOT x.cycle
+        )
+ SELECT DISTINCT var_recurse.root_company_id AS company_id,
+    var_recurse.person_id
+   FROM var_recurse;
+
+delete from __recreate where type = 'view' and object = 'v_person_company_expanded';
+-- DONE DEALING WITH TABLE v_person_company_expanded [408288]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_physical_connection [454458]
+-- Save grants for later reapplication
+SELECT schema_support.save_view_for_replay('jazzhands', 'v_physical_connection');
+CREATE VIEW v_physical_connection AS
+ WITH RECURSIVE var_recurse(level, layer1_connection_id, physical_connection_id, layer1_physical_port1_id, layer1_physical_port2_id, physical_port1_id, physical_port2_id, array_path, cycle) AS (
+         SELECT 0,
+            l1.layer1_connection_id,
+            pc.physical_connection_id,
+            l1.physical_port1_id AS layer1_physical_port1_id,
+            l1.physical_port2_id AS layer1_physical_port2_id,
+            pc.physical_port1_id,
+            pc.physical_port2_id,
+            ARRAY[l1.physical_port1_id] AS array_path,
+            false AS cycle
+           FROM layer1_connection l1
+             JOIN physical_connection pc USING (physical_port1_id)
+        UNION ALL
+         SELECT x.level + 1,
+            x.layer1_connection_id,
+            pc.physical_connection_id,
+            x.physical_port1_id AS layer1_physical_port1_id,
+            x.physical_port2_id AS layer1_physical_port2_id,
+            pc.physical_port1_id,
+            pc.physical_port2_id,
+            pc.physical_port2_id || x.array_path AS array_path,
+            pc.physical_port2_id = ANY (x.array_path) AS cycle
+           FROM var_recurse x
+             JOIN physical_connection pc ON x.physical_port2_id = pc.physical_port1_id
+        )
+ SELECT var_recurse.level,
+    var_recurse.layer1_connection_id,
+    var_recurse.physical_connection_id,
+    var_recurse.layer1_physical_port1_id,
+    var_recurse.layer1_physical_port2_id,
+    var_recurse.physical_port1_id,
+    var_recurse.physical_port2_id
+   FROM var_recurse;
+
+delete from __recreate where type = 'view' and object = 'v_physical_connection';
+-- DONE DEALING WITH TABLE v_physical_connection [408371]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH proc check_device_colllection_hier_loop -> check_device_colllection_hier_loop 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 408486
+CREATE OR REPLACE FUNCTION jazzhands.check_device_colllection_hier_loop()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+	IF NEW.device_collection_id = NEW.parent_device_collection_id THEN
+		RAISE EXCEPTION 'device Collection Loops Not Pernitted '
+			USING ERRCODE = 20704;	/* XXX */
+	END IF;
+	RETURN NEW;
+END;
+$function$
+;
+
+-- DONE WITH proc check_device_colllection_hier_loop -> check_device_colllection_hier_loop 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc manipulate_netblock_parentage_before -> manipulate_netblock_parentage_before 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'manipulate_netblock_parentage_before', 'manipulate_netblock_parentage_before');
+
+-- DROP OLD FUNCTION
+-- consider old oid 485787
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 485787
+-- consider NEW oid 408500
+CREATE OR REPLACE FUNCTION jazzhands.manipulate_netblock_parentage_before()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+
+DECLARE
+	nbtype				record;
+	v_netblock_type		val_netblock_type.netblock_type%TYPE;
+BEGIN
+	/*
+	 * Get the parameters for the given netblock type to see if we need
+	 * to do anything
+	 */
+
+	RAISE DEBUG 'Performing % on netblock %', TG_OP, NEW.netblock_id;
+
+	SELECT * INTO nbtype FROM val_netblock_type WHERE
+		netblock_type = NEW.netblock_type;
+
+	IF (NOT FOUND) OR nbtype.db_forced_hierarchy != 'Y' THEN
+		RETURN NEW;
+	END IF;
+
+	/*
+	 * Find the correct parent netblock
+	 */
+
+	RAISE DEBUG 'Setting forced hierarchical netblock %', NEW.netblock_id;
+	NEW.parent_netblock_id := netblock_utils.find_best_parent_id(
+		NEW.ip_address,
+		NULL,
+		NEW.netblock_type,
+		NEW.ip_universe_id,
+		NEW.is_single_address,
+		NEW.netblock_id
+		);
+
+	RAISE DEBUG 'Setting parent for netblock % (%, type %, universe %, single-address %) to %',
+		NEW.netblock_id, NEW.ip_address, NEW.netblock_type,
+		NEW.ip_universe_id, NEW.is_single_address,
+		NEW.parent_netblock_id;
+
+	/*
+	 * If we are an end-node, then we're done
+	 */
+
+	IF NEW.is_single_address = 'Y' THEN
+		RETURN NEW;
+	END IF;
+
+	/*
+	 * If we're updating and we're a container netblock, find
+	 * all of the children of our new parent that should be ours and take
+	 * them.  They will already be guaranteed to be of the correct
+	 * netblock_type and ip_universe_id.  We can't do this for inserts
+	 * because the row doesn't exist causing foreign key problems, so
+	 * that needs to be done in an after trigger.
+	 */
+	IF TG_OP = 'UPDATE' THEN
+		RAISE DEBUG 'Setting parent for all child netblocks of parent netblock % that belong to %',
+			NEW.parent_netblock_id,
+			NEW.netblock_id;
+		UPDATE
+			netblock
+		SET
+			parent_netblock_id = NEW.netblock_id
+		WHERE
+			parent_netblock_id = NEW.parent_netblock_id AND
+			ip_address <<= NEW.ip_address AND
+			netblock_id != NEW.netblock_id;
+
+		RAISE DEBUG 'Setting parent for all child netblocks of netblock % that no longer belong to it to %',
+			NEW.parent_netblock_id,
+			NEW.netblock_id;
+		RAISE DEBUG 'Setting parent % to %',
+			OLD.netblock_id,
+			OLD.parent_netblock_id;
+		UPDATE
+			netblock
+		SET
+			parent_netblock_id = OLD.parent_netblock_id
+		WHERE
+			parent_netblock_id = NEW.netblock_id AND
+			(ip_universe_id != NEW.ip_universe_id OR
+			 netblock_type != NEW.netblock_type OR
+			 NOT(ip_address <<= NEW.ip_address));
+	END IF;
+
+	RETURN NEW;
+END;
+$function$
+;
+
+-- DONE WITH proc manipulate_netblock_parentage_before -> manipulate_netblock_parentage_before 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc validate_netblock -> validate_netblock 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'validate_netblock', 'validate_netblock');
+
+-- DROP OLD FUNCTION
+-- consider old oid 485785
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 485785
+-- consider NEW oid 408498
+CREATE OR REPLACE FUNCTION jazzhands.validate_netblock()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	nbtype				RECORD;
+	v_netblock_id		netblock.netblock_id%TYPE;
+	parent_netblock		RECORD;
+BEGIN
+	IF NEW.ip_address IS NULL THEN
+		RAISE EXCEPTION 'Column ip_address may not be null'
+			USING ERRCODE = 'not_null_violation';
+	END IF;
+
+	SELECT * INTO nbtype FROM val_netblock_type WHERE
+		netblock_type = NEW.netblock_type;
+
+	IF NEW.is_single_address = 'Y' THEN
+		IF nbtype.db_forced_hierarchy = 'Y' THEN
+			RAISE DEBUG 'Calculating netmask for new netblock';
+
+			v_netblock_id := netblock_utils.find_best_parent_id(
+				NEW.ip_address,
+				NULL,
+				NEW.netblock_type,
+				NEW.ip_universe_id,
+				NEW.is_single_address,
+				NEW.netblock_id
+				);
+
+			IF v_netblock_id IS NULL THEN
+				RAISE EXCEPTION 'A single address (%) must be the child of a parent netblock, which must have can_subnet=N', NEW.ip_address
+					USING ERRCODE = 'JH105';
+			END IF;
+
+		END IF;
+	END IF;
+
+	/* Done with handling of netmasks */
+
+	IF NEW.can_subnet = 'Y' AND NEW.is_single_address = 'Y' THEN
+		RAISE EXCEPTION 'Single addresses may not be subnettable'
+			USING ERRCODE = 'JH106';
+	END IF;
+
+	IF NEW.is_single_address = 'N' AND (NEW.ip_address != cidr(NEW.ip_address))
+			THEN
+		RAISE EXCEPTION
+			'Non-network bits must be zero if is_single_address is N for %',
+			NEW.ip_address
+			USING ERRCODE = 'JH103';
+	END IF;
+
+	/*
+	 * Commented out check for RFC1918 space.  This is probably handled
+	 * well enough by the ip_universe/netblock_type additions, although
+	 * it's possible that netblock_type may need to have an additional
+	 * field added to allow people to be stupid (for example,
+	 * allow_duplicates='Y','N','RFC1918')
+	 */
+
+/*
+	IF NOT net_manip.inet_is_private(NEW.ip_address) THEN
+*/
+			PERFORM netblock_id
+			   FROM netblock
+			  WHERE ip_address = NEW.ip_address AND
+					ip_universe_id = NEW.ip_universe_id AND
+					netblock_type = NEW.netblock_type AND
+					is_single_address = NEW.is_single_address;
+			IF (TG_OP = 'INSERT' AND FOUND) THEN
+				RAISE EXCEPTION 'Unique Constraint Violated on IP Address: %',
+					NEW.ip_address
+					USING ERRCODE= 'unique_violation';
+			END IF;
+			IF (TG_OP = 'UPDATE') THEN
+				IF (NEW.ip_address != OLD.ip_address AND FOUND) THEN
+					RAISE EXCEPTION
+						'Unique Constraint Violated on IP Address: %',
+						NEW.ip_address
+						USING ERRCODE = 'unique_violation';
+				END IF;
+			END IF;
+/*
+	END IF;
+*/
+
+	/*
+	 * Parent validation is performed in the deferred after trigger
+	 */
+
+	 RETURN NEW;
+END;
+$function$
+;
+
+-- DONE WITH proc validate_netblock -> validate_netblock 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_utils.find_free_netblock -> find_free_netblock 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('netblock_utils', 'find_free_netblock', 'find_free_netblock');
+
+-- DROP OLD FUNCTION
+-- consider old oid 485745
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 485745
+-- consider NEW oid 408448
+CREATE OR REPLACE FUNCTION netblock_utils.find_free_netblock(parent_netblock_id integer, netmask_bits integer DEFAULT NULL::integer, single_address boolean DEFAULT false, allocation_method text DEFAULT NULL::text, desired_ip_address inet DEFAULT NULL::inet, rnd_masklen_threshold integer DEFAULT 110, rnd_max_count integer DEFAULT 1024)
+ RETURNS TABLE(ip_address inet, netblock_type character varying, ip_universe_id integer)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+	RETURN QUERY SELECT * FROM netblock_utils.find_free_netblocks(
+			parent_netblock_id := parent_netblock_id,
+			netmask_bits := netmask_bits,
+			single_address := single_address,
+			allocate_from_bottom := allocate_from_bottom,
+			desired_ip_address := desired_ip_address,
+			max_addresses := 1);
+END;
+$function$
+;
+
+-- DONE WITH proc netblock_utils.find_free_netblock -> find_free_netblock 
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_department_company_expanded [485594]
+-- Save grants for later reapplication
+SELECT schema_support.save_view_for_replay('jazzhands', 'v_department_company_expanded');
+CREATE VIEW v_department_company_expanded AS
+ WITH RECURSIVE var_recurse(level, root_company_id, company_id, account_collection_id, array_path, cycle) AS (
+         SELECT 0 AS level,
+            c.company_id AS root_company_id,
+            c.company_id,
+            d.account_collection_id,
+            ARRAY[c.company_id] AS array_path,
+            false AS bool
+           FROM company c
+             JOIN department d USING (company_id)
+        UNION ALL
+         SELECT x.level + 1 AS level,
+            x.company_id AS root_company_id,
+            c.company_id,
+            d.account_collection_id,
+            c.company_id || x.array_path AS array_path,
+            c.company_id = ANY (x.array_path) AS cycle
+           FROM var_recurse x
+             JOIN company c ON c.parent_company_id = x.company_id
+             JOIN department d ON c.company_id = d.company_id
+          WHERE NOT x.cycle
+        )
+ SELECT DISTINCT var_recurse.root_company_id AS company_id,
+    var_recurse.account_collection_id
+   FROM var_recurse;
+
+delete from __recreate where type = 'view' and object = 'v_department_company_expanded';
+-- DONE DEALING WITH TABLE v_department_company_expanded [408293]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_application_role [485657]
+-- Save grants for later reapplication
+SELECT schema_support.save_view_for_replay('jazzhands', 'v_application_role');
+CREATE VIEW v_application_role AS
+ WITH RECURSIVE var_recurse(role_level, role_id, parent_role_id, root_role_id, root_role_name, role_name, role_path, role_is_leaf, array_path, cycle) AS (
+         SELECT 0 AS role_level,
+            device_collection.device_collection_id AS role_id,
+            NULL::integer AS parent_role_id,
+            device_collection.device_collection_id AS root_role_id,
+            device_collection.device_collection_name AS root_role_name,
+            device_collection.device_collection_name AS role_name,
+            '/'::text || device_collection.device_collection_name::text AS role_path,
+            'N'::text AS role_is_leaf,
+            ARRAY[device_collection.device_collection_id] AS array_path,
+            false AS cycle
+           FROM device_collection
+          WHERE device_collection.device_collection_type::text = 'appgroup'::text AND NOT (device_collection.device_collection_id IN ( SELECT device_collection_hier.device_collection_id
+                   FROM device_collection_hier))
+        UNION ALL
+         SELECT x.role_level + 1 AS role_level,
+            dch.device_collection_id AS role_id,
+            dch.parent_device_collection_id AS parent_role_id,
+            x.root_role_id,
+            x.root_role_name,
+            dc.device_collection_name AS role_name,
+            (((x.role_path || '/'::text) || dc.device_collection_name::text))::character varying(255) AS role_path,
+                CASE
+                    WHEN lchk.parent_device_collection_id IS NULL THEN 'Y'::text
+                    ELSE 'N'::text
+                END AS role_is_leaf,
+            dch.parent_device_collection_id || x.array_path AS array_path,
+            dch.parent_device_collection_id = ANY (x.array_path) AS cycle
+           FROM var_recurse x
+             JOIN device_collection_hier dch ON x.role_id = dch.parent_device_collection_id
+             JOIN device_collection dc ON dch.device_collection_id = dc.device_collection_id
+             LEFT JOIN device_collection_hier lchk ON dch.device_collection_id = lchk.parent_device_collection_id
+          WHERE NOT x.cycle
+        )
+ SELECT DISTINCT var_recurse.role_level,
+    var_recurse.role_id,
+    var_recurse.parent_role_id,
+    var_recurse.root_role_id,
+    var_recurse.root_role_name,
+    var_recurse.role_name,
+    var_recurse.role_path,
+    var_recurse.role_is_leaf,
+    var_recurse.array_path,
+    var_recurse.cycle
+   FROM var_recurse;
+
+delete from __recreate where type = 'view' and object = 'v_application_role';
+-- DONE DEALING WITH TABLE v_application_role [408352]
+--------------------------------------------------------------------
+
+
+
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_property [485579]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'v_property', 'v_property');
+CREATE VIEW v_property AS
+ SELECT property.property_id,
+    property.account_collection_id,
+    property.account_id,
+    property.account_realm_id,
+    property.company_id,
+    property.device_collection_id,
+    property.dns_domain_id,
+    property.netblock_collection_id,
+    property.layer2_network_id,
+    property.layer3_network_id,
+    property.operating_system_id,
+    property.person_id,
+    property.property_collection_id,
+    property.service_env_collection_id,
+    property.site_code,
+    property.property_name,
+    property.property_type,
+    property.property_value,
+    property.property_value_timestamp,
+    property.property_value_company_id,
+    property.property_value_account_coll_id,
+    property.property_value_dns_domain_id,
+    property.property_value_nblk_coll_id,
+    property.property_value_password_type,
+    property.property_value_person_id,
+    property.property_value_sw_package_id,
+    property.property_value_token_col_id,
+    property.property_rank,
+    property.start_date,
+    property.finish_date,
+    property.is_enabled,
+    property.data_ins_user,
+    property.data_ins_date,
+    property.data_upd_user,
+    property.data_upd_date
+   FROM property
+  WHERE property.is_enabled = 'Y'::bpchar AND (property.start_date IS NULL AND property.finish_date IS NULL OR property.start_date IS NULL AND now() <= property.finish_date OR property.start_date <= now() AND property.finish_date IS NULL OR property.start_date <= now() AND now() <= property.finish_date);
+
+delete from __recreate where type = 'view' and object = 'v_property';
+-- DONE DEALING WITH TABLE v_property [408278]
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_acct_coll_prop_expanded [485647]
+-- Save grants for later reapplication
+SELECT schema_support.save_view_for_replay('jazzhands', 'v_acct_coll_prop_expanded');
+CREATE VIEW v_acct_coll_prop_expanded AS
+ SELECT v_acct_coll_expanded_detail.root_account_collection_id AS account_collection_id,
+    v_property.property_id,
+    v_property.property_name,
+    v_property.property_type,
+    v_property.property_value,
+    v_property.property_value_timestamp,
+    v_property.property_value_company_id,
+    v_property.property_value_account_coll_id,
+    v_property.property_value_dns_domain_id,
+    v_property.property_value_nblk_coll_id,
+    v_property.property_value_password_type,
+    v_property.property_value_person_id,
+    v_property.property_value_sw_package_id,
+    v_property.property_value_token_col_id,
+    v_property.property_rank,
+        CASE val_property.is_multivalue
+            WHEN 'N'::bpchar THEN false
+            WHEN 'Y'::bpchar THEN true
+            ELSE NULL::boolean
+        END AS is_multivalue,
+        CASE ac.account_collection_type
+            WHEN 'per-user'::text THEN 0
+            ELSE
+            CASE v_acct_coll_expanded_detail.assign_method
+                WHEN 'DirectAccountCollectionAssignment'::text THEN 10
+                WHEN 'DirectDepartmentAssignment'::text THEN 200
+                WHEN 'DepartmentAssignedToAccountCollection'::text THEN 300 + v_acct_coll_expanded_detail.dept_level + v_acct_coll_expanded_detail.acct_coll_level
+                WHEN 'AccountAssignedToChildDepartment'::text THEN 400 + v_acct_coll_expanded_detail.dept_level
+                WHEN 'AccountAssignedToChildAccountCollection'::text THEN 500 + v_acct_coll_expanded_detail.acct_coll_level
+                WHEN 'DepartmentAssignedToChildAccountCollection'::text THEN 600 + v_acct_coll_expanded_detail.dept_level + v_acct_coll_expanded_detail.acct_coll_level
+                WHEN 'ChildDepartmentAssignedToAccountCollection'::text THEN 700 + v_acct_coll_expanded_detail.dept_level + v_acct_coll_expanded_detail.acct_coll_level
+                WHEN 'ChildDepartmentAssignedToChildAccountCollection'::text THEN 800 + v_acct_coll_expanded_detail.dept_level + v_acct_coll_expanded_detail.acct_coll_level
+                ELSE 999
+            END
+        END AS assign_rank
+   FROM v_acct_coll_expanded_detail
+     JOIN account_collection ac USING (account_collection_id)
+     JOIN v_property USING (account_collection_id)
+     JOIN val_property USING (property_name, property_type);
+
+delete from __recreate where type = 'view' and object = 'v_acct_coll_prop_expanded';
+-- DONE DEALING WITH TABLE v_acct_coll_prop_expanded [408346]
+--------------------------------------------------------------------
+
 -- Dropping obsoleted sequences....
 
 
@@ -3265,10 +7820,39 @@ CREATE CONSTRAINT TRIGGER trigger_property_collection_member_enforce
 -- fk constraints
 -- triggers
 
+-- wtf
+alter table netblock_collection_netblock
+	rename constraint pk_account_collection_account to
+		pk_netblock_collecton_netblock;
+
+alter table device_collection
+	rename constraint pk_networkdevicecoll to
+		pk_device_collection;
+
+alter table netblock_collection_netblock
+	rename constraint pk_netblock_collecton_netblock to
+		pk_netblock_collection_netbloc;
+
+ALTER TABLE NETWORK_INTERFACE_NETBLOCK
+        ADD CONSTRAINT FK_NETINT_NB_NBLK_ID 
+	FOREIGN KEY (NETWORK_INTERFACE_ID) 
+	REFERENCES NETWORK_INTERFACE (NETWORK_INTERFACE_ID)  
+	DEFERRABLE  INITIALLY IMMEDIATE;
+
+-- consider FK service_environment and sw_package_release
+ALTER TABLE sw_package_release
+	ADD CONSTRAINT fk_sw_pkg_rel_ref_vsvcenv
+ 	FOREIGN KEY (service_environment_id) REFERENCES service_environment(service_environment_id);
+
+update __regrants set
+	regrant = regexp_replace(regrant, 'allocate_netblock\([^\)]+\)',
+'allocate_netblock(parent_netblock_id integer, netmask_bits integer, address_type text, can_subnet boolean, allocation_method text, rnd_masklen_threshold integer, rnd_max_count integer, ip_address inet, description character varying, netblock_status character varying)')
+where object = 'allocate_netblock'
+and schema = 'netblock_manip';
 
 -- Clean Up
-SELECT schema_support.replay_saved_grants();
 SELECT schema_support.replay_object_recreates();
+SELECT schema_support.replay_saved_grants();
 
-RAISE EXCEPTION 'Not done';
-SELECT schema_support.end_maintenance();
+-- RAISE EXCEPTION 'Not done';
+-- SELECT schema_support.end_maintenance();
