@@ -460,18 +460,67 @@ sub generate_named_acl_file($$$) {
 
 	$out->print("\n\n");
 
+	# generate explicitly defined acls
+	{
+	my $sth = $dbh->prepare_cached(qq{
+		SELECT	p.property_value AS acl_name, nb.ip_address, nb.description
+		FROM 	v_nblk_coll_netblock_expanded nbe
+				INNER JOIN property p USING (netblock_collection_id)
+				INNER JOIN netblock nb USING (netblock_id)
+		WHERE property_name = 'DNSACLs' and property_type = 'DNSZonegen'
+		ORDER BY 1,2;
+	}) || die $dbh->errstr;
+
+	$sth->execute || die $sth->errstr;
+	my $lastacl = undef;
+	while ( my ( $acl, $ip, $desc ) = $sth->fetchrow_array ) {
+		if ( defined($lastacl) && $acl ne $lastacl ) {
+			$out->print("};\n\n");
+			$lastacl = undef;
+		}
+		if ( !defined($lastacl) ) {
+			$out->print("acl $acl\n{\n");
+		}
+		$lastacl = $acl;
+		$out->printf("\t%-35s\t// %s\n", "$ip;", ($desc)?$desc:"" );
+	}
+	if ( defined($lastacl) ) {
+		$out->print("};\n\n");
+	}
+	}
+
+	# generate per site blocks
+	{
 	my $sth = $dbh->prepare_cached(
 		qq{
-		select	site_code, ip_address, description
-	 	  from	site_netblock
-				join netblock using (netblock_id)
-		 order by site_code, ip_address
+			SELECT * FROM (
+				SELECT '!' AS inclusion, psnb.site_code, nb.ip_address,
+					snb.site_code AS child_site_code,
+					pnb.ip_address AS parent_ip,
+					nb.description
+				  FROM  site_netblock snb
+						JOIN netblock nb using (netblock_id),
+					site_netblock psnb
+						JOIN netblock pnb using (netblock_id)
+				WHERE   psnb.site_code != snb.site_code
+				AND     pnb.ip_address >>= nb.ip_address
+			UNION
+				SELECT  NULL AS inclusion, site_code, ip_address, 
+						NULL AS child_site_code ,NULL AS parent_ip,
+						description
+				  FROM  site_netblock
+					JOIN netblock USING (netblock_id)
+			) subq
+			ORDER BY site_code, 
+				coalesce(parent_ip, ip_address), inclusion, 
+				masklen(ip_address) DESC
+
 	}
 	) || die $dbh->errstr;
 
 	$sth->execute || die $sth->errstr;
 	my $lastsite = undef;
-	while ( my ( $sc, $ip, $desc ) = $sth->fetchrow_array ) {
+	while ( my ( $inc, $sc, $ip, $ksc, $pip, $desc ) = $sth->fetchrow_array ) {
 		$sc =~ tr/A-Z/a-z/;
 		if ( defined($lastsite) && $sc ne $lastsite ) {
 			$out->print("};\n\n");
@@ -481,11 +530,18 @@ sub generate_named_acl_file($$$) {
 			$out->print("acl $sc\n{\n");
 		}
 		$lastsite = $sc;
-		$out->print( "\t$ip;", ($desc) ? "\t// $desc" : "", "\n" );
+		if($inc) {
+			$desc = "[$ksc vs $pip] ".(($desc)?$desc:"");
+		} else {
+			$inc = "";
+		}
+		$out->printf("\t%-35s\t// %s\n", "$inc$ip;", ($desc)?$desc:"" );
 	}
 	if ( defined($lastsite) ) {
 		$out->print("};\n\n");
 	}
+	}
+
 	$out->close;
 
 	safe_mv_if_changed( $tmpfn, $fn );

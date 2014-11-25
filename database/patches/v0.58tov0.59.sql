@@ -103,6 +103,12 @@ SELECT schema_support.begin_maintenance();
 	v_application_role
 	v_property
 	v_acct_coll_prop_expanded
+	service_environment_collection_member_enforce
+	netblock_utils.id_tag
+	v_corp_family_account
+	validate_netblock_parentage
+	service_environment_collection_member_enforce
+	netblock_utils.find_best_parent_id
 */
 
 DO $$
@@ -1086,8 +1092,6 @@ SELECT schema_support.save_view_for_replay('jazzhands', 'v_netblock_hier');
 DROP TRIGGER IF EXISTS trigger_validate_netblock_parentage ON jazzhands.netblock;
 DROP TRIGGER IF EXISTS zzzz_trigger_retire_netblock_columns ON jazzhands.netblock;
 DROP TRIGGER IF EXISTS trigger_netblock_complain_on_mismatch ON jazzhands.netblock;
-DROP TRIGGER IF EXISTS trig_userlog_netblock ON jazzhands.netblock;
-DROP TRIGGER IF EXISTS trigger_audit_netblock ON jazzhands.netblock;
 DROP TRIGGER IF EXISTS tb_a_validate_netblock ON jazzhands.netblock;
 DROP TRIGGER IF EXISTS tb_manipulate_netblock_parentage ON jazzhands.netblock;
 DROP TRIGGER IF EXISTS aaa_ta_manipulate_netblock_parentage ON jazzhands.netblock;
@@ -2885,8 +2889,7 @@ CREATE TABLE sw_package
 	data_ins_user	varchar(255)  NULL,
 	data_ins_date	timestamp with time zone  NULL,
 	data_upd_user	varchar(255)  NULL,
-	data_upd_date	timestamp with time zone  NULL,
-	service_environment_id	integer  NULL
+	data_upd_date	timestamp with time zone  NULL
 );
 SELECT schema_support.build_audit_table('audit', 'jazzhands', 'sw_package', false);
 ALTER TABLE sw_package
@@ -2970,10 +2973,6 @@ ALTER TABLE sw_package_relation
 
 
 -- FOREIGN KEYS TO
--- consider FK sw_package and service_environment
-ALTER TABLE sw_package
-	ADD CONSTRAINT fk_sw_pkg_ref_v_prod_state
-	FOREIGN KEY (service_environment_id) REFERENCES service_environment(service_environment_id);
 -- consider FK sw_package and val_sw_package_type
 ALTER TABLE sw_package
 	ADD CONSTRAINT fk_swpkg_ref_vswpkgtype
@@ -3041,6 +3040,7 @@ CREATE TABLE sw_package_release
 	sw_package_type	varchar(50)  NULL,
 	creation_account_id	integer NOT NULL,
 	processor_architecture	varchar(50) NOT NULL,
+	service_environment_id	integer NOT NULL,
 	sw_package_repository_id	integer NOT NULL,
 	uploading_principal	varchar(255)  NULL,
 	package_size	integer  NULL,
@@ -3052,8 +3052,7 @@ CREATE TABLE sw_package_release
 	data_ins_user	varchar(255)  NULL,
 	data_ins_date	timestamp with time zone  NULL,
 	data_upd_user	varchar(255)  NULL,
-	data_upd_date	timestamp with time zone  NULL,
-	service_environment_id	integer NOT NULL
+	data_upd_date	timestamp with time zone  NULL
 );
 SELECT schema_support.build_audit_table('audit', 'jazzhands', 'sw_package_release', false);
 ALTER TABLE sw_package_release
@@ -3278,11 +3277,11 @@ CREATE TABLE network_service
 	device_id	integer  NULL,
 	network_interface_id	integer  NULL,
 	dns_record_id	integer  NULL,
+	service_environment_id	integer NOT NULL,
 	data_ins_user	varchar(255)  NULL,
 	data_ins_date	timestamp with time zone  NULL,
 	data_upd_user	varchar(255)  NULL,
-	data_upd_date	timestamp with time zone  NULL,
-	service_environment_id	integer NOT NULL
+	data_upd_date	timestamp with time zone  NULL
 );
 SELECT schema_support.build_audit_table('audit', 'jazzhands', 'network_service', false);
 ALTER TABLE network_service
@@ -3462,14 +3461,14 @@ CREATE TABLE appaal_instance
 (
 	appaal_instance_id	integer NOT NULL,
 	appaal_id	integer  NULL,
+	service_environment_id	integer NOT NULL,
 	file_mode	integer NOT NULL,
 	file_owner_account_id	integer NOT NULL,
 	file_group_acct_collection_id	integer  NULL,
 	data_ins_user	varchar(255)  NULL,
 	data_ins_date	timestamp with time zone  NULL,
 	data_upd_user	varchar(255)  NULL,
-	data_upd_date	timestamp with time zone  NULL,
-	service_environment_id	integer NOT NULL
+	data_upd_date	timestamp with time zone  NULL
 );
 SELECT schema_support.build_audit_table('audit', 'jazzhands', 'appaal_instance', false);
 ALTER TABLE appaal_instance
@@ -3644,11 +3643,11 @@ CREATE TABLE voe
 	voe_name	varchar(50) NOT NULL,
 	voe_state	varchar(50) NOT NULL,
 	sw_package_repository_id	integer NOT NULL,
+	service_environment_id	integer NOT NULL,
 	data_ins_user	varchar(255)  NULL,
 	data_ins_date	timestamp with time zone  NULL,
 	data_upd_user	varchar(255)  NULL,
-	data_upd_date	timestamp with time zone  NULL,
-	service_environment_id	integer NOT NULL
+	data_upd_date	timestamp with time zone  NULL
 );
 SELECT schema_support.build_audit_table('audit', 'jazzhands', 'voe', false);
 ALTER TABLE voe
@@ -7809,6 +7808,579 @@ delete from __recreate where type = 'view' and object = 'v_acct_coll_prop_expand
 -- DONE DEALING WITH TABLE v_acct_coll_prop_expanded [408346]
 --------------------------------------------------------------------
 
+--------------------------------------------------------------------
+-- DEALING WITH proc service_environment_collection_member_enforce -> service_environment_collection_member_enforce 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'service_environment_collection_member_enforce', 'service_environment_collection_member_enforce');
+
+-- DROP OLD FUNCTION
+-- consider old oid 504394
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 504394
+-- consider NEW oid 408603
+CREATE OR REPLACE FUNCTION jazzhands.service_environment_collection_member_enforce()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+	svcenvt	val_service_env_coll_type%ROWTYPE;
+	tally integer;
+BEGIN
+	SELECT *
+	INTO	svcenvt
+	FROM	val_service_env_coll_type
+	WHERE	service_env_collection_type =
+		(select service_env_collection_type 
+			from service_environment_collection
+			where service_env_collection_id = 
+				NEW.service_env_collection_id);
+
+	IF svcenvt.MAX_NUM_MEMBERS IS NOT NULL THEN
+		select count(*)
+		  into tally
+		  from svc_environment_coll_svc_env
+		  where service_env_collection_id = NEW.service_env_collection_id;
+		IF tally > svcenvt.MAX_NUM_MEMBERS THEN
+			RAISE EXCEPTION 'Too many members'
+				USING ERRCODE = 'unique_violation';
+		END IF;
+	END IF;
+
+	IF svcenvt.MAX_NUM_COLLECTIONS IS NOT NULL THEN
+		select count(*)
+		  into tally
+		  from svc_environment_coll_svc_env
+		  		inner join service_environment_collection 
+					USING (service_env_collection_id)
+		  where service_environment_id = NEW.service_environment_id
+		  and	service_env_collection_type = 
+					svcenvt.service_env_collection_type;
+		IF tally > svcenvt.MAX_NUM_COLLECTIONS THEN
+			RAISE EXCEPTION 'Device may not be a member of more than % collections of type %',
+				svcenvt.MAX_NUM_COLLECTIONS, svcenvt.service_env_collection_type
+				USING ERRCODE = 'unique_violation';
+		END IF;
+	END IF;
+
+	RETURN NEW;
+END;
+$function$
+;
+
+-- DONE WITH proc service_environment_collection_member_enforce -> service_environment_collection_member_enforce 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_utils.id_tag -> id_tag 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('netblock_utils', 'id_tag', 'id_tag');
+
+-- DROP OLD FUNCTION
+-- consider old oid 504260
+DROP FUNCTION IF EXISTS netblock_utils.id_tag();
+
+-- DONE WITH proc netblock_utils.id_tag -> id_tag 
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_corp_family_account [504207]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'v_corp_family_account', 'v_corp_family_account');
+CREATE VIEW v_corp_family_account AS
+ SELECT account.account_id,
+    account.login,
+    account.person_id,
+    account.company_id,
+    account.account_realm_id,
+    account.account_status,
+    account.account_role,
+    account.account_type,
+    account.description,
+    account.data_ins_user,
+    account.data_ins_date,
+    account.data_upd_user,
+    account.data_upd_date
+   FROM account
+  WHERE (account.account_realm_id IN ( SELECT account_realm_company.account_realm_id
+           FROM account_realm_company
+          WHERE (account_realm_company.company_id IN ( SELECT property.property_value_company_id
+                   FROM property
+                  WHERE property.property_name::text = '_rootcompanyid'::text AND property.property_type::text = 'Defaults'::text))));
+
+delete from __recreate where type = 'view' and object = 'v_corp_family_account';
+-- DONE DEALING WITH TABLE v_corp_family_account [408381]
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- DEALING WITH proc validate_netblock_parentage -> validate_netblock_parentage 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'validate_netblock_parentage', 'validate_netblock_parentage');
+
+-- DROP OLD FUNCTION
+-- consider old oid 504313
+-- consider NEW oid 408505
+CREATE OR REPLACE FUNCTION jazzhands.validate_netblock_parentage()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	nbrec			record;
+	realnew			record;
+	nbtype			record;
+	parent_nbid		netblock.netblock_id%type;
+	ipaddr			inet;
+	parent_ipaddr	inet;
+	single_count	integer;
+	nonsingle_count	integer;
+	pip	    		netblock.ip_address%type;
+BEGIN
+
+	RAISE DEBUG 'Validating % of netblock %', TG_OP, NEW.netblock_id;
+
+	SELECT * INTO nbtype FROM val_netblock_type WHERE
+		netblock_type = NEW.netblock_type;
+
+	/*
+	 * It's possible that due to delayed triggers that what is stored in
+	 * NEW is not current, so fetch the current values
+	 */
+
+	SELECT * INTO realnew FROM netblock WHERE netblock_id =
+		NEW.netblock_id;
+	IF NOT FOUND THEN
+		/*
+		 * If the netblock isn't there, it was subsequently deleted, so
+		 * our parentage doesn't need to be checked
+		 */
+		RETURN NULL;
+	END IF;
+
+
+	/*
+	 * If the parent changed above (or somewhere else between update and
+	 * now), just bail, because another trigger will have been fired that
+	 * we can do the full check with.
+	 */
+	IF NEW.parent_netblock_id != realnew.parent_netblock_id AND
+		realnew.parent_netblock_id IS NOT NULL
+	THEN
+		RAISE DEBUG '... skipping for now';
+		RETURN NULL;
+	END IF;
+
+	/*
+	 * Validate that parent and all children are of the same netblock_type and
+	 * in the same ip_universe.  We care about this even if the
+	 * netblock type is not a validated type.
+	 */
+
+	RAISE DEBUG 'Verifying child ip_universe and type match';
+	PERFORM netblock_id FROM netblock WHERE
+		parent_netblock_id = realnew.netblock_id AND
+		netblock_type != realnew.netblock_type AND
+		ip_universe_id != realnew.ip_universe_id;
+
+	IF FOUND THEN
+		RAISE EXCEPTION 'Netblock children must all be of the same type and universe as the parent'
+			USING ERRCODE = 'JH109';
+	END IF;
+
+	RAISE DEBUG '... OK';
+
+	/*
+	 * validate that this netblock is attached to its correct parent
+	 */
+	IF realnew.parent_netblock_id IS NULL THEN
+		IF nbtype.is_validated_hierarchy='N' THEN
+			RETURN NULL;
+		END IF;
+		RAISE DEBUG 'Checking hierarchical netblock_id % with NULL parent',
+			NEW.netblock_id;
+
+		IF realnew.is_single_address = 'Y' THEN
+			RAISE 'A single address (%) must be the child of a parent netblock, which must have can_subnet=N',
+				realnew.ip_address
+				USING ERRCODE = 'JH105';
+		END IF;
+
+		/*
+		 * Validate that a netblock has a parent, unless
+		 * it is the root of a hierarchy
+		 */
+		parent_nbid := netblock_utils.find_best_parent_id(
+			realnew.ip_address,
+			NULL,
+			realnew.netblock_type,
+			realnew.ip_universe_id,
+			realnew.is_single_address,
+			realnew.netblock_id
+		);
+
+		IF parent_nbid IS NOT NULL THEN
+			SELECT * INTO nbrec FROM netblock WHERE netblock_id =
+				parent_nbid;
+
+			RAISE EXCEPTION 'Netblock % (%) has NULL parent; should be % (%)',
+				realnew.netblock_id, realnew.ip_address,
+				parent_nbid, nbrec.ip_address USING ERRCODE = 'JH102';
+		END IF;
+
+		/*
+		 * Validate that none of the other top-level netblocks should
+		 * belong to this netblock
+		 */
+		PERFORM netblock_id FROM netblock WHERE
+			parent_netblock_id IS NULL AND
+			netblock_id != NEW.netblock_id AND
+			netblock_type = NEW.netblock_type AND
+			ip_universe_id = NEW.ip_universe_id AND
+			ip_address <<= NEW.ip_address;
+		IF FOUND THEN
+			RAISE EXCEPTION 'Other top-level netblocks should belong to this parent'
+				USING ERRCODE = 'JH108';
+		END IF;
+	ELSE
+	 	/*
+		 * Reject a block that is self-referential
+		 */
+	 	IF realnew.parent_netblock_id = realnew.netblock_id THEN
+			RAISE EXCEPTION 'Netblock may not have itself as a parent'
+				USING ERRCODE = 'JH101';
+		END IF;
+
+		SELECT * INTO nbrec FROM netblock WHERE netblock_id =
+			realnew.parent_netblock_id;
+
+		/*
+		 * This shouldn't happen, but may because of deferred constraints
+		 */
+		IF NOT FOUND THEN
+			RAISE EXCEPTION 'Parent netblock % does not exist',
+			realnew.parent_netblock_id
+			USING ERRCODE = 'foreign_key_violation';
+		END IF;
+
+		IF nbrec.is_single_address = 'Y' THEN
+			RAISE EXCEPTION 'A parent netblock (% for %) may not be a single address',
+			nbrec.netblock_id, realnew.ip_address
+			USING ERRCODE = 'JH10A';
+		END IF;
+
+		IF nbrec.ip_universe_id != realnew.ip_universe_id OR
+				nbrec.netblock_type != realnew.netblock_type THEN
+			RAISE EXCEPTION 'Netblock children must all be of the same type and universe as the parent'
+			USING ERRCODE = 'JH109';
+		END IF;
+
+		IF nbtype.is_validated_hierarchy='N' THEN
+			RETURN NULL;
+		ELSE
+			parent_nbid := netblock_utils.find_best_parent_id(
+				realnew.ip_address,
+				NULL,
+				realnew.netblock_type,
+				realnew.ip_universe_id,
+				realnew.is_single_address,
+				realnew.netblock_id
+				);
+
+			IF realnew.can_subnet = 'N' THEN
+				PERFORM netblock_id FROM netblock WHERE
+					parent_netblock_id = realnew.netblock_id AND
+					is_single_address = 'N';
+				IF FOUND THEN
+					RAISE EXCEPTION 'A non-subnettable netblock (%) may not have child network netblocks',
+					realnew.netblock_id
+					USING ERRCODE = 'JH10B';
+				END IF;
+			END IF;
+			IF realnew.is_single_address = 'Y' THEN
+				SELECT * INTO nbrec FROM netblock
+					WHERE netblock_id = realnew.parent_netblock_id;
+				IF (nbrec.can_subnet = 'Y') THEN
+					RAISE 'Parent netblock % for single-address % must have can_subnet=N',
+						nbrec.netblock_id,
+						realnew.ip_address
+						USING ERRCODE = 'JH10D';
+				END IF;
+				IF (masklen(realnew.ip_address) != 
+						masklen(nbrec.ip_address)) THEN
+					RAISE 'Parent netblock % does not have same netmask as single-address child % (% vs %)',
+						parent_nbid, realnew.netblock_id, masklen(ipaddr),
+						masklen(realnew.ip_address)
+						USING ERRCODE = 'JH105';
+				END IF;
+			END IF;
+			IF (parent_nbid IS NULL OR realnew.parent_netblock_id != parent_nbid) THEN
+				SELECT ip_address INTO parent_ipaddr FROM netblock
+				WHERE
+					netblock_id = parent_nbid;
+				SELECT ip_address INTO ipaddr FROM netblock WHERE
+					netblock_id = realnew.parent_netblock_id;
+
+				RAISE EXCEPTION
+					'Parent netblock % (%) for netblock % (%) is not the correct parent (should be % (%))',
+					realnew.parent_netblock_id, ipaddr,
+					realnew.netblock_id, realnew.ip_address,
+					parent_nbid, parent_ipaddr
+					USING ERRCODE = 'JH102';
+			END IF;
+			/*
+			 * Validate that all children are is_single_address='Y' or
+			 * all children are is_single_address='N'
+			 */
+			SELECT count(*) INTO single_count FROM netblock WHERE
+				is_single_address='Y' and parent_netblock_id =
+				realnew.parent_netblock_id;
+			SELECT count(*) INTO nonsingle_count FROM netblock WHERE
+				is_single_address='N' and parent_netblock_id =
+				realnew.parent_netblock_id;
+
+			IF (single_count > 0 and nonsingle_count > 0) THEN
+				SELECT * INTO nbrec FROM netblock WHERE netblock_id =
+					realnew.parent_netblock_id;
+				RAISE EXCEPTION 'Netblock % (%) may not have direct children for both single and multiple addresses simultaneously',
+					nbrec.netblock_id, nbrec.ip_address
+					USING ERRCODE = 'JH107';
+			END IF;
+			/*
+			 *  If we're updating and we changed our ip_address (including
+			 *  netmask bits), then check that our children still belong to
+			 *  us
+			 */
+			 IF (TG_OP = 'UPDATE' AND NEW.ip_address != OLD.ip_address) THEN
+				PERFORM netblock_id FROM netblock WHERE
+					parent_netblock_id = realnew.netblock_id AND
+					((is_single_address = 'Y' AND NEW.ip_address !=
+						ip_address::cidr) OR
+					(is_single_address = 'N' AND realnew.netblock_id !=
+						netblock_utils.find_best_parent_id(netblock_id)));
+				IF FOUND THEN
+					RAISE EXCEPTION 'Update for netblock % (%) causes parent to have children that do not belong to it',
+						realnew.netblock_id, realnew.ip_address
+						USING ERRCODE = 'JH10E';
+				END IF;
+			END IF;
+
+			/*
+			 * Validate that none of the children of the parent netblock are
+			 * children of this netblock (e.g. if inserting into the middle
+			 * of the hierarchy)
+			 */
+			IF (realnew.is_single_address = 'N') THEN
+				PERFORM netblock_id FROM netblock WHERE
+					parent_netblock_id = realnew.parent_netblock_id AND
+					netblock_id != realnew.netblock_id AND
+					ip_address <<= realnew.ip_address;
+				IF FOUND THEN
+					RAISE EXCEPTION 'Other netblocks have children that should belong to parent % (%)',
+						realnew.parent_netblock_id, realnew.ip_address
+						USING ERRCODE = 'JH108';
+				END IF;
+			END IF;
+		END IF;
+	END IF;
+
+	RETURN NULL;
+END;
+$function$
+;
+
+-- DONE WITH proc validate_netblock_parentage -> validate_netblock_parentage 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc service_environment_collection_member_enforce -> service_environment_collection_member_enforce 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'service_environment_collection_member_enforce', 'service_environment_collection_member_enforce');
+
+-- DROP OLD FUNCTION
+-- consider old oid 504394
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 504394
+-- consider NEW oid 408603
+CREATE OR REPLACE FUNCTION jazzhands.service_environment_collection_member_enforce()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+	svcenvt	val_service_env_coll_type%ROWTYPE;
+	tally integer;
+BEGIN
+	SELECT *
+	INTO	svcenvt
+	FROM	val_service_env_coll_type
+	WHERE	service_env_collection_type =
+		(select service_env_collection_type 
+			from service_environment_collection
+			where service_env_collection_id = 
+				NEW.service_env_collection_id);
+
+	IF svcenvt.MAX_NUM_MEMBERS IS NOT NULL THEN
+		select count(*)
+		  into tally
+		  from svc_environment_coll_svc_env
+		  where service_env_collection_id = NEW.service_env_collection_id;
+		IF tally > svcenvt.MAX_NUM_MEMBERS THEN
+			RAISE EXCEPTION 'Too many members'
+				USING ERRCODE = 'unique_violation';
+		END IF;
+	END IF;
+
+	IF svcenvt.MAX_NUM_COLLECTIONS IS NOT NULL THEN
+		select count(*)
+		  into tally
+		  from svc_environment_coll_svc_env
+		  		inner join service_environment_collection 
+					USING (service_env_collection_id)
+		  where service_environment_id = NEW.service_environment_id
+		  and	service_env_collection_type = 
+					svcenvt.service_env_collection_type;
+		IF tally > svcenvt.MAX_NUM_COLLECTIONS THEN
+			RAISE EXCEPTION 'Device may not be a member of more than % collections of type %',
+				svcenvt.MAX_NUM_COLLECTIONS, svcenvt.service_env_collection_type
+				USING ERRCODE = 'unique_violation';
+		END IF;
+	END IF;
+
+	RETURN NEW;
+END;
+$function$
+;
+
+-- DONE WITH proc service_environment_collection_member_enforce -> service_environment_collection_member_enforce 
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_utils.find_best_parent_id -> find_best_parent_id 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('netblock_utils', 'find_best_parent_id', 'find_best_parent_id');
+
+-- DROP OLD FUNCTION
+-- consider old oid 517331
+DROP FUNCTION IF EXISTS netblock_utils.find_best_parent_id(in_netblock_id integer);
+-- consider old oid 517330
+DROP FUNCTION IF EXISTS netblock_utils.find_best_parent_id(in_ipaddress inet, in_netmask_bits integer, in_netblock_type character varying, in_ip_universe_id integer, in_is_single_address character, in_netblock_id integer, in_fuzzy_can_subnet boolean, can_fix_can_subnet boolean);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 517331
+DROP FUNCTION IF EXISTS netblock_utils.find_best_parent_id(in_netblock_id integer);
+-- consider old oid 517330
+DROP FUNCTION IF EXISTS netblock_utils.find_best_parent_id(in_ipaddress inet, in_netmask_bits integer, in_netblock_type character varying, in_ip_universe_id integer, in_is_single_address character, in_netblock_id integer, in_fuzzy_can_subnet boolean, can_fix_can_subnet boolean);
+-- consider NEW oid 408444
+CREATE OR REPLACE FUNCTION netblock_utils.find_best_parent_id(in_netblock_id integer)
+ RETURNS integer
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	nbrec		RECORD;
+BEGIN
+	SELECT * INTO nbrec FROM jazzhands.netblock WHERE 
+		netblock_id = in_netblock_id;
+
+	RETURN netblock_utils.find_best_parent_id(
+		nbrec.ip_address,
+		masklen(nbrec.ip_address),
+		nbrec.netblock_type,
+		nbrec.ip_universe_id,
+		nbrec.is_single_address,
+		in_netblock_id
+	);
+END;
+$function$
+;
+-- consider NEW oid 408443
+CREATE OR REPLACE FUNCTION netblock_utils.find_best_parent_id(in_ipaddress inet, in_netmask_bits integer DEFAULT NULL::integer, in_netblock_type character varying DEFAULT 'default'::character varying, in_ip_universe_id integer DEFAULT 0, in_is_single_address character DEFAULT 'N'::bpchar, in_netblock_id integer DEFAULT NULL::integer, in_fuzzy_can_subnet boolean DEFAULT false, can_fix_can_subnet boolean DEFAULT false)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	par_nbid	jazzhands.netblock.netblock_id%type;
+BEGIN
+	IF (in_netmask_bits IS NOT NULL) THEN
+		in_IpAddress := set_masklen(in_IpAddress, in_Netmask_Bits);
+	END IF;
+
+	select  Netblock_Id
+	  into	par_nbid
+	  from  ( select Netblock_Id, Ip_Address
+		    from jazzhands.netblock
+		   where
+		   	in_IpAddress <<= ip_address
+		    and is_single_address = 'N'
+			and netblock_type = in_netblock_type
+			and ip_universe_id = in_ip_universe_id
+		    and (
+				(in_is_single_address = 'N' AND 
+					masklen(ip_address) < masklen(In_IpAddress))
+				OR
+				(in_is_single_address = 'Y' AND can_subnet = 'N' AND
+					(in_Netmask_Bits IS NULL 
+						OR masklen(Ip_Address) = in_Netmask_Bits))
+			)
+			and (in_netblock_id IS NULL OR
+				netblock_id != in_netblock_id)
+		order by masklen(ip_address) desc
+	) subq LIMIT 1;
+
+	IF par_nbid IS NULL AND in_is_single_address = 'Y' AND in_fuzzy_can_subnet THEN
+		select  Netblock_Id
+		  into	par_nbid
+		  from  ( select Netblock_Id, Ip_Address, Netmask_Bits
+			    from jazzhands.netblock
+			   where
+			   	in_IpAddress <<= ip_address
+			    and is_single_address = 'N'
+				and netblock_type = in_netblock_type
+				and ip_universe_id = in_ip_universe_id
+			    and 
+					(in_is_single_address = 'Y' AND can_subnet = 'Y' AND
+						(in_Netmask_Bits IS NULL 
+							OR masklen(Ip_Address) = in_Netmask_Bits))
+				and (in_netblock_id IS NULL OR
+					netblock_id != in_netblock_id)
+				and netblock_id not IN (
+					select parent_netblock_id from jazzhands.netblock 
+						where is_single_address = 'N'
+						and parent_netblock_id is not null
+				)
+			order by masklen(ip_address) desc
+		) subq LIMIT 1;
+
+		IF can_fix_can_subnet AND par_nbid IS NOT NULL THEN
+			UPDATE netblock SET can_subnet = 'N' where netblock_id = par_nbid;
+		END IF;
+	END IF;
+
+
+	return par_nbid;
+END;
+$function$
+;
+
+-- DONE WITH proc netblock_utils.find_best_parent_id -> find_best_parent_id 
+--------------------------------------------------------------------
+
 -- Dropping obsoleted sequences....
 
 
@@ -7844,11 +8416,31 @@ ALTER TABLE sw_package_release
 	ADD CONSTRAINT fk_sw_pkg_rel_ref_vsvcenv
  	FOREIGN KEY (service_environment_id) REFERENCES service_environment(service_environment_id);
 
+CREATE TRIGGER trigger_check_device_collection_hier_loop AFTER INSERT OR UPDATE ON device_collection_hier FOR EACH ROW EXECUTE PROCEDURE check_device_colllection_hier_loop();
+CREATE TRIGGER trigger_check_svcenv_collection_hier_loop AFTER INSERT OR UPDATE ON service_environment_coll_hier FOR EACH ROW EXECUTE PROCEDURE check_svcenv_colllection_hier_loop();
+CREATE TRIGGER trigger_check_token_collection_hier_loop AFTER INSERT OR UPDATE ON token_collection_hier FOR EACH ROW EXECUTE PROCEDURE check_token_colllection_hier_loop();
+CREATE TRIGGER trigger_del_v_corp_family_account INSTEAD OF DELETE ON v_corp_family_account FOR EACH ROW EXECUTE PROCEDURE del_v_corp_family_account();
+CREATE TRIGGER trigger_dns_record_cname_checker BEFORE INSERT OR UPDATE OF dns_type ON dns_record FOR EACH ROW EXECUTE PROCEDURE dns_record_cname_checker();
+CREATE TRIGGER trigger_ins_v_corp_family_account INSTEAD OF INSERT ON v_corp_family_account FOR EACH ROW EXECUTE PROCEDURE ins_v_corp_family_account();
+CREATE TRIGGER trigger_net_int_nb_single_address BEFORE INSERT OR UPDATE OF netblock_id ON network_interface FOR EACH ROW EXECUTE PROCEDURE net_int_nb_single_address();
+CREATE TRIGGER trigger_net_int_netblock_to_nbn_compat_after AFTER INSERT OR DELETE OR UPDATE OF network_interface_id, netblock_id ON network_interface FOR EACH ROW EXECUTE PROCEDURE net_int_netblock_to_nbn_compat_after();
+CREATE TRIGGER trigger_net_int_netblock_to_nbn_compat_before BEFORE DELETE ON network_interface FOR EACH ROW EXECUTE PROCEDURE net_int_netblock_to_nbn_compat_before();
+CREATE TRIGGER trigger_netblock_single_address_ni BEFORE UPDATE OF is_single_address, netblock_type ON netblock FOR EACH ROW EXECUTE PROCEDURE netblock_single_address_ni();
+CREATE TRIGGER trigger_network_interface_drop_tt_netint_ni AFTER INSERT OR DELETE OR UPDATE ON network_interface FOR EACH STATEMENT EXECUTE PROCEDURE network_interface_drop_tt();
+CREATE TRIGGER trigger_upd_v_corp_family_account INSTEAD OF UPDATE ON v_corp_family_account FOR EACH ROW EXECUTE PROCEDURE upd_v_corp_family_account();
+
+
 update __regrants set
 	regrant = regexp_replace(regrant, 'allocate_netblock\([^\)]+\)',
 'allocate_netblock(parent_netblock_id integer, netmask_bits integer, address_type text, can_subnet boolean, allocation_method text, rnd_masklen_threshold integer, rnd_max_count integer, ip_address inet, description character varying, netblock_status character varying)')
 where object = 'allocate_netblock'
 and schema = 'netblock_manip';
+
+--
+-- stuff that should not be replayed (grants should)
+--
+DROP FUNCTION IF EXISTS  netblock_utils.find_free_netblock(integer, integer, boolean, boolean);
+delete from __recreate where schema = 'jazzhands' and object = 'validate_netblock_parentage';
 
 -- Clean Up
 SELECT schema_support.replay_object_recreates();
