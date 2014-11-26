@@ -16,6 +16,44 @@
  * limitations under the License.
  */
 
+/*
+	Brute force query that clears out dup netblocks os that a unique
+	connstraint can be put in:
+
+with foo as (
+select network_interface_id, device_Id, network_interface_name,netblock_id,
+        ni.description,ip_address, dns.dns_name, dom.soa_name,
+        coalesce(ni.data_upd_user,ni.data_ins_user) as dick
+from network_interface ni
+        join netblock nb using (netblock_id)
+        left join dns_record dns using (netblock_id)
+        left join dns_domain dom using (dns_domain_id)
+where 
+	netblock_id in (
+                select netblock_id from network_interface
+                where netblock_id is not null
+                group by netblock_id having count(*) > 1)
+and 
+network_interface_id not in (
+                select max(network_interface_id) 
+		from network_interface
+		group by netblock_id
+                )
+), purp as (
+ delete from network_interface_purpose where network_interface_id in
+	( select network_interface_id from foo) returning * 
+) delete 
+from network_interface 
+where network_interface_id in
+( select network_interface_id from purp )
+or
+network_interface_id in
+( select network_interface_id from foo )
+
+;
+
+*/
+
 \set ON_ERROR_STOP
 SELECT schema_support.begin_maintenance();
 
