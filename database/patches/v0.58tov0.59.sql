@@ -1115,17 +1115,37 @@ ALTER TABLE jazzhands.netblock DROP COLUMN IF EXISTS is_ipv4_address;
 ALTER TABLE audit.netblock DROP COLUMN IF EXISTS netmask_bits;
 ALTER TABLE audit.netblock DROP COLUMN IF EXISTS is_ipv4_address;
 
-CREATE TRIGGER tb_manipulate_netblock_parentage
-	BEFORE INSERT OR UPDATE OF
-		netblock_id, ip_address, netblock_type, is_single_address,
-		can_subnet, parent_netblock_id, ip_universe_id
-	ON netblock
-	FOR EACH ROW EXECUTE PROCEDURE manipulate_netblock_parentage_before();
+CREATE TRIGGER tb_a_validate_netblock 
+	BEFORE INSERT OR UPDATE 
+	OF netblock_id, ip_address, netblock_type, 
+	is_single_address, can_subnet, parent_netblock_id, ip_universe_id 
+	ON netblock 
+	FOR EACH ROW 
+	EXECUTE PROCEDURE validate_netblock();
 
-CREATE TRIGGER tb_a_validate_netblock BEFORE INSERT OR UPDATE ON netblock FOR EACH ROW EXECUTE PROCEDURE validate_netblock();
-CREATE CONSTRAINT TRIGGER aaa_ta_manipulate_netblock_parentage AFTER INSERT OR DELETE ON netblock NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE PROCEDURE manipulate_netblock_parentage_after();
+CREATE TRIGGER tb_manipulate_netblock_parentage 
+	BEFORE INSERT OR UPDATE OF ip_address, netblock_type, ip_universe_id,
+	netblock_id, can_subnet, is_single_address 
+	ON netblock 
+	FOR EACH ROW 
+	EXECUTE PROCEDURE manipulate_netblock_parentage_before();
+
+CREATE CONSTRAINT TRIGGER trigger_validate_netblock_parentage 
+	AFTER INSERT OR UPDATE OF netblock_id, ip_address, netblock_type, 
+	is_single_address, can_subnet,parent_netblock_id, ip_universe_id 
+	ON netblock 
+	DEFERRABLE INITIALLY DEFERRED 
+	FOR EACH ROW 
+	EXECUTE PROCEDURE validate_netblock_parentage();
+
+CREATE CONSTRAINT TRIGGER aaa_ta_manipulate_netblock_parentage 
+	AFTER INSERT OR DELETE 
+	ON netblock NOT 
+	DEFERRABLE INITIALLY IMMEDIATE 
+	FOR EACH ROW 
+	EXECUTE PROCEDURE manipulate_netblock_parentage_after();
+
 CREATE TRIGGER trigger_netblock_single_address_ni BEFORE UPDATE OF is_single_address, netblock_type ON netblock FOR EACH ROW EXECUTE PROCEDURE netblock_single_address_ni();
-CREATE CONSTRAINT TRIGGER trigger_validate_netblock_parentage AFTER INSERT OR UPDATE ON netblock DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE PROCEDURE validate_netblock_parentage();
 
 
 -- DONE DEALING WITH TABLE netblock [369167]
