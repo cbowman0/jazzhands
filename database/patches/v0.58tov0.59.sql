@@ -8750,7 +8750,7 @@ delete from __recreate where type = 'view' and object = 'v_device_collection_acc
 --------------------------------------------------------------------
 -- DEALING WITH TABLE v_person_company_expanded [586046]
 -- Save grants for later reapplication
-SELECT schema_support.save_grants_for_replay('jazzhands', 'v_person_company_expanded', 'v_person_company_expanded');
+SELECT schema_support.save_view_for_replay('jazzhands', 'v_person_company_expanded');
 CREATE VIEW v_person_company_expanded AS
  WITH RECURSIVE var_recurse(level, root_company_id, company_id, parent_company_id, person_id, array_path, cycle) AS (
          SELECT 0 AS level,
@@ -8780,145 +8780,6 @@ CREATE VIEW v_person_company_expanded AS
 
 delete from __recreate where type = 'view' and object = 'v_person_company_expanded';
 -- DONE DEALING WITH TABLE v_person_company_expanded [593263]
---------------------------------------------------------------------
-
---------------------------------------------------------------------
--- DEALING WITH NEW TABLE v_unix_group_mappings
-CREATE VIEW v_unix_group_mappings AS
- WITH accts AS (
-         SELECT a_1.account_id,
-            a_1.login,
-            a_1.person_id,
-            a_1.company_id,
-            a_1.account_realm_id,
-            a_1.account_status,
-            a_1.account_role,
-            a_1.account_type,
-            a_1.description,
-            a_1.data_ins_user,
-            a_1.data_ins_date,
-            a_1.data_upd_user,
-            a_1.data_upd_date
-           FROM account a_1
-             JOIN account_unix_info USING (account_id)
-             JOIN val_person_status vps ON a_1.account_status::text = vps.person_status::text
-          WHERE vps.is_disabled = 'N'::bpchar
-        ), ugmap AS (
-         SELECT dch.device_collection_id,
-            vace.account_collection_id
-           FROM v_property p
-             JOIN v_device_coll_hier_detail dch ON p.device_collection_id = dch.parent_device_collection_id
-             JOIN v_account_collection_expanded vace ON vace.root_account_collection_id = p.account_collection_id
-          WHERE p.property_name::text = 'UnixGroup'::text AND p.property_type::text = 'MclassUnixProp'::text
-        UNION
-         SELECT dch.device_collection_id,
-            uag.account_collection_id
-           FROM v_property p
-             JOIN v_device_coll_hier_detail dch ON p.device_collection_id = dch.parent_device_collection_id
-             JOIN v_acct_coll_acct_expanded vace USING (account_collection_id)
-             JOIN accts a_1 ON vace.account_id = a_1.account_id
-             JOIN account_unix_info aui ON a_1.account_id = aui.account_id
-             JOIN unix_group ug ON ug.account_collection_id = aui.unix_group_acct_collection_id
-             JOIN account_collection uag ON ug.account_collection_id = uag.account_collection_id
-          WHERE p.property_name::text = 'UnixLogin'::text AND p.property_type::text = 'MclassUnixProp'::text
-        ), dcugm AS (
-         SELECT dch.device_collection_id,
-            p.account_collection_id,
-            aca.account_id
-           FROM v_property p
-             JOIN unix_group ug USING (account_collection_id)
-             JOIN v_device_coll_hier_detail dch ON p.device_collection_id = dch.parent_device_collection_id
-             JOIN v_acct_coll_acct_expanded aca ON p.property_value_account_coll_id = aca.account_collection_id
-          WHERE p.property_name::text = 'UnixGroupMemberOverride'::text AND p.property_type::text = 'MclassUnixProp'::text
-        ), grp_members AS (
-         SELECT actoa.account_id,
-            actoa.device_collection_id,
-            actoa.account_collection_id,
-            ui.unix_uid,
-            ui.unix_group_acct_collection_id,
-            ui.shell,
-            ui.default_home,
-            ui.data_ins_user,
-            ui.data_ins_date,
-            ui.data_upd_user,
-            ui.data_upd_date,
-            a_1.login,
-            a_1.person_id,
-            a_1.company_id,
-            a_1.account_realm_id,
-            a_1.account_status,
-            a_1.account_role,
-            a_1.account_type,
-            a_1.description,
-            a_1.data_ins_user,
-            a_1.data_ins_date,
-            a_1.data_upd_user,
-            a_1.data_upd_date
-           FROM ( SELECT dc_1.device_collection_id,
-                    ae.account_collection_id,
-                    ae.account_id
-                   FROM device_collection dc_1,
-                    v_acct_coll_acct_expanded ae
-                     JOIN unix_group unix_group_1 USING (account_collection_id)
-                     JOIN account_collection inac USING (account_collection_id)
-                  WHERE dc_1.device_collection_type::text = 'mclass'::text
-                UNION
-                 SELECT dcugm.device_collection_id,
-                    dcugm.account_collection_id,
-                    dcugm.account_id
-                   FROM dcugm) actoa
-             JOIN account_unix_info ui USING (account_id)
-             JOIN accts a_1 USING (account_id)
-        ), grp_accounts AS (
-         SELECT g.account_id,
-            g.device_collection_id,
-            g.account_collection_id,
-            g.unix_uid,
-            g.unix_group_acct_collection_id,
-            g.shell,
-            g.default_home,
-            g.data_ins_user,
-            g.data_ins_date,
-            g.data_upd_user,
-            g.data_upd_date,
-            g.login,
-            g.person_id,
-            g.company_id,
-            g.account_realm_id,
-            g.account_status,
-            g.account_role,
-            g.account_type,
-            g.description,
-            g.data_ins_user_1 AS data_ins_user,
-            g.data_ins_date_1 AS data_ins_date,
-            g.data_upd_user_1 AS data_upd_user,
-            g.data_upd_date_1 AS data_upd_date
-           FROM grp_members g(account_id, device_collection_id, account_collection_id, unix_uid, unix_group_acct_collection_id, shell, default_home, data_ins_user, data_ins_date, data_upd_user, data_upd_date, login, person_id, company_id, account_realm_id, account_status, account_role, account_type, description, data_ins_user_1, data_ins_date_1, data_upd_user_1, data_upd_date_1)
-             JOIN accts USING (account_id)
-             JOIN v_unix_passwd_mappings USING (device_collection_id, account_id)
-        )
- SELECT dc.device_collection_id,
-    ac.account_collection_id,
-    ac.account_collection_name AS group_name,
-    COALESCE(o.setting[( SELECT i.i + 1
-           FROM generate_subscripts(o.setting, 1) i(i)
-          WHERE o.setting[i.i]::text = 'ForceGroupGID'::text)]::integer, unix_group.unix_gid) AS unix_gid,
-    unix_group.group_password,
-    o.setting,
-    mcs.mclass_setting,
-    array_agg(DISTINCT a.login ORDER BY a.login) AS members
-   FROM device_collection dc
-     JOIN ugmap USING (device_collection_id)
-     JOIN account_collection ac USING (account_collection_id)
-     JOIN unix_group USING (account_collection_id)
-     LEFT JOIN v_device_col_account_col_cart o USING (device_collection_id, account_collection_id)
-     LEFT JOIN grp_accounts a(account_id, device_collection_id, account_collection_id, unix_uid, unix_group_acct_collection_id, shell, default_home, data_ins_user, data_ins_date, data_upd_user, data_upd_date, login, person_id, company_id, account_realm_id, account_status, account_role, account_type, description, data_ins_user_1, data_ins_date_1, data_upd_user_1, data_upd_date_1) USING (device_collection_id, account_collection_id)
-     LEFT JOIN v_unix_mclass_settings mcs ON mcs.device_collection_id = dc.device_collection_id
-  GROUP BY dc.device_collection_id, ac.account_collection_id, ac.account_collection_name, unix_group.unix_gid, unix_group.group_password, o.setting, mcs.mclass_setting
-  ORDER BY dc.device_collection_id, ac.account_collection_id;
-
-delete from __recreate where type = 'view' and object = 'v_unix_group_mappings';
--- DONE DEALING WITH TABLE v_unix_group_mappings [593406]
 --------------------------------------------------------------------
 --------------------------------------------------------------------
 -- DEALING WITH NEW TABLE v_unix_mclass_settings
@@ -9076,6 +8937,145 @@ CREATE VIEW v_unix_passwd_mappings AS
 delete from __recreate where type = 'view' and object = 'v_unix_passwd_mappings';
 -- DONE DEALING WITH TABLE v_unix_passwd_mappings [593391]
 --------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE v_unix_group_mappings
+CREATE VIEW v_unix_group_mappings AS
+ WITH accts AS (
+         SELECT a_1.account_id,
+            a_1.login,
+            a_1.person_id,
+            a_1.company_id,
+            a_1.account_realm_id,
+            a_1.account_status,
+            a_1.account_role,
+            a_1.account_type,
+            a_1.description,
+            a_1.data_ins_user,
+            a_1.data_ins_date,
+            a_1.data_upd_user,
+            a_1.data_upd_date
+           FROM account a_1
+             JOIN account_unix_info USING (account_id)
+             JOIN val_person_status vps ON a_1.account_status::text = vps.person_status::text
+          WHERE vps.is_disabled = 'N'::bpchar
+        ), ugmap AS (
+         SELECT dch.device_collection_id,
+            vace.account_collection_id
+           FROM v_property p
+             JOIN v_device_coll_hier_detail dch ON p.device_collection_id = dch.parent_device_collection_id
+             JOIN v_account_collection_expanded vace ON vace.root_account_collection_id = p.account_collection_id
+          WHERE p.property_name::text = 'UnixGroup'::text AND p.property_type::text = 'MclassUnixProp'::text
+        UNION
+         SELECT dch.device_collection_id,
+            uag.account_collection_id
+           FROM v_property p
+             JOIN v_device_coll_hier_detail dch ON p.device_collection_id = dch.parent_device_collection_id
+             JOIN v_acct_coll_acct_expanded vace USING (account_collection_id)
+             JOIN accts a_1 ON vace.account_id = a_1.account_id
+             JOIN account_unix_info aui ON a_1.account_id = aui.account_id
+             JOIN unix_group ug ON ug.account_collection_id = aui.unix_group_acct_collection_id
+             JOIN account_collection uag ON ug.account_collection_id = uag.account_collection_id
+          WHERE p.property_name::text = 'UnixLogin'::text AND p.property_type::text = 'MclassUnixProp'::text
+        ), dcugm AS (
+         SELECT dch.device_collection_id,
+            p.account_collection_id,
+            aca.account_id
+           FROM v_property p
+             JOIN unix_group ug USING (account_collection_id)
+             JOIN v_device_coll_hier_detail dch ON p.device_collection_id = dch.parent_device_collection_id
+             JOIN v_acct_coll_acct_expanded aca ON p.property_value_account_coll_id = aca.account_collection_id
+          WHERE p.property_name::text = 'UnixGroupMemberOverride'::text AND p.property_type::text = 'MclassUnixProp'::text
+        ), grp_members AS (
+         SELECT actoa.account_id,
+            actoa.device_collection_id,
+            actoa.account_collection_id,
+            ui.unix_uid,
+            ui.unix_group_acct_collection_id,
+            ui.shell,
+            ui.default_home,
+            ui.data_ins_user,
+            ui.data_ins_date,
+            ui.data_upd_user,
+            ui.data_upd_date,
+            a_1.login,
+            a_1.person_id,
+            a_1.company_id,
+            a_1.account_realm_id,
+            a_1.account_status,
+            a_1.account_role,
+            a_1.account_type,
+            a_1.description,
+            a_1.data_ins_user,
+            a_1.data_ins_date,
+            a_1.data_upd_user,
+            a_1.data_upd_date
+           FROM ( SELECT dc_1.device_collection_id,
+                    ae.account_collection_id,
+                    ae.account_id
+                   FROM device_collection dc_1,
+                    v_acct_coll_acct_expanded ae
+                     JOIN unix_group unix_group_1 USING (account_collection_id)
+                     JOIN account_collection inac USING (account_collection_id)
+                  WHERE dc_1.device_collection_type::text = 'mclass'::text
+                UNION
+                 SELECT dcugm.device_collection_id,
+                    dcugm.account_collection_id,
+                    dcugm.account_id
+                   FROM dcugm) actoa
+             JOIN account_unix_info ui USING (account_id)
+             JOIN accts a_1 USING (account_id)
+        ), grp_accounts AS (
+         SELECT g.account_id,
+            g.device_collection_id,
+            g.account_collection_id,
+            g.unix_uid,
+            g.unix_group_acct_collection_id,
+            g.shell,
+            g.default_home,
+            g.data_ins_user,
+            g.data_ins_date,
+            g.data_upd_user,
+            g.data_upd_date,
+            g.login,
+            g.person_id,
+            g.company_id,
+            g.account_realm_id,
+            g.account_status,
+            g.account_role,
+            g.account_type,
+            g.description,
+            g.data_ins_user_1 AS data_ins_user,
+            g.data_ins_date_1 AS data_ins_date,
+            g.data_upd_user_1 AS data_upd_user,
+            g.data_upd_date_1 AS data_upd_date
+           FROM grp_members g(account_id, device_collection_id, account_collection_id, unix_uid, unix_group_acct_collection_id, shell, default_home, data_ins_user, data_ins_date, data_upd_user, data_upd_date, login, person_id, company_id, account_realm_id, account_status, account_role, account_type, description, data_ins_user_1, data_ins_date_1, data_upd_user_1, data_upd_date_1)
+             JOIN accts USING (account_id)
+             JOIN v_unix_passwd_mappings USING (device_collection_id, account_id)
+        )
+ SELECT dc.device_collection_id,
+    ac.account_collection_id,
+    ac.account_collection_name AS group_name,
+    COALESCE(o.setting[( SELECT i.i + 1
+           FROM generate_subscripts(o.setting, 1) i(i)
+          WHERE o.setting[i.i]::text = 'ForceGroupGID'::text)]::integer, unix_group.unix_gid) AS unix_gid,
+    unix_group.group_password,
+    o.setting,
+    mcs.mclass_setting,
+    array_agg(DISTINCT a.login ORDER BY a.login) AS members
+   FROM device_collection dc
+     JOIN ugmap USING (device_collection_id)
+     JOIN account_collection ac USING (account_collection_id)
+     JOIN unix_group USING (account_collection_id)
+     LEFT JOIN v_device_col_account_col_cart o USING (device_collection_id, account_collection_id)
+     LEFT JOIN grp_accounts a(account_id, device_collection_id, account_collection_id, unix_uid, unix_group_acct_collection_id, shell, default_home, data_ins_user, data_ins_date, data_upd_user, data_upd_date, login, person_id, company_id, account_realm_id, account_status, account_role, account_type, description, data_ins_user_1, data_ins_date_1, data_upd_user_1, data_upd_date_1) USING (device_collection_id, account_collection_id)
+     LEFT JOIN v_unix_mclass_settings mcs ON mcs.device_collection_id = dc.device_collection_id
+  GROUP BY dc.device_collection_id, ac.account_collection_id, ac.account_collection_name, unix_group.unix_gid, unix_group.group_password, o.setting, mcs.mclass_setting
+  ORDER BY dc.device_collection_id, ac.account_collection_id;
+
+delete from __recreate where type = 'view' and object = 'v_unix_group_mappings';
+-- DONE DEALING WITH TABLE v_unix_group_mappings [593406]
+--------------------------------------------------------------------
+
 
 -- Dropping obsoleted sequences....
 
