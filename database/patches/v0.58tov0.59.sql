@@ -123,12 +123,12 @@ DO $$
 
 		IF x IS NOT NULL THEN
 			INSERT INTO property (
-        			property_name, property_type,
-	        		account_realm_id
+				property_name, property_type,
+				account_realm_id
 			) VALUES  (
-		        	'_root_account_realm_id', 'Defaults',
-			        (select account_realm_id
-				        from account_realm_company
+				'_root_account_realm_id', 'Defaults',
+				(select account_realm_id
+					from account_realm_company
 						where company_id IN (
 							select  property_value_company_id
 						    from  property
@@ -177,17 +177,17 @@ DECLARE
 	_r			record;
 BEGIN
 	FOR _r IN SELECT  a.attname as colname,
-            pg_catalog.format_type(a.atttypid, a.atttypmod) as coltype,
-            a.attnotnull, a.attnum
-        FROM    pg_catalog.pg_attribute a
+	    pg_catalog.format_type(a.atttypid, a.atttypmod) as coltype,
+	    a.attnotnull, a.attnum
+	FROM    pg_catalog.pg_attribute a
 				INNER JOIN pg_class c on a.attrelid = c.oid
 				INNER JOIN pg_namespace n on n.oid = c.relnamespace
-        WHERE   c.relname = _table
+	WHERE   c.relname = _table
 		  AND	n.nspname = _schema
-          AND   a.attnum > 0
-          AND   NOT a.attisdropped
+	  AND   a.attnum > 0
+	  AND   NOT a.attisdropped
 		  AND	lower(a.attname) not like 'data_%'
-        ORDER BY a.attnum
+	ORDER BY a.attnum
 	LOOP
 		SELECT array_append(cols, _r.colname::text) INTO cols;
 	END LOOP;
@@ -1102,7 +1102,13 @@ ALTER TABLE jazzhands.netblock DROP COLUMN IF EXISTS is_ipv4_address;
 ALTER TABLE audit.netblock DROP COLUMN IF EXISTS netmask_bits;
 ALTER TABLE audit.netblock DROP COLUMN IF EXISTS is_ipv4_address;
 
-CREATE TRIGGER tb_manipulate_netblock_parentage BEFORE INSERT OR UPDATE OF ip_address, netblock_type, ip_universe_id ON netblock FOR EACH ROW EXECUTE PROCEDURE manipulate_netblock_parentage_before();
+CREATE TRIGGER tb_manipulate_netblock_parentage
+	BEFORE INSERT OR UPDATE OF
+		netblock_id, ip_address, netblock_type, is_single_address,
+		can_subnet, parent_netblock_id, ip_universe_id
+	ON netblock
+	FOR EACH ROW EXECUTE PROCEDURE manipulate_netblock_parentage_before();
+
 CREATE TRIGGER tb_a_validate_netblock BEFORE INSERT OR UPDATE ON netblock FOR EACH ROW EXECUTE PROCEDURE validate_netblock();
 CREATE CONSTRAINT TRIGGER aaa_ta_manipulate_netblock_parentage AFTER INSERT OR DELETE ON netblock NOT DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE PROCEDURE manipulate_netblock_parentage_after();
 CREATE TRIGGER trigger_netblock_single_address_ni BEFORE UPDATE OF is_single_address, netblock_type ON netblock FOR EACH ROW EXECUTE PROCEDURE netblock_single_address_ni();
@@ -3211,7 +3217,7 @@ ALTER TABLE sw_package_release
 	FOREIGN KEY (processor_architecture) REFERENCES val_processor_architecture(processor_architecture);
 
 ALTER TABLE SW_PACKAGE_RELEASE
-        ADD CONSTRAINT FK_SW_PACKAGE_TYPE 
+	ADD CONSTRAINT FK_SW_PACKAGE_TYPE 
 	FOREIGN KEY (SW_PACKAGE_TYPE) 
 	REFERENCES VAL_SW_PACKAGE_TYPE (SW_PACKAGE_TYPE)  ;
 
@@ -3833,11 +3839,11 @@ LANGUAGE plpgsql SECURITY DEFINER;
 DROP TRIGGER IF EXISTS trigger_property_collection_hier_enforce
 	 ON property_collection_hier;
 CREATE CONSTRAINT TRIGGER trigger_property_collection_hier_enforce
-        AFTER INSERT OR UPDATE 
-        ON property_collection_hier
+	AFTER INSERT OR UPDATE 
+	ON property_collection_hier
 		DEFERRABLE INITIALLY IMMEDIATE
-        FOR EACH ROW
-        EXECUTE PROCEDURE property_collection_hier_enforce();
+	FOR EACH ROW
+	EXECUTE PROCEDURE property_collection_hier_enforce();
 
 
 -- ---------------------------------------------------------------------------
@@ -3890,11 +3896,11 @@ LANGUAGE plpgsql SECURITY DEFINER;
 DROP TRIGGER IF EXISTS trigger_property_collection_member_enforce
 	 ON property_collection_property;
 CREATE CONSTRAINT TRIGGER trigger_property_collection_member_enforce
-        AFTER INSERT OR UPDATE 
-        ON property_collection_property
+	AFTER INSERT OR UPDATE 
+	ON property_collection_property
 		DEFERRABLE INITIALLY IMMEDIATE
-        FOR EACH ROW
-        EXECUTE PROCEDURE property_collection_member_enforce();
+	FOR EACH ROW
+	EXECUTE PROCEDURE property_collection_member_enforce();
 
 -- DONE DEALING WITH property collection triggers
 --------------------------------------------------------------------
@@ -4677,7 +4683,7 @@ $function$
 SELECT schema_support.save_grants_for_replay('jazzhands', 'netblock_collection_hier_enforce', 'netblock_collection_hier_enforce');
 
 DROP TRIGGER IF EXISTS trigger_netblock_collection_hier_enforce
-         ON netblock_collection_hier;
+	 ON netblock_collection_hier;
 
 -- DROP OLD FUNCTION
 -- consider old oid 396926
@@ -4779,11 +4785,11 @@ $function$
 ;
 
 CREATE CONSTRAINT TRIGGER trigger_netblock_collection_hier_enforce
-        AFTER INSERT OR UPDATE
-        ON netblock_collection_hier
-                DEFERRABLE INITIALLY IMMEDIATE
-        FOR EACH ROW
-        EXECUTE PROCEDURE netblock_collection_hier_enforce();
+	AFTER INSERT OR UPDATE
+	ON netblock_collection_hier
+		DEFERRABLE INITIALLY IMMEDIATE
+	FOR EACH ROW
+	EXECUTE PROCEDURE netblock_collection_hier_enforce();
 
 -- DONE WITH proc netblock_single_address_ni -> netblock_single_address_ni 
 --------------------------------------------------------------------
@@ -6726,11 +6732,11 @@ BEGIN
     SELECT account_id
      INTO  __account_id
      FROM  person_manip.add_user(
-        company_id := _company_id,
-        person_company_relation := 'pseudouser',
-        login := _login,
-        description := _description,
-        person_company_status := 'enabled'
+	company_id := _company_id,
+	person_company_relation := 'pseudouser',
+	login := _login,
+	description := _description,
+	person_company_status := 'enabled'
     );
 	RETURN __account_id;
 END;
@@ -7042,22 +7048,22 @@ SELECT schema_support.save_view_for_replay('jazzhands', 'v_account_collection_ex
 
 CREATE VIEW v_account_collection_expanded AS
  WITH RECURSIVE var_recurse(level, root_account_collection_id, account_collection_id, array_path, cycle) AS (
-         SELECT 0 AS level,
-            a.account_collection_id AS root_account_collection_id,
-            a.account_collection_id,
-            ARRAY[a.account_collection_id] AS array_path,
-            false AS cycle
-           FROM account_collection a
-        UNION ALL
-         SELECT x.level + 1 AS level,
-            x.root_account_collection_id,
-            ach.child_account_collection_id AS account_collection_id,
-            ach.child_account_collection_id || x.array_path AS array_path,
-            ach.child_account_collection_id = ANY (x.array_path) AS cycle
-           FROM var_recurse x
-             JOIN account_collection_hier ach ON x.account_collection_id = ach.account_collection_id
-          WHERE NOT x.cycle
-        )
+	 SELECT 0 AS level,
+	    a.account_collection_id AS root_account_collection_id,
+	    a.account_collection_id,
+	    ARRAY[a.account_collection_id] AS array_path,
+	    false AS cycle
+	   FROM account_collection a
+	UNION ALL
+	 SELECT x.level + 1 AS level,
+	    x.root_account_collection_id,
+	    ach.child_account_collection_id AS account_collection_id,
+	    ach.child_account_collection_id || x.array_path AS array_path,
+	    ach.child_account_collection_id = ANY (x.array_path) AS cycle
+	   FROM var_recurse x
+	     JOIN account_collection_hier ach ON x.account_collection_id = ach.account_collection_id
+	  WHERE NOT x.cycle
+	)
  SELECT var_recurse.level,
     var_recurse.root_account_collection_id,
     var_recurse.account_collection_id
@@ -7073,24 +7079,24 @@ SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'v_acct_col
 SELECT schema_support.save_view_for_replay('jazzhands', 'v_acct_coll_expanded');
 CREATE VIEW v_acct_coll_expanded AS
  WITH RECURSIVE acct_coll_recurse(level, root_account_collection_id, account_collection_id, array_path, rvs_array_path, cycle) AS (
-         SELECT 0 AS level,
-            ac.account_collection_id AS root_account_collection_id,
-            ac.account_collection_id,
-            ARRAY[ac.account_collection_id] AS array_path,
-            ARRAY[ac.account_collection_id] AS rvs_array_path,
-            false AS bool
-           FROM account_collection ac
-        UNION ALL
-         SELECT x.level + 1 AS level,
-            x.root_account_collection_id,
-            ach.account_collection_id,
-            x.array_path || ach.account_collection_id AS array_path,
-            ach.account_collection_id || x.rvs_array_path AS rvs_array_path,
-            ach.account_collection_id = ANY (x.array_path) AS cycle
-           FROM acct_coll_recurse x
-             JOIN account_collection_hier ach ON x.account_collection_id = ach.child_account_collection_id
-          WHERE NOT x.cycle
-        )
+	 SELECT 0 AS level,
+	    ac.account_collection_id AS root_account_collection_id,
+	    ac.account_collection_id,
+	    ARRAY[ac.account_collection_id] AS array_path,
+	    ARRAY[ac.account_collection_id] AS rvs_array_path,
+	    false AS bool
+	   FROM account_collection ac
+	UNION ALL
+	 SELECT x.level + 1 AS level,
+	    x.root_account_collection_id,
+	    ach.account_collection_id,
+	    x.array_path || ach.account_collection_id AS array_path,
+	    ach.account_collection_id || x.rvs_array_path AS rvs_array_path,
+	    ach.account_collection_id = ANY (x.array_path) AS cycle
+	   FROM acct_coll_recurse x
+	     JOIN account_collection_hier ach ON x.account_collection_id = ach.child_account_collection_id
+	  WHERE NOT x.cycle
+	)
  SELECT acct_coll_recurse.level,
     acct_coll_recurse.account_collection_id,
     acct_coll_recurse.root_account_collection_id,
@@ -7108,26 +7114,26 @@ delete from __recreate where type = 'view' and object = 'v_acct_coll_expanded';
 SELECT schema_support.save_view_for_replay('jazzhands', 'v_company_hier');
 CREATE VIEW v_company_hier AS
  WITH RECURSIVE var_recurse(level, root_company_id, company_id, person_id, array_path, cycle) AS (
-         SELECT 0 AS level,
-            c.company_id AS root_company_id,
-            c.company_id,
-            pc.person_id,
-            ARRAY[c.company_id] AS array_path,
-            false AS cycle
-           FROM company c
-             JOIN person_company pc USING (company_id)
-        UNION ALL
-         SELECT x.level + 1 AS level,
-            x.company_id AS root_company_id,
-            c.company_id,
-            pc.person_id,
-            c.company_id || x.array_path AS array_path,
-            c.company_id = ANY (x.array_path) AS cycle
-           FROM var_recurse x
-             JOIN company c ON c.parent_company_id = x.company_id
-             JOIN person_company pc ON c.company_id = pc.company_id
-          WHERE NOT x.cycle
-        )
+	 SELECT 0 AS level,
+	    c.company_id AS root_company_id,
+	    c.company_id,
+	    pc.person_id,
+	    ARRAY[c.company_id] AS array_path,
+	    false AS cycle
+	   FROM company c
+	     JOIN person_company pc USING (company_id)
+	UNION ALL
+	 SELECT x.level + 1 AS level,
+	    x.company_id AS root_company_id,
+	    c.company_id,
+	    pc.person_id,
+	    c.company_id || x.array_path AS array_path,
+	    c.company_id = ANY (x.array_path) AS cycle
+	   FROM var_recurse x
+	     JOIN company c ON c.parent_company_id = x.company_id
+	     JOIN person_company pc ON c.company_id = pc.company_id
+	  WHERE NOT x.cycle
+	)
  SELECT DISTINCT var_recurse.root_company_id,
     var_recurse.company_id
    FROM var_recurse;
@@ -7141,24 +7147,24 @@ delete from __recreate where type = 'view' and object = 'v_company_hier';
 SELECT schema_support.save_view_for_replay('jazzhands', 'v_device_coll_hier_detail');
 CREATE VIEW v_device_coll_hier_detail AS
  WITH RECURSIVE var_recurse(root_device_collection_id, device_collection_id, parent_device_collection_id, device_collection_level, array_path, cycle) AS (
-         SELECT device_collection.device_collection_id AS root_device_collection_id,
-            device_collection.device_collection_id,
-            device_collection.device_collection_id AS parent_device_collection_id,
-            0 AS device_collection_level,
-            ARRAY[device_collection.device_collection_id] AS "array",
-            false AS bool
-           FROM device_collection
-        UNION ALL
-         SELECT x.root_device_collection_id,
-            dch.device_collection_id,
-            dch.parent_device_collection_id,
-            x.device_collection_level + 1 AS device_collection_level,
-            dch.parent_device_collection_id || x.array_path AS array_path,
-            dch.parent_device_collection_id = ANY (x.array_path)
-           FROM var_recurse x
-             JOIN device_collection_hier dch ON x.parent_device_collection_id = dch.device_collection_id
-          WHERE NOT x.cycle
-        )
+	 SELECT device_collection.device_collection_id AS root_device_collection_id,
+	    device_collection.device_collection_id,
+	    device_collection.device_collection_id AS parent_device_collection_id,
+	    0 AS device_collection_level,
+	    ARRAY[device_collection.device_collection_id] AS "array",
+	    false AS bool
+	   FROM device_collection
+	UNION ALL
+	 SELECT x.root_device_collection_id,
+	    dch.device_collection_id,
+	    dch.parent_device_collection_id,
+	    x.device_collection_level + 1 AS device_collection_level,
+	    dch.parent_device_collection_id || x.array_path AS array_path,
+	    dch.parent_device_collection_id = ANY (x.array_path)
+	   FROM var_recurse x
+	     JOIN device_collection_hier dch ON x.parent_device_collection_id = dch.device_collection_id
+	  WHERE NOT x.cycle
+	)
  SELECT var_recurse.root_device_collection_id AS device_collection_id,
     var_recurse.parent_device_collection_id,
     var_recurse.device_collection_level
@@ -7173,24 +7179,24 @@ delete from __recreate where type = 'view' and object = 'v_device_coll_hier_deta
 SELECT schema_support.save_view_for_replay('jazzhands', 'v_nblk_coll_netblock_expanded');
 CREATE VIEW v_nblk_coll_netblock_expanded AS
  WITH RECURSIVE var_recurse(level, root_collection_id, netblock_collection_id, child_netblock_collection_id, array_path, cycle) AS (
-         SELECT 0 AS level,
-            u.netblock_collection_id AS root_collection_id,
-            u.netblock_collection_id,
-            u.netblock_collection_id AS child_netblock_collection_id,
-            ARRAY[u.netblock_collection_id] AS array_path,
-            false AS cycle
-           FROM netblock_collection u
-        UNION ALL
-         SELECT x.level + 1 AS level,
-            x.netblock_collection_id AS root_netblock_collection_id,
-            uch.netblock_collection_id,
-            uch.child_netblock_collection_id,
-            uch.child_netblock_collection_id || x.array_path AS array_path,
-            uch.child_netblock_collection_id = ANY (x.array_path) AS cycle
-           FROM var_recurse x
-             JOIN netblock_collection_hier uch ON x.child_netblock_collection_id = uch.netblock_collection_id
-          WHERE NOT x.cycle
-        )
+	 SELECT 0 AS level,
+	    u.netblock_collection_id AS root_collection_id,
+	    u.netblock_collection_id,
+	    u.netblock_collection_id AS child_netblock_collection_id,
+	    ARRAY[u.netblock_collection_id] AS array_path,
+	    false AS cycle
+	   FROM netblock_collection u
+	UNION ALL
+	 SELECT x.level + 1 AS level,
+	    x.netblock_collection_id AS root_netblock_collection_id,
+	    uch.netblock_collection_id,
+	    uch.child_netblock_collection_id,
+	    uch.child_netblock_collection_id || x.array_path AS array_path,
+	    uch.child_netblock_collection_id = ANY (x.array_path) AS cycle
+	   FROM var_recurse x
+	     JOIN netblock_collection_hier uch ON x.child_netblock_collection_id = uch.netblock_collection_id
+	  WHERE NOT x.cycle
+	)
  SELECT DISTINCT var_recurse.root_collection_id AS netblock_collection_id,
     netblock_collection_netblock.netblock_id
    FROM var_recurse
@@ -7205,41 +7211,41 @@ delete from __recreate where type = 'view' and object = 'v_nblk_coll_netblock_ex
 SELECT schema_support.save_view_for_replay('jazzhands', 'v_netblock_hier');
 CREATE VIEW v_netblock_hier AS
  WITH RECURSIVE var_recurse(netblock_level, root_netblock_id, ip, netblock_id, ip_address, netblock_status, is_single_address, description, parent_netblock_id, site_code, array_path, array_ip_path, cycle) AS (
-         SELECT 0 AS netblock_level,
-            nb.netblock_id AS root_netblock_id,
-            net_manip.inet_dbtop(nb.ip_address) AS ip,
-            nb.netblock_id,
-            nb.ip_address,
-            nb.netblock_status,
-            nb.is_single_address,
-            nb.description,
-            nb.parent_netblock_id,
-            snb.site_code,
-            ARRAY[nb.netblock_id] AS "array",
-            ARRAY[nb.ip_address] AS "array",
-            false AS bool
-           FROM netblock nb
-             LEFT JOIN site_netblock snb ON snb.netblock_id = nb.netblock_id
-          WHERE nb.is_single_address = 'N'::bpchar
-        UNION ALL
-         SELECT x.netblock_level + 1 AS netblock_level,
-            x.root_netblock_id,
-            net_manip.inet_dbtop(nb.ip_address) AS ip,
-            nb.netblock_id,
-            nb.ip_address,
-            nb.netblock_status,
-            nb.is_single_address,
-            nb.description,
-            nb.parent_netblock_id,
-            snb.site_code,
-            x.array_path || nb.netblock_id AS array_path,
-            x.array_ip_path || nb.ip_address AS array_ip_path,
-            nb.netblock_id = ANY (x.array_path)
-           FROM var_recurse x
-             JOIN netblock nb ON x.netblock_id = nb.parent_netblock_id
-             LEFT JOIN site_netblock snb ON snb.netblock_id = nb.netblock_id
-          WHERE nb.is_single_address = 'N'::bpchar AND NOT x.cycle
-        )
+	 SELECT 0 AS netblock_level,
+	    nb.netblock_id AS root_netblock_id,
+	    net_manip.inet_dbtop(nb.ip_address) AS ip,
+	    nb.netblock_id,
+	    nb.ip_address,
+	    nb.netblock_status,
+	    nb.is_single_address,
+	    nb.description,
+	    nb.parent_netblock_id,
+	    snb.site_code,
+	    ARRAY[nb.netblock_id] AS "array",
+	    ARRAY[nb.ip_address] AS "array",
+	    false AS bool
+	   FROM netblock nb
+	     LEFT JOIN site_netblock snb ON snb.netblock_id = nb.netblock_id
+	  WHERE nb.is_single_address = 'N'::bpchar
+	UNION ALL
+	 SELECT x.netblock_level + 1 AS netblock_level,
+	    x.root_netblock_id,
+	    net_manip.inet_dbtop(nb.ip_address) AS ip,
+	    nb.netblock_id,
+	    nb.ip_address,
+	    nb.netblock_status,
+	    nb.is_single_address,
+	    nb.description,
+	    nb.parent_netblock_id,
+	    snb.site_code,
+	    x.array_path || nb.netblock_id AS array_path,
+	    x.array_ip_path || nb.ip_address AS array_ip_path,
+	    nb.netblock_id = ANY (x.array_path)
+	   FROM var_recurse x
+	     JOIN netblock nb ON x.netblock_id = nb.parent_netblock_id
+	     LEFT JOIN site_netblock snb ON snb.netblock_id = nb.netblock_id
+	  WHERE nb.is_single_address = 'N'::bpchar AND NOT x.cycle
+	)
  SELECT var_recurse.netblock_level,
     var_recurse.root_netblock_id,
     var_recurse.ip,
@@ -7264,26 +7270,26 @@ delete from __recreate where type = 'view' and object = 'v_netblock_hier';
 SELECT schema_support.save_view_for_replay('jazzhands', 'v_person_company_expanded');
 CREATE VIEW v_person_company_expanded AS
  WITH RECURSIVE var_recurse(level, root_company_id, company_id, person_id, array_path, cycle) AS (
-         SELECT 0 AS level,
-            c.company_id AS root_company_id,
-            c.company_id,
-            pc.person_id,
-            ARRAY[c.company_id] AS array_path,
-            false AS bool
-           FROM company c
-             JOIN person_company pc USING (company_id)
-        UNION ALL
-         SELECT x.level + 1 AS level,
-            x.company_id AS root_company_id,
-            c.company_id,
-            pc.person_id,
-            c.company_id || x.array_path AS array_path,
-            c.company_id = ANY (x.array_path) AS cycle
-           FROM var_recurse x
-             JOIN company c ON c.parent_company_id = x.company_id
-             JOIN person_company pc ON c.company_id = pc.company_id
-          WHERE NOT x.cycle
-        )
+	 SELECT 0 AS level,
+	    c.company_id AS root_company_id,
+	    c.company_id,
+	    pc.person_id,
+	    ARRAY[c.company_id] AS array_path,
+	    false AS bool
+	   FROM company c
+	     JOIN person_company pc USING (company_id)
+	UNION ALL
+	 SELECT x.level + 1 AS level,
+	    x.company_id AS root_company_id,
+	    c.company_id,
+	    pc.person_id,
+	    c.company_id || x.array_path AS array_path,
+	    c.company_id = ANY (x.array_path) AS cycle
+	   FROM var_recurse x
+	     JOIN company c ON c.parent_company_id = x.company_id
+	     JOIN person_company pc ON c.company_id = pc.company_id
+	  WHERE NOT x.cycle
+	)
  SELECT DISTINCT var_recurse.root_company_id AS company_id,
     var_recurse.person_id
    FROM var_recurse;
@@ -7297,30 +7303,30 @@ delete from __recreate where type = 'view' and object = 'v_person_company_expand
 SELECT schema_support.save_view_for_replay('jazzhands', 'v_physical_connection');
 CREATE VIEW v_physical_connection AS
  WITH RECURSIVE var_recurse(level, layer1_connection_id, physical_connection_id, layer1_physical_port1_id, layer1_physical_port2_id, physical_port1_id, physical_port2_id, array_path, cycle) AS (
-         SELECT 0,
-            l1.layer1_connection_id,
-            pc.physical_connection_id,
-            l1.physical_port1_id AS layer1_physical_port1_id,
-            l1.physical_port2_id AS layer1_physical_port2_id,
-            pc.physical_port1_id,
-            pc.physical_port2_id,
-            ARRAY[l1.physical_port1_id] AS array_path,
-            false AS cycle
-           FROM layer1_connection l1
-             JOIN physical_connection pc USING (physical_port1_id)
-        UNION ALL
-         SELECT x.level + 1,
-            x.layer1_connection_id,
-            pc.physical_connection_id,
-            x.physical_port1_id AS layer1_physical_port1_id,
-            x.physical_port2_id AS layer1_physical_port2_id,
-            pc.physical_port1_id,
-            pc.physical_port2_id,
-            pc.physical_port2_id || x.array_path AS array_path,
-            pc.physical_port2_id = ANY (x.array_path) AS cycle
-           FROM var_recurse x
-             JOIN physical_connection pc ON x.physical_port2_id = pc.physical_port1_id
-        )
+	 SELECT 0,
+	    l1.layer1_connection_id,
+	    pc.physical_connection_id,
+	    l1.physical_port1_id AS layer1_physical_port1_id,
+	    l1.physical_port2_id AS layer1_physical_port2_id,
+	    pc.physical_port1_id,
+	    pc.physical_port2_id,
+	    ARRAY[l1.physical_port1_id] AS array_path,
+	    false AS cycle
+	   FROM layer1_connection l1
+	     JOIN physical_connection pc USING (physical_port1_id)
+	UNION ALL
+	 SELECT x.level + 1,
+	    x.layer1_connection_id,
+	    pc.physical_connection_id,
+	    x.physical_port1_id AS layer1_physical_port1_id,
+	    x.physical_port2_id AS layer1_physical_port2_id,
+	    pc.physical_port1_id,
+	    pc.physical_port2_id,
+	    pc.physical_port2_id || x.array_path AS array_path,
+	    pc.physical_port2_id = ANY (x.array_path) AS cycle
+	   FROM var_recurse x
+	     JOIN physical_connection pc ON x.physical_port2_id = pc.physical_port1_id
+	)
  SELECT var_recurse.level,
     var_recurse.layer1_connection_id,
     var_recurse.physical_connection_id,
@@ -7628,26 +7634,26 @@ $function$
 SELECT schema_support.save_view_for_replay('jazzhands', 'v_department_company_expanded');
 CREATE VIEW v_department_company_expanded AS
  WITH RECURSIVE var_recurse(level, root_company_id, company_id, account_collection_id, array_path, cycle) AS (
-         SELECT 0 AS level,
-            c.company_id AS root_company_id,
-            c.company_id,
-            d.account_collection_id,
-            ARRAY[c.company_id] AS array_path,
-            false AS bool
-           FROM company c
-             JOIN department d USING (company_id)
-        UNION ALL
-         SELECT x.level + 1 AS level,
-            x.company_id AS root_company_id,
-            c.company_id,
-            d.account_collection_id,
-            c.company_id || x.array_path AS array_path,
-            c.company_id = ANY (x.array_path) AS cycle
-           FROM var_recurse x
-             JOIN company c ON c.parent_company_id = x.company_id
-             JOIN department d ON c.company_id = d.company_id
-          WHERE NOT x.cycle
-        )
+	 SELECT 0 AS level,
+	    c.company_id AS root_company_id,
+	    c.company_id,
+	    d.account_collection_id,
+	    ARRAY[c.company_id] AS array_path,
+	    false AS bool
+	   FROM company c
+	     JOIN department d USING (company_id)
+	UNION ALL
+	 SELECT x.level + 1 AS level,
+	    x.company_id AS root_company_id,
+	    c.company_id,
+	    d.account_collection_id,
+	    c.company_id || x.array_path AS array_path,
+	    c.company_id = ANY (x.array_path) AS cycle
+	   FROM var_recurse x
+	     JOIN company c ON c.parent_company_id = x.company_id
+	     JOIN department d ON c.company_id = d.company_id
+	  WHERE NOT x.cycle
+	)
  SELECT DISTINCT var_recurse.root_company_id AS company_id,
     var_recurse.account_collection_id
    FROM var_recurse;
@@ -7661,39 +7667,39 @@ delete from __recreate where type = 'view' and object = 'v_department_company_ex
 SELECT schema_support.save_view_for_replay('jazzhands', 'v_application_role');
 CREATE VIEW v_application_role AS
  WITH RECURSIVE var_recurse(role_level, role_id, parent_role_id, root_role_id, root_role_name, role_name, role_path, role_is_leaf, array_path, cycle) AS (
-         SELECT 0 AS role_level,
-            device_collection.device_collection_id AS role_id,
-            NULL::integer AS parent_role_id,
-            device_collection.device_collection_id AS root_role_id,
-            device_collection.device_collection_name AS root_role_name,
-            device_collection.device_collection_name AS role_name,
-            '/'::text || device_collection.device_collection_name::text AS role_path,
-            'N'::text AS role_is_leaf,
-            ARRAY[device_collection.device_collection_id] AS array_path,
-            false AS cycle
-           FROM device_collection
-          WHERE device_collection.device_collection_type::text = 'appgroup'::text AND NOT (device_collection.device_collection_id IN ( SELECT device_collection_hier.device_collection_id
-                   FROM device_collection_hier))
-        UNION ALL
-         SELECT x.role_level + 1 AS role_level,
-            dch.device_collection_id AS role_id,
-            dch.parent_device_collection_id AS parent_role_id,
-            x.root_role_id,
-            x.root_role_name,
-            dc.device_collection_name AS role_name,
-            (((x.role_path || '/'::text) || dc.device_collection_name::text))::character varying(255) AS role_path,
-                CASE
-                    WHEN lchk.parent_device_collection_id IS NULL THEN 'Y'::text
-                    ELSE 'N'::text
-                END AS role_is_leaf,
-            dch.parent_device_collection_id || x.array_path AS array_path,
-            dch.parent_device_collection_id = ANY (x.array_path) AS cycle
-           FROM var_recurse x
-             JOIN device_collection_hier dch ON x.role_id = dch.parent_device_collection_id
-             JOIN device_collection dc ON dch.device_collection_id = dc.device_collection_id
-             LEFT JOIN device_collection_hier lchk ON dch.device_collection_id = lchk.parent_device_collection_id
-          WHERE NOT x.cycle
-        )
+	 SELECT 0 AS role_level,
+	    device_collection.device_collection_id AS role_id,
+	    NULL::integer AS parent_role_id,
+	    device_collection.device_collection_id AS root_role_id,
+	    device_collection.device_collection_name AS root_role_name,
+	    device_collection.device_collection_name AS role_name,
+	    '/'::text || device_collection.device_collection_name::text AS role_path,
+	    'N'::text AS role_is_leaf,
+	    ARRAY[device_collection.device_collection_id] AS array_path,
+	    false AS cycle
+	   FROM device_collection
+	  WHERE device_collection.device_collection_type::text = 'appgroup'::text AND NOT (device_collection.device_collection_id IN ( SELECT device_collection_hier.device_collection_id
+		   FROM device_collection_hier))
+	UNION ALL
+	 SELECT x.role_level + 1 AS role_level,
+	    dch.device_collection_id AS role_id,
+	    dch.parent_device_collection_id AS parent_role_id,
+	    x.root_role_id,
+	    x.root_role_name,
+	    dc.device_collection_name AS role_name,
+	    (((x.role_path || '/'::text) || dc.device_collection_name::text))::character varying(255) AS role_path,
+		CASE
+		    WHEN lchk.parent_device_collection_id IS NULL THEN 'Y'::text
+		    ELSE 'N'::text
+		END AS role_is_leaf,
+	    dch.parent_device_collection_id || x.array_path AS array_path,
+	    dch.parent_device_collection_id = ANY (x.array_path) AS cycle
+	   FROM var_recurse x
+	     JOIN device_collection_hier dch ON x.role_id = dch.parent_device_collection_id
+	     JOIN device_collection dc ON dch.device_collection_id = dc.device_collection_id
+	     LEFT JOIN device_collection_hier lchk ON dch.device_collection_id = lchk.parent_device_collection_id
+	  WHERE NOT x.cycle
+	)
  SELECT DISTINCT var_recurse.role_level,
     var_recurse.role_id,
     var_recurse.parent_role_id,
@@ -7779,26 +7785,26 @@ CREATE VIEW v_acct_coll_prop_expanded AS
     v_property.property_value_sw_package_id,
     v_property.property_value_token_col_id,
     v_property.property_rank,
-        CASE val_property.is_multivalue
-            WHEN 'N'::bpchar THEN false
-            WHEN 'Y'::bpchar THEN true
-            ELSE NULL::boolean
-        END AS is_multivalue,
-        CASE ac.account_collection_type
-            WHEN 'per-user'::text THEN 0
-            ELSE
-            CASE v_acct_coll_expanded_detail.assign_method
-                WHEN 'DirectAccountCollectionAssignment'::text THEN 10
-                WHEN 'DirectDepartmentAssignment'::text THEN 200
-                WHEN 'DepartmentAssignedToAccountCollection'::text THEN 300 + v_acct_coll_expanded_detail.dept_level + v_acct_coll_expanded_detail.acct_coll_level
-                WHEN 'AccountAssignedToChildDepartment'::text THEN 400 + v_acct_coll_expanded_detail.dept_level
-                WHEN 'AccountAssignedToChildAccountCollection'::text THEN 500 + v_acct_coll_expanded_detail.acct_coll_level
-                WHEN 'DepartmentAssignedToChildAccountCollection'::text THEN 600 + v_acct_coll_expanded_detail.dept_level + v_acct_coll_expanded_detail.acct_coll_level
-                WHEN 'ChildDepartmentAssignedToAccountCollection'::text THEN 700 + v_acct_coll_expanded_detail.dept_level + v_acct_coll_expanded_detail.acct_coll_level
-                WHEN 'ChildDepartmentAssignedToChildAccountCollection'::text THEN 800 + v_acct_coll_expanded_detail.dept_level + v_acct_coll_expanded_detail.acct_coll_level
-                ELSE 999
-            END
-        END AS assign_rank
+	CASE val_property.is_multivalue
+	    WHEN 'N'::bpchar THEN false
+	    WHEN 'Y'::bpchar THEN true
+	    ELSE NULL::boolean
+	END AS is_multivalue,
+	CASE ac.account_collection_type
+	    WHEN 'per-user'::text THEN 0
+	    ELSE
+	    CASE v_acct_coll_expanded_detail.assign_method
+		WHEN 'DirectAccountCollectionAssignment'::text THEN 10
+		WHEN 'DirectDepartmentAssignment'::text THEN 200
+		WHEN 'DepartmentAssignedToAccountCollection'::text THEN 300 + v_acct_coll_expanded_detail.dept_level + v_acct_coll_expanded_detail.acct_coll_level
+		WHEN 'AccountAssignedToChildDepartment'::text THEN 400 + v_acct_coll_expanded_detail.dept_level
+		WHEN 'AccountAssignedToChildAccountCollection'::text THEN 500 + v_acct_coll_expanded_detail.acct_coll_level
+		WHEN 'DepartmentAssignedToChildAccountCollection'::text THEN 600 + v_acct_coll_expanded_detail.dept_level + v_acct_coll_expanded_detail.acct_coll_level
+		WHEN 'ChildDepartmentAssignedToAccountCollection'::text THEN 700 + v_acct_coll_expanded_detail.dept_level + v_acct_coll_expanded_detail.acct_coll_level
+		WHEN 'ChildDepartmentAssignedToChildAccountCollection'::text THEN 800 + v_acct_coll_expanded_detail.dept_level + v_acct_coll_expanded_detail.acct_coll_level
+		ELSE 999
+	    END
+	END AS assign_rank
    FROM v_acct_coll_expanded_detail
      JOIN account_collection ac USING (account_collection_id)
      JOIN v_property USING (account_collection_id)
@@ -7909,10 +7915,10 @@ CREATE VIEW v_corp_family_account AS
     account.data_upd_date
    FROM account
   WHERE (account.account_realm_id IN ( SELECT account_realm_company.account_realm_id
-           FROM account_realm_company
-          WHERE (account_realm_company.company_id IN ( SELECT property.property_value_company_id
-                   FROM property
-                  WHERE property.property_name::text = '_rootcompanyid'::text AND property.property_type::text = 'Defaults'::text))));
+	   FROM account_realm_company
+	  WHERE (account_realm_company.company_id IN ( SELECT property.property_value_company_id
+		   FROM property
+		  WHERE property.property_name::text = '_rootcompanyid'::text AND property.property_type::text = 'Defaults'::text))));
 
 delete from __recreate where type = 'view' and object = 'v_corp_family_account';
 -- DONE DEALING WITH TABLE v_corp_family_account [408381]
@@ -8406,7 +8412,7 @@ alter table netblock_collection_netblock
 		pk_netblock_collection_netbloc;
 
 ALTER TABLE NETWORK_INTERFACE_NETBLOCK
-        ADD CONSTRAINT FK_NETINT_NB_NBLK_ID 
+	ADD CONSTRAINT FK_NETINT_NB_NBLK_ID 
 	FOREIGN KEY (NETWORK_INTERFACE_ID) 
 	REFERENCES NETWORK_INTERFACE (NETWORK_INTERFACE_ID)  
 	DEFERRABLE  INITIALLY IMMEDIATE;
