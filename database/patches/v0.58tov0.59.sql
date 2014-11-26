@@ -134,7 +134,7 @@ DO $$
 		WHERE property_name = '_root_account_realm_id'
 		AND property_type  = 'Defaults';
 
-		IF x IS NOT NULL THEN
+		IF x IS NULL THEN
 			INSERT INTO property (
 				property_name, property_type,
 				account_realm_id
@@ -1286,6 +1286,7 @@ DROP TABLE IF EXISTS audit.svc_environment_coll_svc_env_v58;
 -- Save grants for later reapplication
 SELECT schema_support.save_grants_for_replay('jazzhands', 'device', 'device');
 
+
 -- FOREIGN KEYS FROM
 -- Skipping this FK since table been dropped
 ALTER TABLE physical_port DROP CONSTRAINT IF EXISTS fk_phys_port_dev_id;
@@ -1327,6 +1328,7 @@ ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_ref_parent_devi
 ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_reference_val_devi;
 ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ak_device_rack_location_id;
 ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ak_device_chassis_location_id;
+SELECT schema_support.save_constraint_for_replay('jazzhands', 'device');
 ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS pk_device;
 -- INDEXES
 DROP INDEX IF EXISTS "jazzhands"."idx_dev_ismonitored";
@@ -1581,7 +1583,8 @@ ALTER TABLE device
 -- PRIMARY AND ALTERNATE KEYS
 ALTER TABLE device ADD CONSTRAINT pk_device PRIMARY KEY (device_id);
 ALTER TABLE device ADD CONSTRAINT ak_device_chassis_location_id UNIQUE (chassis_location_id);
-ALTER TABLE device ADD CONSTRAINT ak_device_rack_location_id UNIQUE (rack_location_id);
+-- Temporarily disabled.  *sigh*
+-- ALTER TABLE device ADD CONSTRAINT ak_device_rack_location_id UNIQUE (rack_location_id);
 
 -- Table/Column Comments
 -- INDEXES
@@ -5600,9 +5603,6 @@ $function$
 --------------------------------------------------------------------
 -- DEALING WITH proc person_manip.add_account_non_person -> add_account_non_person 
 
--- Save grants for later reapplication
-SELECT schema_support.save_grants_for_replay('person_manip', 'add_account_non_person', 'add_account_non_person');
-
 -- DROP OLD FUNCTION
 -- consider old oid 396774
 DROP FUNCTION IF EXISTS person_manip.add_account_non_person(_company_id integer, _account_status character varying, _login character varying, _description character varying);
@@ -9132,6 +9132,19 @@ ALTER TABLE sw_package_release
 	ADD CONSTRAINT fk_sw_pkg_rel_ref_vsvcenv
  	FOREIGN KEY (service_environment_id) REFERENCES service_environment(service_environment_id);
 
+DROP TRIGGER IF EXISTS trigger_check_device_collection_hier_loop ON device_collection_hier;
+DROP TRIGGER IF EXISTS trigger_check_svcenv_collection_hier_loop ON service_environment_coll_hier;
+DROP TRIGGER IF EXISTS trigger_check_token_collection_hier_loop ON token_collection_hier;
+DROP TRIGGER IF EXISTS trigger_del_v_corp_family_account ON v_corp_family_account;
+DROP TRIGGER IF EXISTS trigger_dns_record_cname_checker ON dns_record;
+DROP TRIGGER IF EXISTS trigger_ins_v_corp_family_account ON v_corp_family_account;
+DROP TRIGGER IF EXISTS trigger_net_int_nb_single_address ON network_interface;
+DROP TRIGGER IF EXISTS trigger_net_int_netblock_to_nbn_compat_after ON network_interface;
+DROP TRIGGER IF EXISTS trigger_net_int_netblock_to_nbn_compat_before ON network_interface;
+DROP TRIGGER IF EXISTS trigger_netblock_single_address_ni ON netblock;
+DROP TRIGGER IF EXISTS trigger_network_interface_drop_tt_netint_ni ON network_interface;
+DROP TRIGGER IF EXISTS trigger_upd_v_corp_family_account ON v_corp_family_account;
+
 CREATE TRIGGER trigger_check_device_collection_hier_loop AFTER INSERT OR UPDATE ON device_collection_hier FOR EACH ROW EXECUTE PROCEDURE check_device_colllection_hier_loop();
 CREATE TRIGGER trigger_check_svcenv_collection_hier_loop AFTER INSERT OR UPDATE ON service_environment_coll_hier FOR EACH ROW EXECUTE PROCEDURE check_svcenv_colllection_hier_loop();
 CREATE TRIGGER trigger_check_token_collection_hier_loop AFTER INSERT OR UPDATE ON token_collection_hier FOR EACH ROW EXECUTE PROCEDURE check_token_colllection_hier_loop();
@@ -9145,12 +9158,33 @@ CREATE TRIGGER trigger_netblock_single_address_ni BEFORE UPDATE OF is_single_add
 CREATE TRIGGER trigger_network_interface_drop_tt_netint_ni AFTER INSERT OR DELETE OR UPDATE ON network_interface FOR EACH STATEMENT EXECUTE PROCEDURE network_interface_drop_tt();
 CREATE TRIGGER trigger_upd_v_corp_family_account INSTEAD OF UPDATE ON v_corp_family_account FOR EACH ROW EXECUTE PROCEDURE upd_v_corp_family_account();
 
+-- just in case they were here since they were redone above. 
+delete from __recreate where 
+	ddl ~ 'trigger_check_device_collection_hier_loop' OR
+	ddl ~ 'trigger_check_svcenv_collection_hier_loop' OR
+	ddl ~ 'trigger_check_token_collection_hier_loop' OR
+	ddl ~ 'trigger_del_v_corp_family_account' OR
+	ddl ~ 'trigger_dns_record_cname_checker' OR
+	ddl ~ 'trigger_ins_v_corp_family_account' OR
+	ddl ~ 'trigger_net_int_nb_single_address' OR
+	ddl ~ 'trigger_net_int_netblock_to_nbn_compat_after' OR
+	ddl ~ 'trigger_net_int_netblock_to_nbn_compat_before' OR
+	ddl ~ 'trigger_netblock_single_address_ni' OR
+	ddl ~ 'trigger_network_interface_drop_tt_netint_ni' OR
+	ddl ~ 'trigger_upd_v_corp_family_account';
+
 
 update __regrants set
 	regrant = regexp_replace(regrant, 'allocate_netblock\([^\)]+\)',
 'allocate_netblock(parent_netblock_id integer, netmask_bits integer, address_type text, can_subnet boolean, allocation_method text, rnd_masklen_threshold integer, rnd_max_count integer, ip_address inet, description character varying, netblock_status character varying)')
 where object = 'allocate_netblock'
 and schema = 'netblock_manip';
+
+update __regrants set
+	regrant = regexp_replace(regrant, 'add_person\([^\)]+\)',
+'add_person(__person_id integer, first_name character varying, middle_name character varying, last_name character varying, name_suffix character varying, gender character varying, preferred_last_name character varying, preferred_first_name character varying, birth_date date, _company_id integer, external_hr_id character varying, person_company_status character varying, is_manager character varying, is_exempt character varying, is_full_time character varying, employee_id character varying, hire_date date, termination_date date, person_company_relation character varying, job_title character varying, department character varying, login character varying, OUT _person_id integer, OUT _account_collection_id integer, OUT _account_id integer)')
+where object = 'add_person'
+and schema = 'person_manip';
 
 drop index if exists idx_netblock_host_ip_address;
 create index idx_netblock_host_ip_address  ON netblock
