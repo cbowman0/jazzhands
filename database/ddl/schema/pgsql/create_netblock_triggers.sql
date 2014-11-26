@@ -229,10 +229,14 @@ LANGUAGE plpgsql SECURITY DEFINER;
 DROP TRIGGER IF EXISTS trigger_manipulate_netblock_parentage ON netblock;
 DROP TRIGGER IF EXISTS tb_manipulate_netblock_parentage ON netblock;
 
+/* XXX if parent_netblock_id is in the list, then it causes the tests to fail.
+ * this should probably be understood.
+ */
 CREATE TRIGGER tb_manipulate_netblock_parentage
-	BEFORE INSERT OR UPDATE OF 
-		netblock_id, ip_address, netblock_type, is_single_address,
-		can_subnet, parent_netblock_id, ip_universe_id
+	BEFORE INSERT OR UPDATE
+	OF
+		ip_address, netblock_type, ip_universe_id,
+		netblock_id, can_subnet, is_single_address
 	ON netblock
 	FOR EACH ROW EXECUTE PROCEDURE manipulate_netblock_parentage_before();
 
@@ -606,11 +610,13 @@ LANGUAGE plpgsql SECURITY DEFINER;
  * other triggers
  */
 
+
 DROP TRIGGER IF EXISTS trigger_validate_netblock_parentage ON netblock;
 CREATE CONSTRAINT TRIGGER trigger_validate_netblock_parentage
 	AFTER INSERT OR UPDATE OF 
-		netblock_id, ip_address, netblock_type, is_single_address,
-		can_subnet, parent_netblock_id, ip_universe_id ON netblock
+	netblock_id, ip_address, netblock_type, is_single_address,
+	can_subnet, parent_netblock_id, ip_universe_id 
+	ON netblock
 	DEFERRABLE INITIALLY DEFERRED 
 	FOR EACH ROW EXECUTE PROCEDURE validate_netblock_parentage();
 
