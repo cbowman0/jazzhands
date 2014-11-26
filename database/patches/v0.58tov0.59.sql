@@ -8442,6 +8442,11 @@ update __regrants set
 where object = 'allocate_netblock'
 and schema = 'netblock_manip';
 
+drop index if exists idx_netblock_host_ip_address;
+create index idx_netblock_host_ip_address  ON netblock
+USING btree (host(ip_address));
+
+
 --
 -- stuff that should not be replayed (grants should)
 --
