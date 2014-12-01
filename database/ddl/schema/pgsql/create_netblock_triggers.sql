@@ -34,6 +34,7 @@ DECLARE
 	nbtype				RECORD;
 	v_netblock_id		netblock.netblock_id%TYPE;
 	parent_netblock		RECORD;
+	netmask_bits		integer;
 BEGIN
 	IF NEW.ip_address IS NULL THEN
 		RAISE EXCEPTION 'Column ip_address may not be null'
@@ -61,6 +62,10 @@ BEGIN
 					USING ERRCODE = 'JH105';
 			END IF;
 
+			SELECT masklen(ip_address) INTO netmask_bits FROM
+				netblock WHERE netblock_id = v_netblock_id;
+
+			NEW.ip_address := set_masklen(NEW.ip_address, netmask_bits);
 		END IF;
 	END IF;
 
@@ -522,8 +527,9 @@ BEGIN
 				END IF;
 				IF (masklen(realnew.ip_address) != 
 						masklen(nbrec.ip_address)) THEN
-					RAISE 'Parent netblock % does not have same netmask as single-address child % (% vs %)',
-						parent_nbid, realnew.netblock_id, masklen(ipaddr),
+					RAISE 'Parent netblock % does not have the same netmask as single-address child % (% vs %)',
+						parent_nbid, realnew.netblock_id,
+						masklen(nbrec.ip_address),
 						masklen(realnew.ip_address)
 						USING ERRCODE = 'JH105';
 				END IF;
