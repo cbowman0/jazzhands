@@ -118,10 +118,22 @@ BEGIN
 			AND		netblock_id = NEW.netblock_id;
 
 			IF _tally = 0 THEN
-				INSERT INTO network_interface_netblock
-					(network_interface_id, netblock_id)
-				VALUES
-					(NEW.network_interface_id, NEW.netblock_id);
+				SELECT COUNT(*)
+				INTO _tally
+				FROM	network_interface_netblock
+				WHERE	network_interface_id != NEW.network_interface_id
+				AND		netblock_id = NEW.netblock_id;
+
+				IF _tally != 0  THEN
+					UPDATE network_interface_netblock
+					SET network_interface_id = NEW.network_interface_id
+					WHERE netblock_id = NEW.netblock_id;
+				ELSE
+					INSERT INTO network_interface_netblock
+						(network_interface_id, netblock_id)
+					VALUES
+						(NEW.network_interface_id, NEW.netblock_id);
+				END IF;
 			END IF;
 		END IF;
 	ELSIF TG_OP = 'UPDATE'  THEN
