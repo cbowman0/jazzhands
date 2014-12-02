@@ -9283,4 +9283,4 @@ SELECT schema_support.replay_object_recreates();
 SELECT schema_support.replay_saved_grants();
 
 -- RAISE EXCEPTION 'Not done';
--- SELECT schema_support.end_maintenance();
+SELECT schema_support.end_maintenance();
