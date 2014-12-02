@@ -73,7 +73,8 @@ begin;
 \i tests/pgsql/netblock_regression_test.sql
 -- \i tests/pgsql/netblock_regression_test-RETIRE.sql
 \i tests/pgsql/dns_record_regression_test.sql
-\i tests/pgsql/network_interface_regression_test.sql
+-- will be in a point release
+-- \i tests/pgsql/network_interface_regression_test.sql
 \i tests/pgsql/property_regression_test.sql
 \i tests/pgsql/device_ticket_regression.sql
 \i tests/pgsql/device_power_regression.sql

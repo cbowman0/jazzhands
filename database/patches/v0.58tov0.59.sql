@@ -18,7 +18,7 @@
 
 /*
 	Brute force query that clears out dup netblocks os that a unique
-	connstraint can be put in:
+	construct can be put in:
 
 with foo as (
 select network_interface_id, device_Id, network_interface_name,netblock_id,
@@ -166,6 +166,24 @@ DO $$
 	-- deal with _root_account_realm_id 
 	DECLARE x INTEGER;
 	BEGIN
+		SELECT count(*)
+		INTO x
+		FROM val_property
+		WHERE property_name = '_root_account_realm_id'
+		AND property_type  = 'Defaults';
+
+		IF x = 0 THEN
+			INSERT INTO val_property (
+				property_name, property_type, 
+				description, 
+				is_multivalue, property_data_type, permit_account_realm_id
+			) VALUES (
+				'_root_account_realm_id', 'Defaults', 
+				'define the corporate family account realm',
+				'N', 'none', 'REQUIRED'
+			);
+		END IF;
+
 		SELECT account_realm_id
 		INTO x
 		FROM property
@@ -173,21 +191,29 @@ DO $$
 		AND property_type  = 'Defaults';
 
 		IF x IS NULL THEN
-			INSERT INTO property (
-				property_name, property_type,
-				account_realm_id
-			) VALUES  (
-				'_root_account_realm_id', 'Defaults',
-				(select account_realm_id
-					from account_realm_company
-						where company_id IN (
-							select  property_value_company_id
-						    from  property
-							where  property_name = '_rootcompanyid'
-							and  property_type = 'Defaults'
+			SELECT count(*)
+			INTO x
+			FROM val_property
+			WHERE property_name = '_rootcompanyid'
+			AND property_type  = 'Defaults';
+			
+			IF x > 0 THEN
+				INSERT INTO property (
+					property_name, property_type,
+					account_realm_id
+				) VALUES  (
+					'_root_account_realm_id', 'Defaults',
+					(select account_realm_id
+						from account_realm_company
+							where company_id IN (
+								select  property_value_company_id
+						    	from  property
+								where  property_name = '_rootcompanyid'
+								and  property_type = 'Defaults'
+							)
 						)
-					)
-			);
+				);
+			END IF;
 			-- not making _rootcompanyid go away, but should
 		END IF;
 	END;
@@ -196,6 +222,9 @@ $$;
 /*
  * populate network_interface_netblock before putting triggers in 
  */
+
+/*  This is not actually getting into 0.59 but will likely be in a point
+	release.
 
 insert into network_interface_netblock
 	(network_interface_id, netblock_id)
@@ -207,6 +236,7 @@ from network_interface where
 		)
 and netblock_id is not NULL
 ;
+ */
 
 CREATE SEQUENCE service_environment_service_environment_id_seq;
 CREATE SEQUENCE property_collection_property_collection_id_seq;
@@ -981,7 +1011,7 @@ $function$
 
 
 -- XXX - may need to include trigger function
-CREATE TRIGGER trigger_network_interface_drop_tt_netint_nb AFTER INSERT OR DELETE OR UPDATE ON network_interface_netblock FOR EACH STATEMENT EXECUTE PROCEDURE network_interface_drop_tt();
+--    CREATE TRIGGER trigger_network_interface_drop_tt_netint_nb AFTER INSERT OR DELETE OR UPDATE ON network_interface_netblock FOR EACH STATEMENT EXECUTE PROCEDURE network_interface_drop_tt();
 
 -- DONE WITH proc network_interface_drop_tt -> network_interface_drop_tt 
 --------------------------------------------------------------------
@@ -1080,7 +1110,7 @@ END;
 $function$
 ;
 
-CREATE TRIGGER trigger_network_interface_netblock_to_ni AFTER INSERT OR DELETE OR UPDATE ON network_interface_netblock FOR EACH ROW EXECUTE PROCEDURE network_interface_netblock_to_ni();
+--    CREATE TRIGGER trigger_network_interface_netblock_to_ni AFTER INSERT OR DELETE OR UPDATE ON network_interface_netblock FOR EACH ROW EXECUTE PROCEDURE network_interface_netblock_to_ni();
 
 -- DONE WITH proc network_interface_netblock_to_ni -> network_interface_netblock_to_ni 
 --------------------------------------------------------------------
@@ -4619,12 +4649,8 @@ $function$
 
 -- DROP OLD FUNCTION (in case type changed)
 -- consider NEW oid 408547
-CREATE OR REPLACE FUNCTION jazzhands.net_int_netblock_to_nbn_compat_after()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO jazzhands
-AS $function$
+CREATE OR REPLACE FUNCTION net_int_netblock_to_nbn_compat_after() 
+RETURNS TRIGGER AS $$
 DECLARE
 	_tally	INTEGER;
 BEGIN
@@ -4670,10 +4696,22 @@ BEGIN
 			AND		netblock_id = NEW.netblock_id;
 
 			IF _tally = 0 THEN
-				INSERT INTO network_interface_netblock
-					(network_interface_id, netblock_id)
-				VALUES
-					(NEW.network_interface_id, NEW.netblock_id);
+				SELECT COUNT(*)
+				INTO _tally
+				FROM	network_interface_netblock
+				WHERE	network_interface_id != NEW.network_interface_id
+				AND		netblock_id = NEW.netblock_id;
+
+				IF _tally != 0  THEN
+					UPDATE network_interface_netblock
+					SET network_interface_id = NEW.network_interface_id
+					WHERE netblock_id = NEW.netblock_id;
+				ELSE
+					INSERT INTO network_interface_netblock
+						(network_interface_id, netblock_id)
+					VALUES
+						(NEW.network_interface_id, NEW.netblock_id);
+				END IF;
 			END IF;
 		END IF;
 	ELSIF TG_OP = 'UPDATE'  THEN
@@ -4715,8 +4753,9 @@ BEGIN
 	END IF;
 	RETURN NEW;
 END;
-$function$
-;
+$$ 
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
 
 -- DONE WITH proc net_int_netblock_to_nbn_compat_after -> net_int_netblock_to_nbn_compat_after 
 --------------------------------------------------------------------
@@ -7564,16 +7603,14 @@ SELECT schema_support.save_grants_for_replay('jazzhands', 'validate_netblock', '
 -- DROP OLD FUNCTION (in case type changed)
 -- consider old oid 485785
 -- consider NEW oid 408498
-CREATE OR REPLACE FUNCTION jazzhands.validate_netblock()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO jazzhands
-AS $function$
+
+CREATE OR REPLACE FUNCTION validate_netblock()
+RETURNS TRIGGER AS $$
 DECLARE
 	nbtype				RECORD;
 	v_netblock_id		netblock.netblock_id%TYPE;
 	parent_netblock		RECORD;
+	netmask_bits		integer;
 BEGIN
 	IF NEW.ip_address IS NULL THEN
 		RAISE EXCEPTION 'Column ip_address may not be null'
@@ -7601,6 +7638,10 @@ BEGIN
 					USING ERRCODE = 'JH105';
 			END IF;
 
+			SELECT masklen(ip_address) INTO netmask_bits FROM
+				netblock WHERE netblock_id = v_netblock_id;
+
+			NEW.ip_address := set_masklen(NEW.ip_address, netmask_bits);
 		END IF;
 	END IF;
 
@@ -7659,8 +7700,10 @@ BEGIN
 
 	 RETURN NEW;
 END;
-$function$
-;
+$$
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
+
 
 -- DONE WITH proc validate_netblock -> validate_netblock 
 --------------------------------------------------------------------
@@ -8004,12 +8047,9 @@ SELECT schema_support.save_grants_for_replay('jazzhands', 'validate_netblock_par
 -- DROP OLD FUNCTION
 -- consider old oid 504313
 -- consider NEW oid 408505
-CREATE OR REPLACE FUNCTION jazzhands.validate_netblock_parentage()
- RETURNS trigger
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO jazzhands
-AS $function$
+
+CREATE OR REPLACE FUNCTION validate_netblock_parentage()
+RETURNS TRIGGER AS $$
 DECLARE
 	nbrec			record;
 	realnew			record;
@@ -8192,8 +8232,9 @@ BEGIN
 				END IF;
 				IF (masklen(realnew.ip_address) != 
 						masklen(nbrec.ip_address)) THEN
-					RAISE 'Parent netblock % does not have same netmask as single-address child % (% vs %)',
-						parent_nbid, realnew.netblock_id, masklen(ipaddr),
+					RAISE 'Parent netblock % does not have the same netmask as single-address child % (% vs %)',
+						parent_nbid, realnew.netblock_id,
+						masklen(nbrec.ip_address),
 						masklen(realnew.ip_address)
 						USING ERRCODE = 'JH105';
 				END IF;
@@ -8270,8 +8311,10 @@ BEGIN
 
 	RETURN NULL;
 END;
-$function$
-;
+$$
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
+
 
 -- DONE WITH proc validate_netblock_parentage -> validate_netblock_parentage 
 --------------------------------------------------------------------
@@ -9190,10 +9233,10 @@ CREATE TRIGGER trigger_del_v_corp_family_account INSTEAD OF DELETE ON v_corp_fam
 CREATE TRIGGER trigger_dns_record_cname_checker BEFORE INSERT OR UPDATE OF dns_type ON dns_record FOR EACH ROW EXECUTE PROCEDURE dns_record_cname_checker();
 CREATE TRIGGER trigger_ins_v_corp_family_account INSTEAD OF INSERT ON v_corp_family_account FOR EACH ROW EXECUTE PROCEDURE ins_v_corp_family_account();
 CREATE TRIGGER trigger_net_int_nb_single_address BEFORE INSERT OR UPDATE OF netblock_id ON network_interface FOR EACH ROW EXECUTE PROCEDURE net_int_nb_single_address();
-CREATE TRIGGER trigger_net_int_netblock_to_nbn_compat_after AFTER INSERT OR DELETE OR UPDATE OF network_interface_id, netblock_id ON network_interface FOR EACH ROW EXECUTE PROCEDURE net_int_netblock_to_nbn_compat_after();
-CREATE TRIGGER trigger_net_int_netblock_to_nbn_compat_before BEFORE DELETE ON network_interface FOR EACH ROW EXECUTE PROCEDURE net_int_netblock_to_nbn_compat_before();
+--   CREATE TRIGGER trigger_net_int_netblock_to_nbn_compat_after AFTER INSERT OR DELETE OR UPDATE OF network_interface_id, netblock_id ON network_interface FOR EACH ROW EXECUTE PROCEDURE net_int_netblock_to_nbn_compat_after();
+--   CREATE TRIGGER trigger_net_int_netblock_to_nbn_compat_before BEFORE DELETE ON network_interface FOR EACH ROW EXECUTE PROCEDURE net_int_netblock_to_nbn_compat_before();
 CREATE TRIGGER trigger_netblock_single_address_ni BEFORE UPDATE OF is_single_address, netblock_type ON netblock FOR EACH ROW EXECUTE PROCEDURE netblock_single_address_ni();
-CREATE TRIGGER trigger_network_interface_drop_tt_netint_ni AFTER INSERT OR DELETE OR UPDATE ON network_interface FOR EACH STATEMENT EXECUTE PROCEDURE network_interface_drop_tt();
+--    CREATE TRIGGER trigger_network_interface_drop_tt_netint_ni AFTER INSERT OR DELETE OR UPDATE ON network_interface FOR EACH STATEMENT EXECUTE PROCEDURE network_interface_drop_tt();
 CREATE TRIGGER trigger_upd_v_corp_family_account INSTEAD OF UPDATE ON v_corp_family_account FOR EACH ROW EXECUTE PROCEDURE upd_v_corp_family_account();
 
 -- just in case they were here since they were redone above. 
