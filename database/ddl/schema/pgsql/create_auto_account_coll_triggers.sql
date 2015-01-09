@@ -15,6 +15,39 @@
  * limitations under the License.
  */
 
+/*************************************************************************
+
+Here is how these work:
+
+automated_ac()
+	on account, used for RealmName_Type, most practically RealmName_person
+	that is, omniscientcompany_person
+
+automated_ac_on_person_company()
+	on person_company, used for RealmName_ShortName_thing, that is:
+
+		OmniscientRealm_omniscientcompany_full_fime
+		OmniscientRealm_omniscientcompany_management
+		OmniscientRealm_omniscientcompany_exempt
+
+		Y means they're in, N means they're not
+
+automated_ac_on_person()
+	on person, manipulates gender related class of the form
+		RealmName_ShortName_thing that is
+
+		OmniscientRealm_omniscientcompany_male
+		OmniscientRealm_omniscientcompany_female
+
+		also need to incorporate unknown
+
+automated_realm_site_ac_pl()
+	on person_location.  RealmName_SITE, i.e.  Omniscient_IAD1
+
+	associates  a person's primary account in the realm with s site code
+
+*************************************************************************/
+
 CREATE OR REPLACE FUNCTION automated_ac() 
 RETURNS TRIGGER AS $_$
 DECLARE
@@ -142,6 +175,8 @@ CREATE TRIGGER trig_automated_ac
 	FOR EACH ROW 
 	EXECUTE PROCEDURE automated_ac();
 
+--------------------------------------------------------------------------
+
 CREATE OR REPLACE FUNCTION automated_ac_on_person_company() 
 RETURNS TRIGGER AS $_$
 DECLARE
@@ -255,6 +290,8 @@ CREATE TRIGGER trigger_automated_ac_on_person_company
 	FOR EACH ROW EXECUTE PROCEDURE 
 	automated_ac_on_person_company();
 
+--------------------------------------------------------------------------
+
 CREATE OR REPLACE FUNCTION automated_ac_on_person() 
 RETURNS TRIGGER AS $_$
 DECLARE
@@ -350,6 +387,8 @@ CREATE TRIGGER trigger_automated_ac_on_person
 	AFTER UPDATE ON person 
 	FOR EACH ROW 
 	EXECUTE PROCEDURE automated_ac_on_person();
+
+--------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION automated_realm_site_ac_pl() 
 RETURNS TRIGGER AS $_$
