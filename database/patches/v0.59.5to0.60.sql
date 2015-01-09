@@ -116,11 +116,9 @@
 	REFERENCES ACCOUNT_REALM_COMPANY (ACCOUNT_REALM_ID, COMPANY_ID)  
 	DEFERRABLE  INITIALLY IMMEDIATE;
 
-
 -- kill IntegrityPackage
 DROP FUNCTION IF EXISTS "IntegrityPackage"."InitNestLevel"();
 DROP FUNCTION IF EXISTS "IntegrityPackage"."NextNestLevel"();
 DROP FUNCTION IF EXISTS "IntegrityPackage"."PreviousNestLevel"();
 DROP FUNCTION IF EXISTS IntegrityPackage"."GetNestLevel"();
 DROP SCHEMA IF EXISTS "IntegrityPackage";
-
