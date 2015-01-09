@@ -35,6 +35,7 @@ SELECT schema_support.build_audit_tables('audit', 'jazzhands');
 \cd ../..
 
 \i ddl/schema/pgsql/create_triggers.sql
+\i ddl/schema/pgsql/create_collection_loop_triggers.sql
 \i ddl/schema/pgsql/create_account_triggers.sql
 \i ddl/schema/pgsql/create_property_triggers.sql
 \i ddl/schema/pgsql/create_netblock_triggers.sql
