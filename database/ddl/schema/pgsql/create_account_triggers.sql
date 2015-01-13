@@ -29,41 +29,35 @@ looking at what automated_ac does.
 
  */
 
---- start of per-user manipulations
--- manage per-user account collection types.  Arguably we want to extend
+--- start of per-account manipulations
+-- manage per-account account collection types.  Arguably we want to extend
 -- account collections to be per account_realm, but I was not ready to do this at
 -- implementaion time.
 -- XXX need automated test case
 
--- before an account is deleted, remove the per-user account collections, if appropriate
--- this runs on DELETE only
-CREATE OR REPLACE FUNCTION delete_peruser_account_collection() RETURNS TRIGGER AS $$
+-- before an account is deleted, remove the per-account account collections, 
+-- if appropriate.
+--
+-- NOTE: this runs on DELETE only
+CREATE OR REPLACE FUNCTION delete_peraccount_account_collection() 
+RETURNS TRIGGER AS $$
 DECLARE
-	def_acct_rlm	account_realm.account_realm_id%TYPE;
 	acid			account_collection.account_collection_id%TYPE;
 BEGIN
 	IF TG_OP = 'DELETE' THEN
-		SELECT	account_realm_id
-		  INTO	def_acct_rlm
-		  FROM	property
-		 WHERE	property_name = '_root_account_realm_id'
-		    and	property_type = 'Defaults';
+		SELECT	account_collection_id
+		  INTO	acid
+		  FROM	account_collection ac
+				INNER JOIN account_collection_account aca
+					USING (account_collection_id)
+		 WHERE	aca.account_id = OLD.account_Id
+		   AND	ac.account_collection_type = 'per-account';
 
-		IF def_acct_rlm is not NULL AND OLD.account_realm_id = def_acct_rlm THEN
-				SELECT	account_collection_id
-				  INTO	acid
-				  FROM	account_collection ac
-						INNER JOIN account_collection_account aca
-							USING (account_collection_id)
-				 WHERE	aca.account_id = OLD.account_Id
-				   AND	ac.account_collection_type = 'per-user';
+		 DELETE from account_collection_account
+		  where account_collection_id = acid;
 
-				 DELETE from account_collection_account
-				  where account_collection_id = acid;
-
-				 DELETE from account_collection
-				  where account_collection_id = acid;
-		END IF;
+		 DELETE from account_collection
+		  where account_collection_id = acid;
 	END IF;
 	RETURN OLD;
 END;
@@ -71,64 +65,47 @@ $$
 SET search_path=jazzhands
 LANGUAGE plpgsql SECURITY DEFINER;
 
-DROP TRIGGER IF EXISTS trigger_delete_peruser_account_collection ON Account;
+DROP TRIGGER IF EXISTS /rigger_delete_peraccount_account_collection ON Account;
 CREATE TRIGGER trigger_delete_peruser_account_collection BEFORE DELETE
-	ON Account FOR EACH ROW EXECUTE PROCEDURE delete_peruser_account_collection();
+	ON account 
+	FOR EACH ROW 
+	EXECUTE PROCEDURE delete_peruser_account_collection();
 
--- on inserts/updates ensure the per-user account is updated properly
-CREATE OR REPLACE FUNCTION update_peruser_account_collection() RETURNS TRIGGER AS $$
+-- on inserts/updates ensure the per-account account is updated properly
+CREATE OR REPLACE FUNCTION update_peruser_account_collection() 
+RETURNS TRIGGER AS $$
 DECLARE
 	def_acct_rlm	account_realm.account_realm_id%TYPE;
 	acid			account_collection.account_collection_id%TYPE;
+DECALRE
+	newname	TEXT;
 BEGIN
-	SELECT	account_realm_id
-	  INTO	def_acct_rlm
-	  FROM	property
-	 WHERE	property_name = '_root_account_realm_id'
-	    and	property_type = 'Defaults';
-
-	IF def_acct_rlm is not NULL AND NEW.account_realm_id = def_acct_rlm THEN
-		if TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND OLD.account_realm_id != NEW.account_realm_id) THEN
-			insert into account_collection 
-				(account_collection_name, account_collection_type)
-			values
-				(NEW.login, 'per-user')
-			RETURNING account_collection_id INTO acid;
-			insert into account_collection_account 
-				(account_collection_id, account_id)
-			VALUES
-				(acid, NEW.account_id);
-		END IF;
-
-		IF TG_OP = 'UPDATE' AND OLD.login != NEW.login THEN
-			IF OLD.account_realm_id = NEW.account_realm_id THEN
-				update	account_collection
-				    set	account_collection_name = NEW.login
-				  where	account_collection_type = 'per-user'
-				    and	account_collection_name = OLD.login;
-			END IF;
-		END IF;
+	newname = concat(NEW.login, '_', NEW.account_id);
+	if TG_OP = 'INSERT' THEN
+		insert into account_collection 
+			(account_collection_name, account_collection_type)
+		values
+			(newname, 'per-account')
+		RETURNING account_collection_id INTO acid;
+		insert into account_collection_account 
+			(account_collection_id, account_id)
+		VALUES
+			(acid, NEW.account_id);
 	END IF;
 
-	-- remove the per-user entry if the new account realm is not the default
-	IF TG_OP = 'UPDATE'  THEN
-		IF def_acct_rlm is not NULL AND OLD.account_realm_id = def_acct_rlm AND NEW.account_realm_id != OLD.account_realm_id THEN
-		    SELECT  account_collection_id
-		INTO    acid
-		FROM    account_collection ac
-			INNER JOIN account_collection_account aca
-					USING (account_collection_id)
-		WHERE  aca.account_id = NEW.account_Id
-		AND     ac.account_collection_type = 'per-user';
-
-			DELETE from account_collection_account
-				WHERE account_collection_id = acid;
-
-			DELETE from account_collection
-				WHERE account_collection_id = acid;
-		END IF;
+	IF TG_OP = 'UPDATE' AND OLD.login != NEW.login THEN
+		UPDATE	account_collection
+		    set	account_collection_name = newname
+		  where	account_collection_type = 'per-account'
+		    and	account_collection_id = (
+				SELECT	account_collection_id
+		  		FROM	account_collection ac
+						INNER JOIN account_collection_account aca
+							USING (account_collection_id)
+		 		WHERE	aca.account_id = OLD.account_Id
+		   		AND	ac.account_collection_type = 'per-account';
+			)
 	END IF;
-	RETURN NEW;
 END;
 $$ 
 SET search_path=jazzhands
@@ -138,7 +115,7 @@ DROP TRIGGER IF EXISTS trigger_update_peruser_account_collection ON Property;
 CREATE TRIGGER trigger_update_peruser_account_collection AFTER INSERT OR UPDATE
 	ON Account FOR EACH ROW EXECUTE PROCEDURE update_peruser_account_collection();
 
---- end of per-user manipulations
+--- end of per-account manipulations
 
 CREATE OR REPLACE FUNCTION update_account_type_account_collection() RETURNS TRIGGER AS $$
 DECLARE

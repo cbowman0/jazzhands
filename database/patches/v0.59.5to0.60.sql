@@ -116,17 +116,38 @@
 	REFERENCES ACCOUNT_REALM_COMPANY (ACCOUNT_REALM_ID, COMPANY_ID)  
 	DEFERRABLE  INITIALLY IMMEDIATE;
 
-<<<<<<< HEAD
-=======
-
->>>>>>> abac890... kill IntegrityPackage, which is not in use and leftover from oracle
 -- kill IntegrityPackage
 DROP FUNCTION IF EXISTS "IntegrityPackage"."InitNestLevel"();
 DROP FUNCTION IF EXISTS "IntegrityPackage"."NextNestLevel"();
 DROP FUNCTION IF EXISTS "IntegrityPackage"."PreviousNestLevel"();
 DROP FUNCTION IF EXISTS IntegrityPackage"."GetNestLevel"();
 DROP SCHEMA IF EXISTS "IntegrityPackage";
-<<<<<<< HEAD
-=======
 
->>>>>>> abac890... kill IntegrityPackage, which is not in use and leftover from oracle
+-- migrate per-user to per-account and give a genericy name 
+alter table account_collection drop constraint "fk_acctcol_usrcoltyp";
+
+WITH merge AS (
+	SELECT  account_collection_id, account_id, login,
+		account_collection_name
+	FROM    account_collection
+		INNER JOIN account_collection_account
+			USING (account_collection_id)
+		INNER JOIN account USING (account_id)
+	WHERE   account_collection_type = 'per-account'
+)  UPDATE account_collection ac
+	SET account_collection_name =
+		CONCAT(m.login, '_', m.account_id),
+	account_collection_type = 'per-account'
+FROM merge m
+WHERE m.account_collection_id = ac.account_collection_Id;
+
+
+update account_collection set account_collection_type = 'per-account'
+where account_collection_type = 'per-user';
+
+ALTER TABLE ACCOUNT_COLLECTION
+	ADD CONSTRAINT FK_ACCTCOL_USRCOLTYP 
+	FOREIGN KEY (ACCOUNT_COLLECTION_TYPE) 
+	REFERENCES VAL_ACCOUNT_COLLECTION_TYPE (ACCOUNT_COLLECTION_TYPE)  ;
+
+
