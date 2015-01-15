@@ -150,4 +150,25 @@ ALTER TABLE ACCOUNT_COLLECTION
 	FOREIGN KEY (ACCOUNT_COLLECTION_TYPE) 
 	REFERENCES VAL_ACCOUNT_COLLECTION_TYPE (ACCOUNT_COLLECTION_TYPE)  ;
 
+RAISE EXCEPTION 'Need to cleanup per-user stuff';
 
+-- random queries related to sorting out all the automated/usertype stuff
+delete from account_collection_account
+where account_collection_id in (
+	select account_collection_id
+	from account_collection
+	where account_collection_type in ('automated', 'usertype')
+);
+ 
+ delete from account_collection
+where account_collection_id in (
+	select account_collection_id
+	from account_collection
+	where account_collection_type in ('automated', 'usertype')
+);
+ 
+select * from account_collection
+where account_collection_id in (
+	select child_account_collection_id
+	from account_collection_hier
+) and account_collection_type='automated';
