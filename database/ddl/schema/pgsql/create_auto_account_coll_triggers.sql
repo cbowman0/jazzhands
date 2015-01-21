@@ -87,6 +87,7 @@ BEGIN
 	SELECT company_short_name INTO c_name FROM company WHERE company_id = NEW.company_id AND company_short_name IS NOT NULL;
 	IF NOT FOUND THEN
 		RAISE NOTICE 'Company short name cannot be determined from company_id % in %', NEW.company_id, TG_NAME;
+		RETURN NEW;
 	ELSE
 		acr_c_name = acr || '_' || c_name;
 		ac_ids[1] = acct_coll_manip.get_automated_account_collection_id(acr_c_name || '_' || NEW.account_type);
@@ -337,6 +338,7 @@ BEGIN
 			END IF;
 		ELSE
 			RAISE NOTICE 'Company short name cannot be determined from company_id % in %', old_r.company_id, TG_NAME;
+			RETURN NEW;
 		END IF;
 		-- looping over the same set of data.  TODO: optimize for speed
 		FOR r

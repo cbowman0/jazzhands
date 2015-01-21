@@ -65,19 +65,19 @@ $$
 SET search_path=jazzhands
 LANGUAGE plpgsql SECURITY DEFINER;
 
-DROP TRIGGER IF EXISTS /rigger_delete_peraccount_account_collection ON Account;
-CREATE TRIGGER trigger_delete_peruser_account_collection BEFORE DELETE
+DROP TRIGGER IF EXISTS trigger_delete_peraccount_account_collection ON Account;
+CREATE TRIGGER trigger_delete_peraccount_account_collection BEFORE DELETE
 	ON account 
 	FOR EACH ROW 
-	EXECUTE PROCEDURE delete_peruser_account_collection();
+	EXECUTE PROCEDURE delete_peraccount_account_collection();
 
 -- on inserts/updates ensure the per-account account is updated properly
-CREATE OR REPLACE FUNCTION update_peruser_account_collection() 
+CREATE OR REPLACE FUNCTION update_peraccount_account_collection() 
 RETURNS TRIGGER AS $$
 DECLARE
 	def_acct_rlm	account_realm.account_realm_id%TYPE;
 	acid			account_collection.account_collection_id%TYPE;
-DECALRE
+DECLARE
 	newname	TEXT;
 BEGIN
 	newname = concat(NEW.login, '_', NEW.account_id);
@@ -103,17 +103,18 @@ BEGIN
 						INNER JOIN account_collection_account aca
 							USING (account_collection_id)
 		 		WHERE	aca.account_id = OLD.account_Id
-		   		AND	ac.account_collection_type = 'per-account';
-			)
+		   		AND	ac.account_collection_type = 'per-account'
+			);
 	END IF;
+	return NEW;
 END;
 $$ 
 SET search_path=jazzhands
 LANGUAGE plpgsql SECURITY DEFINER;
 
-DROP TRIGGER IF EXISTS trigger_update_peruser_account_collection ON Property;
-CREATE TRIGGER trigger_update_peruser_account_collection AFTER INSERT OR UPDATE
-	ON Account FOR EACH ROW EXECUTE PROCEDURE update_peruser_account_collection();
+DROP TRIGGER IF EXISTS trigger_update_peraccount_account_collection ON Property;
+CREATE TRIGGER trigger_update_peraccount_account_collection AFTER INSERT OR UPDATE
+	ON Account FOR EACH ROW EXECUTE PROCEDURE update_peraccount_account_collection();
 
 --- end of per-account manipulations
 
