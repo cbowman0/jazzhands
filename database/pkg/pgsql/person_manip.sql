@@ -498,7 +498,7 @@ CREATE OR REPLACE FUNCTION person_manip.purge_account(
 		in_account_id	account.account_id%TYPE
 ) RETURNS void AS $$
 BEGIN
-	-- note the per-user account collection is removed in triggers
+	-- note the per-account account collection is removed in triggers
 
 	DELETE FROM account_assignd_cert where ACCOUNT_ID = in_account_id;
 	DELETE FROM account_token where ACCOUNT_ID = in_account_id;
@@ -516,7 +516,7 @@ BEGIN
 
 	DELETE FROM account_collection where account_collection_name in
 		(select login from account where account_id = in_account_id)
-		and account_collection_type in ('per-user', 'unix-group');
+		and account_collection_type in ('per-account', 'unix-group');
 
 	DELETE FROM account where ACCOUNT_ID = in_account_id;
 END;
