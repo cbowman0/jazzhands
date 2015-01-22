@@ -16,6 +16,20 @@
  * limitations under the License.
  */
 
+/*
+ * TODO before release:
+
+ 	- trigger for phsicalish_volume to deal with only one of lgid/compid set
+	- check inner_device_commonet_trigger to make sure it is right
+	- mdr to finish component triggers
+	- resolve component issues
+		- device_type becomes component_type?
+	- compatibility views
+	- finish testing all the account collection triggers
+	- finish the reimplementation of the company triggers to tie to properties
+
+ */
+
 \set ON_ERROR_STOP
 
  ALTER TABLE ACCOUNT_REALM_COMPANY DROP CONSTRAINT FK_ACCT_RLM_CMPY_CMPY_ID;
