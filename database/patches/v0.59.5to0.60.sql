@@ -24,6 +24,7 @@
 	- mdr to finish component triggers
 	- resolve component issues
 		- device_type becomes component_type?
+		- rack becomes a component?
 	- compatibility views
 	- finish testing all the account collection triggers
 	- finish the reimplementation of the company triggers to tie to properties
