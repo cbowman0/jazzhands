@@ -17,7 +17,7 @@
  */
 
 /*
- * TODO before release:
+  TODO before release:
 
  	- trigger for phsicalish_volume to deal with only one of lgid/compid set
 	- check inner_device_commonet_trigger to make sure it is right
@@ -28,10 +28,17 @@
 	- compatibility views
 	- finish testing all the account collection triggers
 	- finish the reimplementation of the company triggers to tie to properties
+	- check init/ *.sql changes for updates that should happen
+
+	- search for XXX's
+	- trigger functions
 
  */
 
+SELECT schema_support.begin_maintenance();
 \set ON_ERROR_STOP
+
+select now();
 
  ALTER TABLE ACCOUNT_REALM_COMPANY DROP CONSTRAINT FK_ACCT_RLM_CMPY_CMPY_ID;
  ALTER TABLE ACCOUNT_REALM_COMPANY 
@@ -131,14 +138,25 @@
 	REFERENCES ACCOUNT_REALM_COMPANY (ACCOUNT_REALM_ID, COMPANY_ID)  
 	DEFERRABLE  INITIALLY IMMEDIATE;
 
--- kill IntegrityPackage
+
+--------------------------------------------------------------------
+-- BEGIN kill IntegrityPackage
+--------------------------------------------------------------------
+
 DROP FUNCTION IF EXISTS "IntegrityPackage"."InitNestLevel"();
 DROP FUNCTION IF EXISTS "IntegrityPackage"."NextNestLevel"();
 DROP FUNCTION IF EXISTS "IntegrityPackage"."PreviousNestLevel"();
-DROP FUNCTION IF EXISTS IntegrityPackage"."GetNestLevel"();
+DROP FUNCTION IF EXISTS "IntegrityPackage"."GetNestLevel"();
 DROP SCHEMA IF EXISTS "IntegrityPackage";
 
+--------------------------------------------------------------------
+-- END kill IntegrityPackage
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
 -- migrate per-user to per-account and give a genericy name 
+--------------------------------------------------------------------
+
 alter table account_collection drop constraint "fk_acctcol_usrcoltyp";
 
 WITH merge AS (
@@ -157,6 +175,9 @@ FROM merge m
 WHERE m.account_collection_id = ac.account_collection_Id;
 
 
+update val_account_collection_type set account_collection_type = 'per-account'
+where account_collection_type = 'per-user';
+
 update account_collection set account_collection_type = 'per-account'
 where account_collection_type = 'per-user';
 
@@ -165,6 +186,2584 @@ ALTER TABLE ACCOUNT_COLLECTION
 	FOREIGN KEY (ACCOUNT_COLLECTION_TYPE) 
 	REFERENCES VAL_ACCOUNT_COLLECTION_TYPE (ACCOUNT_COLLECTION_TYPE)  ;
 
+--------------------------------------------------------------------
+-- DONE: migrate per-user to per-account and give a genericy name 
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- BEGIN AUTOGEN DDL
+--------------------------------------------------------------------
+
+/*
+Invoked:
+
+	--scan
+	--suffix=v59
+	asset
+	device_type
+	device
+	val_volume_group_relation
+	val_logical_volume_property
+	val_component_property
+	val_raid_type
+	val_slot_function
+	val_component_function
+	val_filesystem_type
+	val_slot_physical_interface
+	val_component_property_value
+	val_component_property_type
+	slot_type_prmt_rem_slot_type
+	inter_component_connection
+	component_type
+	component_property
+	component_type_slot_tmplt
+	slot_type_prmt_comp_slot_type
+	slot_type
+	logical_port_slot
+	slot
+	component_type_component_func
+	component
+	physicalish_volume
+	volume_group_physicalish_vol
+	logical_volume
+	logical_volume_property
+	volume_group
+*/
+
+\set ON_ERROR_STOP
+SELECT schema_support.begin_maintenance();
+-- Creating new sequences....
+CREATE SEQUENCE inter_component_connection_inter_component_connection_id_seq;
+CREATE SEQUENCE component_component_id_seq;
+CREATE SEQUENCE component_type_slot_tmplt_component_type_slot_tmplt_id_seq;
+CREATE SEQUENCE component_property_component_property_id_seq;
+CREATE SEQUENCE component_type_component_type_id_seq;
+CREATE SEQUENCE slot_type_slot_type_id_seq;
+CREATE SEQUENCE slot_slot_id_seq;
+CREATE SEQUENCE physicalish_volume_physicalish_volume_id_seq;
+CREATE SEQUENCE logical_volume_logical_volume_id_seq;
+CREATE SEQUENCE volume_group_volume_group_id_seq;
+
+
+--------------------------------------------------------------------
+-- DEALING WITH TABLE asset [216169]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'asset', 'asset');
+
+-- FOREIGN KEYS FROM
+ALTER TABLE device DROP CONSTRAINT IF EXISTS fk_device_asset_id;
+
+-- FOREIGN KEYS TO
+ALTER TABLE jazzhands.asset DROP CONSTRAINT IF EXISTS fk_asset_contract_id;
+ALTER TABLE jazzhands.asset DROP CONSTRAINT IF EXISTS fk_asset_ownshp_stat;
+ALTER TABLE jazzhands.asset DROP CONSTRAINT IF EXISTS pk_asset;
+-- INDEXES
+DROP INDEX IF EXISTS "jazzhands"."xif_asset_ownshp_stat";
+DROP INDEX IF EXISTS "jazzhands"."xif_asset_contract_id";
+-- CHECK CONSTRAINTS, etc
+-- TRIGGERS, etc
+DROP TRIGGER IF EXISTS trig_userlog_asset ON jazzhands.asset;
+DROP TRIGGER IF EXISTS trigger_audit_asset ON jazzhands.asset;
+SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'asset');
+---- BEGIN audit.asset TEARDOWN
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+-- INDEXES
+DROP INDEX IF EXISTS "audit"."asset_aud#timestamp_idx";
+-- CHECK CONSTRAINTS, etc
+-- TRIGGERS, etc
+SELECT schema_support.save_dependant_objects_for_replay('audit', 'asset');
+---- DONE audit.asset TEARDOWN
+
+
+ALTER TABLE asset RENAME TO asset_v59;
+ALTER TABLE audit.asset RENAME TO asset_v59;
+
+CREATE TABLE asset
+(
+	asset_id	integer NOT NULL,
+	component_id	integer  NULL,
+	description	varchar(255)  NULL,
+	contract_id	integer  NULL,
+	serial_number	varchar(255)  NULL,
+	part_number	varchar(255)  NULL,
+	asset_tag	varchar(255)  NULL,
+	ownership_status	varchar(50) NOT NULL,
+	lease_expiration_date	timestamp with time zone  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'asset', false);
+ALTER TABLE asset
+	ALTER asset_id
+	SET DEFAULT nextval('asset_asset_id_seq'::regclass);
+INSERT INTO asset (
+	asset_id,
+	component_id,		-- new column (component_id)
+	description,
+	contract_id,
+	serial_number,
+	part_number,
+	asset_tag,
+	ownership_status,
+	lease_expiration_date,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+) SELECT
+	asset_id,
+	NULL,		-- new column (component_id)
+	description,
+	contract_id,
+	serial_number,
+	part_number,
+	asset_tag,
+	ownership_status,
+	lease_expiration_date,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+FROM asset_v59;
+
+INSERT INTO audit.asset (
+	asset_id,
+	component_id,		-- new column (component_id)
+	description,
+	contract_id,
+	serial_number,
+	part_number,
+	asset_tag,
+	ownership_status,
+	lease_expiration_date,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+) SELECT
+	asset_id,
+	NULL,		-- new column (component_id)
+	description,
+	contract_id,
+	serial_number,
+	part_number,
+	asset_tag,
+	ownership_status,
+	lease_expiration_date,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+FROM audit.asset_v59;
+
+ALTER TABLE asset
+	ALTER asset_id
+	SET DEFAULT nextval('asset_asset_id_seq'::regclass);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE asset ADD CONSTRAINT ak_asset_component_id UNIQUE (component_id);
+ALTER TABLE asset ADD CONSTRAINT pk_asset PRIMARY KEY (asset_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_asset_ownshp_stat ON asset USING btree (ownership_status);
+CREATE INDEX xif_asset_contract_id ON asset USING btree (contract_id);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+-- consider FK asset and device
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_asset_id
+	FOREIGN KEY (asset_id) REFERENCES asset(asset_id);
+
+-- FOREIGN KEYS TO
+-- consider FK asset and contract
+ALTER TABLE asset
+	ADD CONSTRAINT fk_asset_contract_id
+	FOREIGN KEY (contract_id) REFERENCES contract(contract_id);
+-- consider FK asset and component
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE asset
+--	ADD CONSTRAINT fk_asset_comp_id
+--	FOREIGN KEY (component_id) REFERENCES component(component_id);
+
+-- consider FK asset and val_ownership_status
+ALTER TABLE asset
+	ADD CONSTRAINT fk_asset_ownshp_stat
+	FOREIGN KEY (ownership_status) REFERENCES val_ownership_status(ownership_status);
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'asset');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'asset');
+ALTER SEQUENCE asset_asset_id_seq
+	 OWNED BY asset.asset_id;
+DROP TABLE IF EXISTS asset_v59;
+DROP TABLE IF EXISTS audit.asset_v59;
+-- DONE DEALING WITH TABLE asset [207398]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE device_type [216480]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'device_type', 'device_type');
+
+-- FOREIGN KEYS FROM
+ALTER TABLE device_type_module_device_type DROP CONSTRAINT IF EXISTS fk_dt_mod_dev_type_mod_dtid;
+ALTER TABLE device_type_module DROP CONSTRAINT IF EXISTS fk_devt_mod_dev_type_id;
+ALTER TABLE device DROP CONSTRAINT IF EXISTS fk_dev_devtp_id;
+ALTER TABLE device_type_power_port_templt DROP CONSTRAINT IF EXISTS fk_dev_type_dev_pwr_prt_tmpl;
+ALTER TABLE device_type_phys_port_templt DROP CONSTRAINT IF EXISTS fk_devtype_ref_devtphysprttmpl;
+ALTER TABLE chassis_location DROP CONSTRAINT IF EXISTS fk_chass_loc_mod_dev_typ_id;
+
+-- FOREIGN KEYS TO
+ALTER TABLE jazzhands.device_type DROP CONSTRAINT IF EXISTS fk_devtyp_company;
+ALTER TABLE jazzhands.device_type DROP CONSTRAINT IF EXISTS fk_device_t_fk_device_val_proc;
+ALTER TABLE jazzhands.device_type DROP CONSTRAINT IF EXISTS pk_device_type;
+-- INDEXES
+DROP INDEX IF EXISTS "jazzhands"."xif4device_type";
+-- CHECK CONSTRAINTS, etc
+ALTER TABLE jazzhands.device_type DROP CONSTRAINT IF EXISTS ckc_has_802_11_interf_device_t;
+ALTER TABLE jazzhands.device_type DROP CONSTRAINT IF EXISTS ckc_devtyp_ischs;
+ALTER TABLE jazzhands.device_type DROP CONSTRAINT IF EXISTS ckc_has_802_3_interfa_device_t;
+ALTER TABLE jazzhands.device_type DROP CONSTRAINT IF EXISTS ckc_snmp_capable_device_t;
+-- TRIGGERS, etc
+DROP TRIGGER IF EXISTS trigger_device_type_chassis_check ON jazzhands.device_type;
+DROP TRIGGER IF EXISTS trigger_audit_device_type ON jazzhands.device_type;
+DROP TRIGGER IF EXISTS trig_userlog_device_type ON jazzhands.device_type;
+SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'device_type');
+---- BEGIN audit.device_type TEARDOWN
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+-- INDEXES
+DROP INDEX IF EXISTS "audit"."device_type_aud#timestamp_idx";
+-- CHECK CONSTRAINTS, etc
+-- TRIGGERS, etc
+SELECT schema_support.save_dependant_objects_for_replay('audit', 'device_type');
+---- DONE audit.device_type TEARDOWN
+
+
+ALTER TABLE device_type RENAME TO device_type_v59;
+ALTER TABLE audit.device_type RENAME TO device_type_v59;
+
+CREATE TABLE device_type
+(
+	device_type_id	integer NOT NULL,
+	component_type_id	integer  NULL,
+	company_id	integer  NULL,
+	model	varchar(255) NOT NULL,
+	device_type_depth_in_cm	character(18)  NULL,
+	processor_architecture	varchar(50)  NULL,
+	config_fetch_type	varchar(50)  NULL,
+	rack_units	integer NOT NULL,
+	description	varchar(4000)  NULL,
+	has_802_3_interface	character(1) NOT NULL,
+	has_802_11_interface	character(1) NOT NULL,
+	snmp_capable	character(1) NOT NULL,
+	is_chassis	character(1) NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'device_type', false);
+ALTER TABLE device_type
+	ALTER device_type_id
+	SET DEFAULT nextval('device_type_device_type_id_seq'::regclass);
+ALTER TABLE device_type
+	ALTER is_chassis
+	SET DEFAULT 'N'::bpchar;
+INSERT INTO device_type (
+	device_type_id,
+	component_type_id,		-- new column (component_type_id)
+	company_id,
+	model,
+	device_type_depth_in_cm,
+	processor_architecture,
+	config_fetch_type,
+	rack_units,
+	description,
+	has_802_3_interface,
+	has_802_11_interface,
+	snmp_capable,
+	is_chassis,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+) SELECT
+	device_type_id,
+	NULL,		-- new column (component_type_id)
+	company_id,
+	model,
+	device_type_depth_in_cm,
+	processor_architecture,
+	config_fetch_type,
+	rack_units,
+	description,
+	has_802_3_interface,
+	has_802_11_interface,
+	snmp_capable,
+	is_chassis,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+FROM device_type_v59;
+
+INSERT INTO audit.device_type (
+	device_type_id,
+	component_type_id,		-- new column (component_type_id)
+	company_id,
+	model,
+	device_type_depth_in_cm,
+	processor_architecture,
+	config_fetch_type,
+	rack_units,
+	description,
+	has_802_3_interface,
+	has_802_11_interface,
+	snmp_capable,
+	is_chassis,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+) SELECT
+	device_type_id,
+	NULL,		-- new column (component_type_id)
+	company_id,
+	model,
+	device_type_depth_in_cm,
+	processor_architecture,
+	config_fetch_type,
+	rack_units,
+	description,
+	has_802_3_interface,
+	has_802_11_interface,
+	snmp_capable,
+	is_chassis,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+FROM audit.device_type_v59;
+
+ALTER TABLE device_type
+	ALTER device_type_id
+	SET DEFAULT nextval('device_type_device_type_id_seq'::regclass);
+ALTER TABLE device_type
+	ALTER is_chassis
+	SET DEFAULT 'N'::bpchar;
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE device_type ADD CONSTRAINT pk_device_type PRIMARY KEY (device_type_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif4device_type ON device_type USING btree (company_id);
+CREATE INDEX xif_fevtyp_component_id ON device_type USING btree (component_type_id);
+
+-- CHECK CONSTRAINTS
+ALTER TABLE device_type ADD CONSTRAINT ckc_devtyp_ischs
+	CHECK (is_chassis = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+ALTER TABLE device_type ADD CONSTRAINT ckc_has_802_3_interfa_device_t
+	CHECK (has_802_3_interface = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+ALTER TABLE device_type ADD CONSTRAINT ckc_snmp_capable_device_t
+	CHECK (snmp_capable = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+ALTER TABLE device_type ADD CONSTRAINT ckc_has_802_11_interf_device_t
+	CHECK (has_802_11_interface = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+
+-- FOREIGN KEYS FROM
+-- consider FK device_type and device_type_power_port_templt
+ALTER TABLE device_type_power_port_templt
+	ADD CONSTRAINT fk_dev_type_dev_pwr_prt_tmpl
+	FOREIGN KEY (device_type_id) REFERENCES device_type(device_type_id);
+-- consider FK device_type and device
+ALTER TABLE device
+	ADD CONSTRAINT fk_dev_devtp_id
+	FOREIGN KEY (device_type_id) REFERENCES device_type(device_type_id);
+-- consider FK device_type and device_type_module_device_type
+ALTER TABLE device_type_module_device_type
+	ADD CONSTRAINT fk_dt_mod_dev_type_mod_dtid
+	FOREIGN KEY (module_device_type_id) REFERENCES device_type(device_type_id);
+-- consider FK device_type and device_type_module
+ALTER TABLE device_type_module
+	ADD CONSTRAINT fk_devt_mod_dev_type_id
+	FOREIGN KEY (device_type_id) REFERENCES device_type(device_type_id);
+-- consider FK device_type and chassis_location
+ALTER TABLE chassis_location
+	ADD CONSTRAINT fk_chass_loc_mod_dev_typ_id
+	FOREIGN KEY (module_device_type_id) REFERENCES device_type(device_type_id);
+-- consider FK device_type and device_type_phys_port_templt
+ALTER TABLE device_type_phys_port_templt
+	ADD CONSTRAINT fk_devtype_ref_devtphysprttmpl
+	FOREIGN KEY (device_type_id) REFERENCES device_type(device_type_id);
+
+-- FOREIGN KEYS TO
+-- consider FK device_type and val_processor_architecture
+ALTER TABLE device_type
+	ADD CONSTRAINT fk_device_t_fk_device_val_proc
+	FOREIGN KEY (processor_architecture) REFERENCES val_processor_architecture(processor_architecture);
+-- consider FK device_type and company
+ALTER TABLE device_type
+	ADD CONSTRAINT fk_devtyp_company
+	FOREIGN KEY (company_id) REFERENCES company(company_id) DEFERRABLE;
+-- consider FK device_type and component_type
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE device_type
+--	ADD CONSTRAINT fk_fevtyp_component_id
+--	FOREIGN KEY (component_type_id) REFERENCES component_type(component_type_id);
+
+
+-- TRIGGERS
+CREATE TRIGGER trigger_device_type_chassis_check BEFORE UPDATE OF is_chassis ON device_type FOR EACH ROW EXECUTE PROCEDURE device_type_chassis_check();
+
+-- XXX - may need to include trigger function
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'device_type');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'device_type');
+ALTER SEQUENCE device_type_device_type_id_seq
+	 OWNED BY device_type.device_type_id;
+DROP TABLE IF EXISTS device_type_v59;
+DROP TABLE IF EXISTS audit.device_type_v59;
+-- DONE DEALING WITH TABLE device_type [207793]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE device [216301]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'device', 'device');
+
+-- FOREIGN KEYS FROM
+ALTER TABLE device_management_controller DROP CONSTRAINT IF EXISTS fk_dev_mgmt_ctlr_dev_id;
+ALTER TABLE device_collection_device DROP CONSTRAINT IF EXISTS fk_devcolldev_dev_id;
+ALTER TABLE network_service DROP CONSTRAINT IF EXISTS fk_netsvc_device_id;
+ALTER TABLE snmp_commstr DROP CONSTRAINT IF EXISTS fk_snmpstr_device_id;
+ALTER TABLE device_management_controller DROP CONSTRAINT IF EXISTS fk_dvc_mgmt_ctrl_mgr_dev_id;
+ALTER TABLE device_ticket DROP CONSTRAINT IF EXISTS fk_dev_tkt_dev_id;
+ALTER TABLE device_ssh_key DROP CONSTRAINT IF EXISTS fk_dev_ssh_key_ssh_key_id;
+ALTER TABLE device_layer2_network DROP CONSTRAINT IF EXISTS fk_device_l2_net_devid;
+ALTER TABLE network_interface DROP CONSTRAINT IF EXISTS fk_netint_device_id;
+ALTER TABLE mlag_peering DROP CONSTRAINT IF EXISTS fk_mlag_peering_devid1;
+ALTER TABLE network_interface_purpose DROP CONSTRAINT IF EXISTS fk_netint_purpose_device_id;
+ALTER TABLE mlag_peering DROP CONSTRAINT IF EXISTS fk_mlag_peering_devid2;
+ALTER TABLE physical_port DROP CONSTRAINT IF EXISTS fk_phys_port_dev_id;
+ALTER TABLE layer1_connection DROP CONSTRAINT IF EXISTS fk_l1conn_ref_device;
+ALTER TABLE device_note DROP CONSTRAINT IF EXISTS fk_device_note_device;
+ALTER TABLE device_power_interface DROP CONSTRAINT IF EXISTS fk_device_device_power_supp;
+ALTER TABLE device_encapsulation_domain DROP CONSTRAINT IF EXISTS fk_dev_encap_domain_devid;
+ALTER TABLE static_route DROP CONSTRAINT IF EXISTS fk_statrt_devsrc_id;
+ALTER TABLE chassis_location DROP CONSTRAINT IF EXISTS fk_chass_loc_chass_devid;
+
+-- FOREIGN KEYS TO
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_company__id;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_site_code;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_fk_dev_v_svcenv;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_dev_devtp_id;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_ref_parent_device;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_dev_os_id;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_fk_voe;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_ref_voesymbtrk;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_dev_chass_loc_id_mod_enfc;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_fk_dev_val_stat;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_asset_id;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_chasloc_chass_devid;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_dnsrecord;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_reference_val_devi;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_dev_rack_location_id;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ak_device_chassis_location_id;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS pk_device;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ak_device_rack_location_id;
+-- INDEXES
+DROP INDEX IF EXISTS "jazzhands"."idx_dev_voeid";
+DROP INDEX IF EXISTS "jazzhands"."xif17device";
+DROP INDEX IF EXISTS "jazzhands"."idx_dev_svcenv";
+DROP INDEX IF EXISTS "jazzhands"."idx_dev_dev_status";
+DROP INDEX IF EXISTS "jazzhands"."idx_dev_ismonitored";
+DROP INDEX IF EXISTS "jazzhands"."xif16device";
+DROP INDEX IF EXISTS "jazzhands"."idx_device_type_location";
+DROP INDEX IF EXISTS "jazzhands"."idx_dev_iddnsrec";
+DROP INDEX IF EXISTS "jazzhands"."xif18device";
+DROP INDEX IF EXISTS "jazzhands"."xifdevice_sitecode";
+DROP INDEX IF EXISTS "jazzhands"."idx_dev_osid";
+DROP INDEX IF EXISTS "jazzhands"."idx_dev_islclymgd";
+-- CHECK CONSTRAINTS, etc
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS dev_osid_notnull;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS sys_c0069051;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS sys_c0069052;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ckc_is_monitored_device;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS sys_c0069059;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ckc_is_locally_manage_device;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS sys_c0069057;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ckc_is_virtual_device_device;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS sys_c0069060;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ckc_should_fetch_conf_device;
+-- TRIGGERS, etc
+DROP TRIGGER IF EXISTS trig_userlog_device ON jazzhands.device;
+DROP TRIGGER IF EXISTS trigger_delete_per_device_device_collection ON jazzhands.device;
+DROP TRIGGER IF EXISTS trigger_audit_device ON jazzhands.device;
+DROP TRIGGER IF EXISTS trigger_device_one_location_validate ON jazzhands.device;
+DROP TRIGGER IF EXISTS trigger_update_per_device_device_collection ON jazzhands.device;
+DROP TRIGGER IF EXISTS trigger_verify_device_voe ON jazzhands.device;
+SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'device');
+---- BEGIN audit.device TEARDOWN
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+-- INDEXES
+DROP INDEX IF EXISTS "audit"."device_aud#timestamp_idx";
+-- CHECK CONSTRAINTS, etc
+-- TRIGGERS, etc
+SELECT schema_support.save_dependant_objects_for_replay('audit', 'device');
+---- DONE audit.device TEARDOWN
+
+
+ALTER TABLE device RENAME TO device_v59;
+ALTER TABLE audit.device RENAME TO device_v59;
+
+CREATE TABLE device
+(
+	device_id	integer NOT NULL,
+	component_id	integer  NULL,
+	device_type_id	integer NOT NULL,
+	company_id	integer  NULL,
+	asset_id	integer  NULL,
+	device_name	varchar(255)  NULL,
+	site_code	varchar(50)  NULL,
+	identifying_dns_record_id	integer  NULL,
+	host_id	varchar(255)  NULL,
+	physical_label	varchar(255)  NULL,
+	rack_location_id	integer  NULL,
+	chassis_location_id	integer  NULL,
+	parent_device_id	integer  NULL,
+	description	varchar(255)  NULL,
+	device_status	varchar(50) NOT NULL,
+	operating_system_id	integer NOT NULL,
+	service_environment_id	integer NOT NULL,
+	voe_id	integer  NULL,
+	auto_mgmt_protocol	varchar(50)  NULL,
+	voe_symbolic_track_id	integer  NULL,
+	is_locally_managed	character(1) NOT NULL,
+	is_monitored	character(1) NOT NULL,
+	is_virtual_device	character(1) NOT NULL,
+	should_fetch_config	character(1) NOT NULL,
+	date_in_service	timestamp with time zone  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'device', false);
+ALTER TABLE device
+	ALTER device_id
+	SET DEFAULT nextval('device_device_id_seq'::regclass);
+ALTER TABLE device
+	ALTER operating_system_id
+	SET DEFAULT 0;
+ALTER TABLE device
+	ALTER is_locally_managed
+	SET DEFAULT 'Y'::bpchar;
+ALTER TABLE device
+	ALTER is_virtual_device
+	SET DEFAULT 'N'::bpchar;
+ALTER TABLE device
+	ALTER should_fetch_config
+	SET DEFAULT 'Y'::bpchar;
+INSERT INTO device (
+	device_id,
+	component_id,		-- new column (component_id)
+	device_type_id,
+	company_id,
+	asset_id,
+	device_name,
+	site_code,
+	identifying_dns_record_id,
+	host_id,
+	physical_label,
+	rack_location_id,
+	chassis_location_id,
+	parent_device_id,
+	description,
+	device_status,
+	operating_system_id,
+	service_environment_id,
+	voe_id,
+	auto_mgmt_protocol,
+	voe_symbolic_track_id,
+	is_locally_managed,
+	is_monitored,
+	is_virtual_device,
+	should_fetch_config,
+	date_in_service,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+) SELECT
+	device_id,
+	NULL,		-- new column (component_id)
+	device_type_id,
+	company_id,
+	asset_id,
+	device_name,
+	site_code,
+	identifying_dns_record_id,
+	host_id,
+	physical_label,
+	rack_location_id,
+	chassis_location_id,
+	parent_device_id,
+	description,
+	device_status,
+	operating_system_id,
+	service_environment_id,
+	voe_id,
+	auto_mgmt_protocol,
+	voe_symbolic_track_id,
+	is_locally_managed,
+	is_monitored,
+	is_virtual_device,
+	should_fetch_config,
+	date_in_service,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+FROM device_v59;
+
+INSERT INTO audit.device (
+	device_id,
+	component_id,		-- new column (component_id)
+	device_type_id,
+	company_id,
+	asset_id,
+	device_name,
+	site_code,
+	identifying_dns_record_id,
+	host_id,
+	physical_label,
+	rack_location_id,
+	chassis_location_id,
+	parent_device_id,
+	description,
+	device_status,
+	operating_system_id,
+	service_environment_id,
+	voe_id,
+	auto_mgmt_protocol,
+	voe_symbolic_track_id,
+	is_locally_managed,
+	is_monitored,
+	is_virtual_device,
+	should_fetch_config,
+	date_in_service,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+) SELECT
+	device_id,
+	NULL,		-- new column (component_id)
+	device_type_id,
+	company_id,
+	asset_id,
+	device_name,
+	site_code,
+	identifying_dns_record_id,
+	host_id,
+	physical_label,
+	rack_location_id,
+	chassis_location_id,
+	parent_device_id,
+	description,
+	device_status,
+	operating_system_id,
+	service_environment_id,
+	voe_id,
+	auto_mgmt_protocol,
+	voe_symbolic_track_id,
+	is_locally_managed,
+	is_monitored,
+	is_virtual_device,
+	should_fetch_config,
+	date_in_service,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+FROM audit.device_v59;
+
+ALTER TABLE device
+	ALTER device_id
+	SET DEFAULT nextval('device_device_id_seq'::regclass);
+ALTER TABLE device
+	ALTER operating_system_id
+	SET DEFAULT 0;
+ALTER TABLE device
+	ALTER is_locally_managed
+	SET DEFAULT 'Y'::bpchar;
+ALTER TABLE device
+	ALTER is_virtual_device
+	SET DEFAULT 'N'::bpchar;
+ALTER TABLE device
+	ALTER should_fetch_config
+	SET DEFAULT 'Y'::bpchar;
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE device ADD CONSTRAINT ak_device_rack_location_id UNIQUE (rack_location_id);
+ALTER TABLE device ADD CONSTRAINT ak_device_chassis_location_id UNIQUE (chassis_location_id);
+ALTER TABLE device ADD CONSTRAINT pk_device PRIMARY KEY (device_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_device_fk_voe ON device USING btree (voe_id);
+CREATE INDEX xif_device_id_dnsrecord ON device USING btree (identifying_dns_record_id);
+CREATE INDEX xif_device_site_code ON device USING btree (site_code);
+CREATE INDEX xif_dev_chass_loc_id_mod_enfc ON device USING btree (chassis_location_id, parent_device_id, device_type_id);
+CREATE INDEX idx_dev_islclymgd ON device USING btree (is_locally_managed);
+CREATE INDEX xif_device_asset_id ON device USING btree (asset_id);
+CREATE INDEX xif_device_dev_v_svcenv ON device USING btree (service_environment_id);
+CREATE INDEX idx_dev_ismonitored ON device USING btree (is_monitored);
+CREATE INDEX xif_device_dev_val_status ON device USING btree (device_status);
+CREATE INDEX xif_device_company__id ON device USING btree (company_id);
+CREATE INDEX idx_device_type_location ON device USING btree (device_type_id);
+CREATE INDEX xif_dev_os_id ON device USING btree (operating_system_id);
+CREATE INDEX xif_device_comp_id ON device USING btree (component_id);
+
+-- CHECK CONSTRAINTS
+ALTER TABLE device ADD CONSTRAINT ckc_is_monitored_device
+	CHECK ((is_monitored = ANY (ARRAY['Y'::bpchar, 'N'::bpchar])) AND ((is_monitored)::text = upper((is_monitored)::text)));
+ALTER TABLE device ADD CONSTRAINT sys_c0069059
+	CHECK (is_virtual_device IS NOT NULL);
+ALTER TABLE device ADD CONSTRAINT sys_c0069057
+	CHECK (is_monitored IS NOT NULL);
+ALTER TABLE device ADD CONSTRAINT ckc_is_locally_manage_device
+	CHECK ((is_locally_managed = ANY (ARRAY['Y'::bpchar, 'N'::bpchar])) AND ((is_locally_managed)::text = upper((is_locally_managed)::text)));
+ALTER TABLE device ADD CONSTRAINT ckc_is_virtual_device_device
+	CHECK ((is_virtual_device = ANY (ARRAY['Y'::bpchar, 'N'::bpchar])) AND ((is_virtual_device)::text = upper((is_virtual_device)::text)));
+ALTER TABLE device ADD CONSTRAINT ckc_should_fetch_conf_device
+	CHECK ((should_fetch_config = ANY (ARRAY['Y'::bpchar, 'N'::bpchar])) AND ((should_fetch_config)::text = upper((should_fetch_config)::text)));
+ALTER TABLE device ADD CONSTRAINT sys_c0069060
+	CHECK (should_fetch_config IS NOT NULL);
+ALTER TABLE device ADD CONSTRAINT dev_osid_notnull
+	CHECK (operating_system_id IS NOT NULL);
+ALTER TABLE device ADD CONSTRAINT sys_c0069051
+	CHECK (device_id IS NOT NULL);
+ALTER TABLE device ADD CONSTRAINT sys_c0069052
+	CHECK (device_type_id IS NOT NULL);
+
+-- FOREIGN KEYS FROM
+-- consider FK device and physical_port
+ALTER TABLE physical_port
+	ADD CONSTRAINT fk_phys_port_dev_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and mlag_peering
+ALTER TABLE mlag_peering
+	ADD CONSTRAINT fk_mlag_peering_devid2
+	FOREIGN KEY (device2_id) REFERENCES device(device_id);
+-- consider FK device and layer1_connection
+ALTER TABLE layer1_connection
+	ADD CONSTRAINT fk_l1conn_ref_device
+	FOREIGN KEY (tcpsrv_device_id) REFERENCES device(device_id);
+-- consider FK device and device_layer2_network
+ALTER TABLE device_layer2_network
+	ADD CONSTRAINT fk_device_l2_net_devid
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and mlag_peering
+ALTER TABLE mlag_peering
+	ADD CONSTRAINT fk_mlag_peering_devid1
+	FOREIGN KEY (device1_id) REFERENCES device(device_id);
+-- consider FK device and network_interface
+ALTER TABLE network_interface
+	ADD CONSTRAINT fk_netint_device_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and snmp_commstr
+ALTER TABLE snmp_commstr
+	ADD CONSTRAINT fk_snmpstr_device_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and device_ticket
+ALTER TABLE device_ticket
+	ADD CONSTRAINT fk_dev_tkt_dev_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and device_management_controller
+ALTER TABLE device_management_controller
+	ADD CONSTRAINT fk_dvc_mgmt_ctrl_mgr_dev_id
+	FOREIGN KEY (manager_device_id) REFERENCES device(device_id);
+-- consider FK device and device_ssh_key
+ALTER TABLE device_ssh_key
+	ADD CONSTRAINT fk_dev_ssh_key_ssh_key_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and network_interface_purpose
+ALTER TABLE network_interface_purpose
+	ADD CONSTRAINT fk_netint_purpose_device_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and device_management_controller
+ALTER TABLE device_management_controller
+	ADD CONSTRAINT fk_dev_mgmt_ctlr_dev_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and device_collection_device
+ALTER TABLE device_collection_device
+	ADD CONSTRAINT fk_devcolldev_dev_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and network_service
+ALTER TABLE network_service
+	ADD CONSTRAINT fk_netsvc_device_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and static_route
+ALTER TABLE static_route
+	ADD CONSTRAINT fk_statrt_devsrc_id
+	FOREIGN KEY (device_src_id) REFERENCES device(device_id);
+-- consider FK device and device_encapsulation_domain
+ALTER TABLE device_encapsulation_domain
+	ADD CONSTRAINT fk_dev_encap_domain_devid
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and chassis_location
+ALTER TABLE chassis_location
+	ADD CONSTRAINT fk_chass_loc_chass_devid
+	FOREIGN KEY (chassis_device_id) REFERENCES device(device_id) DEFERRABLE;
+-- consider FK device and device_power_interface
+ALTER TABLE device_power_interface
+	ADD CONSTRAINT fk_device_device_power_supp
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and device_note
+ALTER TABLE device_note
+	ADD CONSTRAINT fk_device_note_device
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+
+-- FOREIGN KEYS TO
+-- consider FK device and component
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE device
+--	ADD CONSTRAINT fk_device_comp_id
+--	FOREIGN KEY (component_id) REFERENCES component(component_id);
+
+-- consider FK device and device
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_ref_parent_device
+	FOREIGN KEY (parent_device_id) REFERENCES device(device_id);
+-- consider FK device and device_type
+ALTER TABLE device
+	ADD CONSTRAINT fk_dev_devtp_id
+	FOREIGN KEY (device_type_id) REFERENCES device_type(device_type_id);
+-- consider FK device and site
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_site_code
+	FOREIGN KEY (site_code) REFERENCES site(site_code);
+-- consider FK device and voe_symbolic_track
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_ref_voesymbtrk
+	FOREIGN KEY (voe_symbolic_track_id) REFERENCES voe_symbolic_track(voe_symbolic_track_id);
+-- consider FK device and voe
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_fk_voe
+	FOREIGN KEY (voe_id) REFERENCES voe(voe_id);
+-- consider FK device and operating_system
+ALTER TABLE device
+	ADD CONSTRAINT fk_dev_os_id
+	FOREIGN KEY (operating_system_id) REFERENCES operating_system(operating_system_id);
+-- consider FK device and asset
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_asset_id
+	FOREIGN KEY (asset_id) REFERENCES asset(asset_id);
+-- consider FK device and chassis_location
+ALTER TABLE device
+	ADD CONSTRAINT fk_dev_chass_loc_id_mod_enfc
+	FOREIGN KEY (chassis_location_id, parent_device_id, device_type_id) REFERENCES chassis_location(chassis_location_id, chassis_device_id, module_device_type_id) DEFERRABLE;
+-- consider FK device and dns_record
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_id_dnsrecord
+	FOREIGN KEY (identifying_dns_record_id) REFERENCES dns_record(dns_record_id);
+-- consider FK device and chassis_location
+ALTER TABLE device
+	ADD CONSTRAINT fk_chasloc_chass_devid
+	FOREIGN KEY (chassis_location_id) REFERENCES chassis_location(chassis_location_id) DEFERRABLE;
+-- consider FK device and val_device_status
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_dev_val_status
+	FOREIGN KEY (device_status) REFERENCES val_device_status(device_status);
+-- consider FK device and val_device_auto_mgmt_protocol
+ALTER TABLE device
+	ADD CONSTRAINT fk_dev_ref_mgmt_proto
+	FOREIGN KEY (auto_mgmt_protocol) REFERENCES val_device_auto_mgmt_protocol(auto_mgmt_protocol);
+-- consider FK device and company
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_company__id
+	FOREIGN KEY (company_id) REFERENCES company(company_id) DEFERRABLE;
+-- consider FK device and rack_location
+ALTER TABLE device
+	ADD CONSTRAINT fk_dev_rack_location_id
+	FOREIGN KEY (rack_location_id) REFERENCES rack_location(rack_location_id);
+-- consider FK device and service_environment
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_dev_v_svcenv
+	FOREIGN KEY (service_environment_id) REFERENCES service_environment(service_environment_id);
+
+-- TRIGGERS
+CREATE TRIGGER trigger_device_one_location_validate BEFORE INSERT OR UPDATE ON device FOR EACH ROW EXECUTE PROCEDURE device_one_location_validate();
+
+-- XXX - may need to include trigger function
+CREATE TRIGGER trigger_delete_per_device_device_collection BEFORE DELETE ON device FOR EACH ROW EXECUTE PROCEDURE delete_per_device_device_collection();
+
+-- XXX - may need to include trigger function
+CREATE TRIGGER trigger_verify_device_voe BEFORE INSERT OR UPDATE ON device FOR EACH ROW EXECUTE PROCEDURE verify_device_voe();
+
+-- XXX - may need to include trigger function
+CREATE TRIGGER trigger_update_per_device_device_collection AFTER INSERT OR UPDATE ON device FOR EACH ROW EXECUTE PROCEDURE update_per_device_device_collection();
+
+-- XXX - may need to include trigger function
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'device');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'device');
+ALTER SEQUENCE device_device_id_seq
+	 OWNED BY device.device_id;
+DROP TABLE IF EXISTS device_v59;
+DROP TABLE IF EXISTS audit.device_v59;
+-- DONE DEALING WITH TABLE device [207613]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE val_volume_group_relation
+CREATE TABLE val_volume_group_relation
+(
+	volume_group_relation	varchar(50) NOT NULL,
+	description	varchar(4000)  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'val_volume_group_relation', true);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE val_volume_group_relation ADD CONSTRAINT pk_val_volume_group_relation PRIMARY KEY (volume_group_relation);
+
+-- Table/Column Comments
+-- INDEXES
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+-- consider FK val_volume_group_relation and volume_group_physicalish_vol
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE volume_group_physicalish_vol
+--	ADD CONSTRAINT r_645
+--	FOREIGN KEY (volume_group_relation) REFERENCES val_volume_group_relation(volume_group_relation);
+
+
+-- FOREIGN KEYS TO
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'val_volume_group_relation');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'val_volume_group_relation');
+-- DONE DEALING WITH TABLE val_volume_group_relation [209792]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE val_logical_volume_property
+CREATE TABLE val_logical_volume_property
+(
+	logical_volume_property_name	varchar(50) NOT NULL,
+	filesystem_type	varchar(50) NOT NULL,
+	description	varchar(4000)  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'val_logical_volume_property', true);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE val_logical_volume_property ADD CONSTRAINT pk_val_logical_volume_property PRIMARY KEY (logical_volume_property_name, filesystem_type);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif1val_logical_volume_propert ON val_logical_volume_property USING btree (filesystem_type);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+-- consider FK val_logical_volume_property and logical_volume_property
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE logical_volume_property
+--	ADD CONSTRAINT r_644
+--	FOREIGN KEY (logical_volume_property_name, filesystem_type) REFERENCES val_logical_volume_property(logical_volume_property_name, filesystem_type);
+
+
+-- FOREIGN KEYS TO
+-- consider FK val_logical_volume_property and val_filesystem_type
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE val_logical_volume_property
+--	ADD CONSTRAINT r_643
+--	FOREIGN KEY (filesystem_type) REFERENCES val_filesystem_type(filesystem_type);
+
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'val_logical_volume_property');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'val_logical_volume_property');
+-- DONE DEALING WITH TABLE val_logical_volume_property [209340]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE val_component_property
+CREATE TABLE val_component_property
+(
+	component_property_name	integer NOT NULL,
+	component_property_type	varchar(50) NOT NULL,
+	description	varchar(4000)  NULL,
+	is_multivalue	character(1) NOT NULL,
+	property_data_type	varchar(50) NOT NULL,
+	permit_component_type_id	character(10) NOT NULL,
+	required_component_type_id	integer  NULL,
+	permit_component_function	character(10) NOT NULL,
+	required_component_function	varchar(50)  NULL,
+	permit_component_id	character(10) NOT NULL,
+	permit_slot_type_id	character(10) NOT NULL,
+	required_slot_type_id	integer  NULL,
+	permit_slot_function	character(10) NOT NULL,
+	required_slot_function	varchar(50)  NULL,
+	permit_slot_id	character(10) NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'val_component_property', true);
+ALTER TABLE val_component_property
+	ALTER permit_component_type_id
+	SET DEFAULT 'PROHIBITED'::bpchar;
+ALTER TABLE val_component_property
+	ALTER permit_component_function
+	SET DEFAULT 'PROHIBITED'::bpchar;
+ALTER TABLE val_component_property
+	ALTER permit_component_id
+	SET DEFAULT 'PROHIBITED'::bpchar;
+ALTER TABLE val_component_property
+	ALTER permit_slot_type_id
+	SET DEFAULT 'PROHIBITED'::bpchar;
+ALTER TABLE val_component_property
+	ALTER permit_slot_function
+	SET DEFAULT 'PROHIBITED'::bpchar;
+ALTER TABLE val_component_property
+	ALTER permit_slot_id
+	SET DEFAULT 'PROHIBITED'::bpchar;
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE val_component_property ADD CONSTRAINT pk_val_component_property PRIMARY KEY (component_property_name, component_property_type);
+
+-- Table/Column Comments
+COMMENT ON TABLE val_component_property IS 'Contains a list of all valid properties for component tables (component, component_type, component_function, slot, slot_type, slot_function)';
+-- INDEXES
+CREATE INDEX xif_vcomp_prop_rqd_cmpfunc ON val_component_property USING btree (required_component_function);
+CREATE INDEX xif_prop_rqd_slt_func ON val_component_property USING btree (required_slot_function);
+CREATE INDEX xif_vcomp_prop_rqd_slttyp_id ON val_component_property USING btree (required_slot_type_id);
+CREATE INDEX xif_vcomp_prop_rqd_cmptypid ON val_component_property USING btree (required_component_type_id);
+CREATE INDEX xif_vcomp_prop_comp_prop_type ON val_component_property USING btree (component_property_type);
+
+-- CHECK CONSTRAINTS
+ALTER TABLE val_component_property ADD CONSTRAINT check_prp_prmt_27441051
+	CHECK (permit_component_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+ALTER TABLE val_component_property ADD CONSTRAINT check_prp_prmt_1618700758
+	CHECK (permit_component_function = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+ALTER TABLE val_component_property ADD CONSTRAINT check_yes_no_1709686918
+	CHECK (is_multivalue = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+ALTER TABLE val_component_property ADD CONSTRAINT check_prp_prmt_1984425150
+	CHECK (permit_slot_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+ALTER TABLE val_component_property ADD CONSTRAINT check_prp_prmt_342055273
+	CHECK (permit_slot_type_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+ALTER TABLE val_component_property ADD CONSTRAINT check_prp_prmt_1181188899
+	CHECK (permit_component_type_id = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+ALTER TABLE val_component_property ADD CONSTRAINT check_prp_prmt_1784750469
+	CHECK (permit_slot_function = ANY (ARRAY['REQUIRED'::bpchar, 'PROHIBITED'::bpchar, 'ALLOWED'::bpchar]));
+
+-- FOREIGN KEYS FROM
+-- consider FK val_component_property and val_component_property_value
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE val_component_property_value
+--	ADD CONSTRAINT fk_comp_prop_val_nametyp
+--	FOREIGN KEY (component_property_name, component_property_type) REFERENCES val_component_property(component_property_name, component_property_type);
+
+-- consider FK val_component_property and component_property
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE component_property
+--	ADD CONSTRAINT fk_comp_prop_prop_nmty
+--	FOREIGN KEY (component_property_name, component_property_type) REFERENCES val_component_property(component_property_name, component_property_type);
+
+
+-- FOREIGN KEYS TO
+-- consider FK val_component_property and val_slot_function
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE val_component_property
+--	ADD CONSTRAINT fk_vcomp_prop_rqd_slt_func
+--	FOREIGN KEY (required_slot_function) REFERENCES val_slot_function(slot_function);
+
+-- consider FK val_component_property and val_component_property_type
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE val_component_property
+--	ADD CONSTRAINT fk_comp_prop_comp_prop_type
+--	FOREIGN KEY (component_property_type) REFERENCES val_component_property_type(component_property_type);
+
+-- consider FK val_component_property and val_component_function
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE val_component_property
+--	ADD CONSTRAINT fk_cmop_prop_rqd_cmpfunc
+--	FOREIGN KEY (required_component_function) REFERENCES val_component_function(component_function);
+
+-- consider FK val_component_property and component_type
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE val_component_property
+--	ADD CONSTRAINT fk_comp_prop_rqd_cmptypid
+--	FOREIGN KEY (required_component_type_id) REFERENCES component_type(component_type_id);
+
+-- consider FK val_component_property and slot_type
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE val_component_property
+--	ADD CONSTRAINT fk_vcomp_prop_rqd_slttyp_id
+--	FOREIGN KEY (required_slot_type_id) REFERENCES slot_type(slot_type_id);
+
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'val_component_property');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'val_component_property');
+-- DONE DEALING WITH TABLE val_component_property [209103]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE val_raid_type
+CREATE TABLE val_raid_type
+(
+	raid_type	varchar(50) NOT NULL,
+	description	varchar(4000)  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'val_raid_type', true);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE val_raid_type ADD CONSTRAINT pk_raid_type PRIMARY KEY (raid_type);
+
+-- Table/Column Comments
+-- INDEXES
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+-- consider FK val_raid_type and volume_group
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE volume_group
+--	ADD CONSTRAINT r_639
+--	FOREIGN KEY (raid_type) REFERENCES val_raid_type(raid_type);
+
+
+-- FOREIGN KEYS TO
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'val_raid_type');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'val_raid_type');
+-- DONE DEALING WITH TABLE val_raid_type [209667]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE val_slot_function
+CREATE TABLE val_slot_function
+(
+	slot_function	varchar(50) NOT NULL,
+	description	varchar(4000)  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'val_slot_function', true);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE val_slot_function ADD CONSTRAINT pk_val_slot_function PRIMARY KEY (slot_function);
+
+-- Table/Column Comments
+-- INDEXES
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+-- consider FK val_slot_function and val_slot_physical_interface
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE val_slot_physical_interface
+--	ADD CONSTRAINT fk_slot_phys_int_slot_func
+--	FOREIGN KEY (slot_function) REFERENCES val_slot_function(slot_function);
+
+-- consider FK val_slot_function and component_property
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE component_property
+--	ADD CONSTRAINT fk_comp_prop_sltfuncid
+--	FOREIGN KEY (slot_function) REFERENCES val_slot_function(slot_function);
+
+-- consider FK val_slot_function and val_component_property
+ALTER TABLE val_component_property
+	ADD CONSTRAINT fk_vcomp_prop_rqd_slt_func
+	FOREIGN KEY (required_slot_function) REFERENCES val_slot_function(slot_function);
+-- consider FK val_slot_function and slot_type
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE slot_type
+--	ADD CONSTRAINT fk_slot_type_slt_func
+--	FOREIGN KEY (slot_function) REFERENCES val_slot_function(slot_function);
+
+
+-- FOREIGN KEYS TO
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'val_slot_function');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'val_slot_function');
+-- DONE DEALING WITH TABLE val_slot_function [209685]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE val_component_function
+CREATE TABLE val_component_function
+(
+	component_function	varchar(50) NOT NULL,
+	description	varchar(4000)  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'val_component_function', true);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE val_component_function ADD CONSTRAINT pk_val_component_function PRIMARY KEY (component_function);
+
+-- Table/Column Comments
+-- INDEXES
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+-- consider FK val_component_function and component_property
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE component_property
+--	ADD CONSTRAINT fk_comp_prop_comp_func
+--	FOREIGN KEY (component_function) REFERENCES val_component_function(component_function);
+
+-- consider FK val_component_function and component_type_component_func
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE component_type_component_func
+--	ADD CONSTRAINT fk_cmptypcf_comp_func
+--	FOREIGN KEY (component_function) REFERENCES val_component_function(component_function);
+
+-- consider FK val_component_function and val_component_property
+ALTER TABLE val_component_property
+	ADD CONSTRAINT fk_cmop_prop_rqd_cmpfunc
+	FOREIGN KEY (required_component_function) REFERENCES val_component_function(component_function);
+
+-- FOREIGN KEYS TO
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'val_component_function');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'val_component_function');
+-- DONE DEALING WITH TABLE val_component_function [209095]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE val_filesystem_type
+CREATE TABLE val_filesystem_type
+(
+	filesystem_type	varchar(50) NOT NULL,
+	description	varchar(4000)  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'val_filesystem_type', true);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE val_filesystem_type ADD CONSTRAINT pk_val_filesytem_type PRIMARY KEY (filesystem_type);
+
+-- Table/Column Comments
+-- INDEXES
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+-- consider FK val_filesystem_type and logical_volume
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE logical_volume
+--	ADD CONSTRAINT r_638
+--	FOREIGN KEY (filesystem_type) REFERENCES val_filesystem_type(filesystem_type);
+
+-- consider FK val_filesystem_type and val_logical_volume_property
+ALTER TABLE val_logical_volume_property
+	ADD CONSTRAINT r_643
+	FOREIGN KEY (filesystem_type) REFERENCES val_filesystem_type(filesystem_type);
+
+-- FOREIGN KEYS TO
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'val_filesystem_type');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'val_filesystem_type');
+-- DONE DEALING WITH TABLE val_filesystem_type [209288]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE val_slot_physical_interface
+CREATE TABLE val_slot_physical_interface
+(
+	slot_physical_interface_type	varchar(50) NOT NULL,
+	slot_function	varchar(50) NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'val_slot_physical_interface', true);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE val_slot_physical_interface ADD CONSTRAINT pk_val_slot_physical_interface PRIMARY KEY (slot_physical_interface_type, slot_function);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_slot_phys_int_slot_func ON val_slot_physical_interface USING btree (slot_function);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+-- consider FK val_slot_physical_interface and slot_type
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE slot_type
+--	ADD CONSTRAINT fk_slot_type_physint_func
+--	FOREIGN KEY (slot_physical_interface_type, slot_function) REFERENCES val_slot_physical_interface(slot_physical_interface_type, slot_function);
+
+
+-- FOREIGN KEYS TO
+-- consider FK val_slot_physical_interface and val_slot_function
+ALTER TABLE val_slot_physical_interface
+	ADD CONSTRAINT fk_slot_phys_int_slot_func
+	FOREIGN KEY (slot_function) REFERENCES val_slot_function(slot_function);
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'val_slot_physical_interface');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'val_slot_physical_interface');
+-- DONE DEALING WITH TABLE val_slot_physical_interface [209693]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE val_component_property_value
+CREATE TABLE val_component_property_value
+(
+	component_property_name	integer NOT NULL,
+	component_property_type	varchar(50) NOT NULL,
+	valid_property_value	varchar(255) NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'val_component_property_value', true);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE val_component_property_value ADD CONSTRAINT pk_val_component_property_valu PRIMARY KEY (component_property_name, component_property_type, valid_property_value);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_comp_prop_val_nametyp ON val_component_property_value USING btree (component_property_name, component_property_type);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+-- consider FK val_component_property_value and val_component_property
+ALTER TABLE val_component_property_value
+	ADD CONSTRAINT fk_comp_prop_val_nametyp
+	FOREIGN KEY (component_property_name, component_property_type) REFERENCES val_component_property(component_property_name, component_property_type);
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'val_component_property_value');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'val_component_property_value');
+-- DONE DEALING WITH TABLE val_component_property_value [209139]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE val_component_property_type
+CREATE TABLE val_component_property_type
+(
+	component_property_type	varchar(50) NOT NULL,
+	description	varchar(4000)  NULL,
+	is_multivalue	character(1) NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'val_component_property_type', true);
+ALTER TABLE val_component_property_type
+	ALTER is_multivalue
+	SET DEFAULT 'N'::bpchar;
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE val_component_property_type ADD CONSTRAINT pk_val_component_property_type PRIMARY KEY (component_property_type);
+
+-- Table/Column Comments
+COMMENT ON TABLE val_component_property_type IS 'Contains list of valid component_property_types';
+-- INDEXES
+
+-- CHECK CONSTRAINTS
+ALTER TABLE val_component_property_type ADD CONSTRAINT check_yes_no_46206456
+	CHECK (is_multivalue = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+
+-- FOREIGN KEYS FROM
+-- consider FK val_component_property_type and val_component_property
+ALTER TABLE val_component_property
+	ADD CONSTRAINT fk_comp_prop_comp_prop_type
+	FOREIGN KEY (component_property_type) REFERENCES val_component_property_type(component_property_type);
+
+-- FOREIGN KEYS TO
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'val_component_property_type');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'val_component_property_type');
+-- DONE DEALING WITH TABLE val_component_property_type [209129]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE slot_type_prmt_rem_slot_type
+CREATE TABLE slot_type_prmt_rem_slot_type
+(
+	slot_type_id	integer NOT NULL,
+	remote_slot_type_id	integer NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'slot_type_prmt_rem_slot_type', true);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE slot_type_prmt_rem_slot_type ADD CONSTRAINT pk_slot_type_prmt_rem_slot_typ PRIMARY KEY (slot_type_id, remote_slot_type_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_stprst_remote_slot_type_id ON slot_type_prmt_rem_slot_type USING btree (remote_slot_type_id);
+CREATE INDEX xif_stprst_slot_type_id ON slot_type_prmt_rem_slot_type USING btree (slot_type_id);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+-- consider FK slot_type_prmt_rem_slot_type and slot_type
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE slot_type_prmt_rem_slot_type
+--	ADD CONSTRAINT fk_stprst_remote_slot_type_id
+--	FOREIGN KEY (remote_slot_type_id) REFERENCES slot_type(slot_type_id);
+
+-- consider FK slot_type_prmt_rem_slot_type and slot_type
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE slot_type_prmt_rem_slot_type
+--	ADD CONSTRAINT fk_stprst_slot_type_id
+--	FOREIGN KEY (slot_type_id) REFERENCES slot_type(slot_type_id);
+
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'slot_type_prmt_rem_slot_type');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'slot_type_prmt_rem_slot_type');
+-- DONE DEALING WITH TABLE slot_type_prmt_rem_slot_type [208773]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE inter_component_connection
+CREATE TABLE inter_component_connection
+(
+	inter_component_connection_id	integer NOT NULL,
+	slot1_id	integer NOT NULL,
+	slot2_id	integer NOT NULL,
+	circuit_id	integer  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'inter_component_connection', true);
+ALTER TABLE inter_component_connection
+	ALTER inter_component_connection_id
+	SET DEFAULT nextval('inter_component_connection_inter_component_connection_id_seq'::regclass);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE inter_component_connection ADD CONSTRAINT pk_inter_component_connection PRIMARY KEY (inter_component_connection_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_intercomp_conn_slot2_id ON inter_component_connection USING btree (slot2_id);
+CREATE INDEX xif_intercomp_conn_slot1_id ON inter_component_connection USING btree (slot1_id);
+CREATE INDEX xif_intercom_conn_circ_id ON inter_component_connection USING btree (circuit_id);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+-- consider FK inter_component_connection and circuit
+ALTER TABLE inter_component_connection
+	ADD CONSTRAINT fk_intercom_conn_circ_id
+	FOREIGN KEY (circuit_id) REFERENCES circuit(circuit_id);
+-- consider FK inter_component_connection and slot
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE inter_component_connection
+--	ADD CONSTRAINT fk_intercomp_conn_slot2_id
+--	FOREIGN KEY (slot2_id) REFERENCES slot(slot_id);
+
+-- consider FK inter_component_connection and slot
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE inter_component_connection
+--	ADD CONSTRAINT fk_intercomp_conn_slot1_id
+--	FOREIGN KEY (slot1_id) REFERENCES slot(slot_id);
+
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'inter_component_connection');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'inter_component_connection');
+ALTER SEQUENCE inter_component_connection_inter_component_connection_id_seq
+	 OWNED BY inter_component_connection.inter_component_connection_id;
+-- DONE DEALING WITH TABLE inter_component_connection [207946]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE component_type
+CREATE TABLE component_type
+(
+	component_type_id	integer NOT NULL,
+	company_id	integer  NULL,
+	model	varchar(255)  NULL,
+	slot_type_id	integer  NULL,
+	description	varchar(255)  NULL,
+	part_number	varchar(255)  NULL,
+	is_removable	character(1) NOT NULL,
+	asset_permitted	character(1) NOT NULL,
+	is_rack_mountable	character(1) NOT NULL,
+	is_virtual_component	character(1) NOT NULL,
+	size_units	varchar(50) NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'component_type', true);
+ALTER TABLE component_type
+	ALTER component_type_id
+	SET DEFAULT nextval('component_type_component_type_id_seq'::regclass);
+ALTER TABLE component_type
+	ALTER is_removable
+	SET DEFAULT 'N'::bpchar;
+ALTER TABLE component_type
+	ALTER asset_permitted
+	SET DEFAULT 'N'::bpchar;
+ALTER TABLE component_type
+	ALTER is_rack_mountable
+	SET DEFAULT 'N'::bpchar;
+ALTER TABLE component_type
+	ALTER is_virtual_component
+	SET DEFAULT 'N'::bpchar;
+ALTER TABLE component_type
+	ALTER size_units
+	SET DEFAULT 0;
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE component_type ADD CONSTRAINT pk_component_type PRIMARY KEY (component_type_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_component_type_slt_type_id ON component_type USING btree (slot_type_id);
+CREATE INDEX xif_component_type_company_id ON component_type USING btree (company_id);
+
+-- CHECK CONSTRAINTS
+ALTER TABLE component_type ADD CONSTRAINT check_yes_no_25197360
+	CHECK (is_rack_mountable = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+ALTER TABLE component_type ADD CONSTRAINT check_yes_no_981718444
+	CHECK (is_virtual_component = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+ALTER TABLE component_type ADD CONSTRAINT check_yes_no_1730011385
+	CHECK (is_removable = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+ALTER TABLE component_type ADD CONSTRAINT check_yes_no_53094976
+	CHECK (asset_permitted = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+
+-- FOREIGN KEYS FROM
+-- consider FK component_type and device_type
+ALTER TABLE device_type
+	ADD CONSTRAINT fk_fevtyp_component_id
+	FOREIGN KEY (component_type_id) REFERENCES component_type(component_type_id);
+-- consider FK component_type and component_type_slot_tmplt
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE component_type_slot_tmplt
+--	ADD CONSTRAINT fk_comp_typ_slt_tmplt_cmptypid
+--	FOREIGN KEY (component_type_id) REFERENCES component_type(component_type_id);
+
+-- consider FK component_type and component_property
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE component_property
+--	ADD CONSTRAINT fk_comp_prop_comp_typ_id
+--	FOREIGN KEY (component_type_id) REFERENCES component_type(component_type_id);
+
+-- consider FK component_type and val_component_property
+ALTER TABLE val_component_property
+	ADD CONSTRAINT fk_comp_prop_rqd_cmptypid
+	FOREIGN KEY (required_component_type_id) REFERENCES component_type(component_type_id);
+-- consider FK component_type and component_type_component_func
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE component_type_component_func
+--	ADD CONSTRAINT fk_cmptypecf_comp_typ_id
+--	FOREIGN KEY (component_type_id) REFERENCES component_type(component_type_id);
+
+-- consider FK component_type and component
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE component
+--	ADD CONSTRAINT fk_component_comp_type_i
+--	FOREIGN KEY (component_type_id) REFERENCES component_type(component_type_id);
+
+
+-- FOREIGN KEYS TO
+-- consider FK component_type and slot_type
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE component_type
+--	ADD CONSTRAINT fk_component_type_slt_type_id
+--	FOREIGN KEY (slot_type_id) REFERENCES slot_type(slot_type_id);
+
+-- consider FK component_type and company
+ALTER TABLE component_type
+	ADD CONSTRAINT fk_component_type_company_id
+	FOREIGN KEY (company_id) REFERENCES company(company_id);
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'component_type');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'component_type');
+ALTER SEQUENCE component_type_component_type_id_seq
+	 OWNED BY component_type.component_type_id;
+-- DONE DEALING WITH TABLE component_type [207535]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE component_property
+CREATE TABLE component_property
+(
+	component_property_id	integer NOT NULL,
+	component_function	varchar(50)  NULL,
+	component_type_id	integer  NULL,
+	component_id	integer  NULL,
+	slot_function	varchar(50)  NULL,
+	slot_type_id	integer  NULL,
+	slot_id	integer  NULL,
+	component_property_name	integer  NULL,
+	component_property_type	varchar(50)  NULL,
+	property_value	varchar(255)  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'component_property', true);
+ALTER TABLE component_property
+	ALTER component_property_id
+	SET DEFAULT nextval('component_property_component_property_id_seq'::regclass);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE component_property ADD CONSTRAINT pk_component_property PRIMARY KEY (component_property_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_comp_prop_comp_typ_id ON component_property USING btree (component_type_id);
+CREATE INDEX xif_comp_prop_prop_nmty ON component_property USING btree (component_property_name, component_property_type);
+CREATE INDEX xif_comp_prop_slt_slt_id ON component_property USING btree (slot_id);
+CREATE INDEX xif_comp_prop_cmp_id ON component_property USING btree (component_id);
+CREATE INDEX xif_comp_prop_sltfuncid ON component_property USING btree (slot_function);
+CREATE INDEX xif_comp_prop_comp_func ON component_property USING btree (component_function);
+CREATE INDEX xif_comp_prop_slt_typ_id ON component_property USING btree (slot_type_id);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+-- consider FK component_property and val_component_property
+ALTER TABLE component_property
+	ADD CONSTRAINT fk_comp_prop_prop_nmty
+	FOREIGN KEY (component_property_name, component_property_type) REFERENCES val_component_property(component_property_name, component_property_type);
+-- consider FK component_property and val_component_function
+ALTER TABLE component_property
+	ADD CONSTRAINT fk_comp_prop_comp_func
+	FOREIGN KEY (component_function) REFERENCES val_component_function(component_function);
+-- consider FK component_property and slot_type
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE component_property
+--	ADD CONSTRAINT fk_comp_prop_slt_typ_id
+--	FOREIGN KEY (slot_type_id) REFERENCES slot_type(slot_type_id);
+
+-- consider FK component_property and val_slot_function
+ALTER TABLE component_property
+	ADD CONSTRAINT fk_comp_prop_sltfuncid
+	FOREIGN KEY (slot_function) REFERENCES val_slot_function(slot_function);
+-- consider FK component_property and component_type
+ALTER TABLE component_property
+	ADD CONSTRAINT fk_comp_prop_comp_typ_id
+	FOREIGN KEY (component_type_id) REFERENCES component_type(component_type_id);
+-- consider FK component_property and component
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE component_property
+--	ADD CONSTRAINT fk_comp_prop_cmp_id
+--	FOREIGN KEY (component_id) REFERENCES component(component_id);
+
+-- consider FK component_property and slot
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE component_property
+--	ADD CONSTRAINT fk_comp_prop_slt_slt_id
+--	FOREIGN KEY (slot_id) REFERENCES slot(slot_id);
+
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'component_property');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'component_property');
+ALTER SEQUENCE component_property_component_property_id_seq
+	 OWNED BY component_property.component_property_id;
+-- DONE DEALING WITH TABLE component_property [207517]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE component_type_slot_tmplt
+CREATE TABLE component_type_slot_tmplt
+(
+	component_type_slot_tmplt_id	integer NOT NULL,
+	component_type_id	integer NOT NULL,
+	slot_type_id	integer NOT NULL,
+	slot_name_template	varchar(50) NOT NULL,
+	child_slot_name_template	varchar(50)  NULL,
+	child_slot_offset	integer  NULL,
+	slot_index	integer  NULL,
+	physical_label	varchar(50)  NULL,
+	slot_x_offset	integer  NULL,
+	slot_y_offset	character(18)  NULL,
+	slot_z_offset	integer  NULL,
+	slot_side	varchar(50)  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'component_type_slot_tmplt', true);
+ALTER TABLE component_type_slot_tmplt
+	ALTER component_type_slot_tmplt_id
+	SET DEFAULT nextval('component_type_slot_tmplt_component_type_slot_tmplt_id_seq'::regclass);
+ALTER TABLE component_type_slot_tmplt
+	ALTER slot_side
+	SET DEFAULT 'FRONT'::character varying;
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE component_type_slot_tmplt ADD CONSTRAINT pk_component_type_slot_tmplt PRIMARY KEY (component_type_slot_tmplt_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_comp_typ_slt_tmplt_slttypi ON component_type_slot_tmplt USING btree (slot_type_id);
+CREATE INDEX xif_comp_typ_slt_tmplt_cmptypi ON component_type_slot_tmplt USING btree (component_type_id);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+-- consider FK component_type_slot_tmplt and slot
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE slot
+--	ADD CONSTRAINT fk_slot_cmp_typ_tmp_id
+--	FOREIGN KEY (component_type_slot_tmplt_id) REFERENCES component_type_slot_tmplt(component_type_slot_tmplt_id);
+
+
+-- FOREIGN KEYS TO
+-- consider FK component_type_slot_tmplt and slot_type
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE component_type_slot_tmplt
+--	ADD CONSTRAINT fk_comp_typ_slt_tmplt_slttypid
+--	FOREIGN KEY (slot_type_id) REFERENCES slot_type(slot_type_id);
+
+-- consider FK component_type_slot_tmplt and component_type
+ALTER TABLE component_type_slot_tmplt
+	ADD CONSTRAINT fk_comp_typ_slt_tmplt_cmptypid
+	FOREIGN KEY (component_type_id) REFERENCES component_type(component_type_id);
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'component_type_slot_tmplt');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'component_type_slot_tmplt');
+ALTER SEQUENCE component_type_slot_tmplt_component_type_slot_tmplt_id_seq
+	 OWNED BY component_type_slot_tmplt.component_type_slot_tmplt_id;
+-- DONE DEALING WITH TABLE component_type_slot_tmplt [207567]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE slot_type_prmt_comp_slot_type
+CREATE TABLE slot_type_prmt_comp_slot_type
+(
+	slot_type_id	integer NOT NULL,
+	component_slot_type_id	integer NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'slot_type_prmt_comp_slot_type', true);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE slot_type_prmt_comp_slot_type ADD CONSTRAINT pk_slot_type_prmt_comp_slot_ty PRIMARY KEY (slot_type_id, component_slot_type_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_stpcst_cmp_slt_typ_id ON slot_type_prmt_comp_slot_type USING btree (slot_type_id);
+CREATE INDEX xif_stpcst_slot_type_id ON slot_type_prmt_comp_slot_type USING btree (component_slot_type_id);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+-- consider FK slot_type_prmt_comp_slot_type and slot_type
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE slot_type_prmt_comp_slot_type
+--	ADD CONSTRAINT fk_stpcst_slot_type_id
+--	FOREIGN KEY (component_slot_type_id) REFERENCES slot_type(slot_type_id);
+
+-- consider FK slot_type_prmt_comp_slot_type and slot_type
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE slot_type_prmt_comp_slot_type
+--	ADD CONSTRAINT fk_stpcst_cmp_slt_typ_id
+--	FOREIGN KEY (slot_type_id) REFERENCES slot_type(slot_type_id);
+
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'slot_type_prmt_comp_slot_type');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'slot_type_prmt_comp_slot_type');
+-- DONE DEALING WITH TABLE slot_type_prmt_comp_slot_type [208763]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE slot_type
+CREATE TABLE slot_type
+(
+	slot_type_id	integer NOT NULL,
+	slot_type	varchar(50) NOT NULL,
+	slot_function	varchar(50) NOT NULL,
+	slot_physical_interface_type	varchar(50) NOT NULL,
+	description	varchar(255)  NULL,
+	remote_slot_permitted	character(1) NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'slot_type', true);
+ALTER TABLE slot_type
+	ALTER slot_type_id
+	SET DEFAULT nextval('slot_type_slot_type_id_seq'::regclass);
+ALTER TABLE slot_type
+	ALTER remote_slot_permitted
+	SET DEFAULT 'N'::bpchar;
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE slot_type ADD CONSTRAINT ak_slot_type_name_type UNIQUE (slot_type, slot_function);
+ALTER TABLE slot_type ADD CONSTRAINT pk_slot_type PRIMARY KEY (slot_type_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_slot_type_slt_func ON slot_type USING btree (slot_function);
+CREATE INDEX xif_slot_type_physint_func ON slot_type USING btree (slot_physical_interface_type, slot_function);
+
+-- CHECK CONSTRAINTS
+ALTER TABLE slot_type ADD CONSTRAINT check_yes_no_28083896
+	CHECK (remote_slot_permitted = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+
+-- FOREIGN KEYS FROM
+-- consider FK slot_type and slot_type_prmt_comp_slot_type
+ALTER TABLE slot_type_prmt_comp_slot_type
+	ADD CONSTRAINT fk_stpcst_slot_type_id
+	FOREIGN KEY (component_slot_type_id) REFERENCES slot_type(slot_type_id);
+-- consider FK slot_type and component_type
+ALTER TABLE component_type
+	ADD CONSTRAINT fk_component_type_slt_type_id
+	FOREIGN KEY (slot_type_id) REFERENCES slot_type(slot_type_id);
+-- consider FK slot_type and slot_type_prmt_rem_slot_type
+ALTER TABLE slot_type_prmt_rem_slot_type
+	ADD CONSTRAINT fk_stprst_remote_slot_type_id
+	FOREIGN KEY (remote_slot_type_id) REFERENCES slot_type(slot_type_id);
+-- consider FK slot_type and slot_type_prmt_comp_slot_type
+ALTER TABLE slot_type_prmt_comp_slot_type
+	ADD CONSTRAINT fk_stpcst_cmp_slt_typ_id
+	FOREIGN KEY (slot_type_id) REFERENCES slot_type(slot_type_id);
+-- consider FK slot_type and slot_type_prmt_rem_slot_type
+ALTER TABLE slot_type_prmt_rem_slot_type
+	ADD CONSTRAINT fk_stprst_slot_type_id
+	FOREIGN KEY (slot_type_id) REFERENCES slot_type(slot_type_id);
+-- consider FK slot_type and slot
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE slot
+--	ADD CONSTRAINT fk_slot_slot_type_id
+--	FOREIGN KEY (slot_type_id) REFERENCES slot_type(slot_type_id);
+
+-- consider FK slot_type and component_type_slot_tmplt
+ALTER TABLE component_type_slot_tmplt
+	ADD CONSTRAINT fk_comp_typ_slt_tmplt_slttypid
+	FOREIGN KEY (slot_type_id) REFERENCES slot_type(slot_type_id);
+-- consider FK slot_type and val_component_property
+ALTER TABLE val_component_property
+	ADD CONSTRAINT fk_vcomp_prop_rqd_slttyp_id
+	FOREIGN KEY (required_slot_type_id) REFERENCES slot_type(slot_type_id);
+-- consider FK slot_type and component_property
+ALTER TABLE component_property
+	ADD CONSTRAINT fk_comp_prop_slt_typ_id
+	FOREIGN KEY (slot_type_id) REFERENCES slot_type(slot_type_id);
+
+-- FOREIGN KEYS TO
+-- consider FK slot_type and val_slot_physical_interface
+ALTER TABLE slot_type
+	ADD CONSTRAINT fk_slot_type_physint_func
+	FOREIGN KEY (slot_physical_interface_type, slot_function) REFERENCES val_slot_physical_interface(slot_physical_interface_type, slot_function);
+-- consider FK slot_type and val_slot_function
+ALTER TABLE slot_type
+	ADD CONSTRAINT fk_slot_type_slt_func
+	FOREIGN KEY (slot_function) REFERENCES val_slot_function(slot_function);
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'slot_type');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'slot_type');
+ALTER SEQUENCE slot_type_slot_type_id_seq
+	 OWNED BY slot_type.slot_type_id;
+-- DONE DEALING WITH TABLE slot_type [208748]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE logical_port_slot
+CREATE TABLE logical_port_slot
+(
+	logical_port_id	integer NOT NULL,
+	slot_id	integer NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'logical_port_slot', true);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE logical_port_slot ADD CONSTRAINT pk_logical_port_slot PRIMARY KEY (logical_port_id, slot_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_lgl_port_slot_slot_id ON logical_port_slot USING btree (slot_id);
+CREATE INDEX xif_lgl_port_slot_lgl_port_id ON logical_port_slot USING btree (logical_port_id);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+-- consider FK logical_port_slot and slot
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE logical_port_slot
+--	ADD CONSTRAINT fk_lgl_port_slot_slot_id
+--	FOREIGN KEY (slot_id) REFERENCES slot(slot_id);
+
+-- consider FK logical_port_slot and logical_port
+ALTER TABLE logical_port_slot
+	ADD CONSTRAINT fk_lgl_port_slot_lgl_port_id
+	FOREIGN KEY (logical_port_id) REFERENCES logical_port(logical_port_id);
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'logical_port_slot');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'logical_port_slot');
+-- DONE DEALING WITH TABLE logical_port_slot [208116]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE slot
+CREATE TABLE slot
+(
+	slot_id	integer NOT NULL,
+	component_id	integer NOT NULL,
+	slot_name	varchar(50) NOT NULL,
+	slot_type_id	integer NOT NULL,
+	component_type_slot_tmplt_id	integer  NULL,
+	is_enabled	character(1) NOT NULL,
+	physical_label	varchar(50)  NULL,
+	description	varchar(255)  NULL,
+	slot_x_offset	integer  NULL,
+	slot_y_offset	integer  NULL,
+	slot_z_offset	integer  NULL,
+	slot_side	varchar(50) NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'slot', true);
+ALTER TABLE slot
+	ALTER slot_id
+	SET DEFAULT nextval('slot_slot_id_seq'::regclass);
+ALTER TABLE slot
+	ALTER is_enabled
+	SET DEFAULT 'Y'::bpchar;
+ALTER TABLE slot
+	ALTER slot_side
+	SET DEFAULT 'FRONT'::character varying;
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE slot ADD CONSTRAINT pk_slot_id PRIMARY KEY (slot_id);
+ALTER TABLE slot ADD CONSTRAINT ak_slot_slot_type_id UNIQUE (slot_id, slot_type_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_slot_slot_type_id ON slot USING btree (slot_type_id);
+CREATE INDEX xif_slot_component_id ON slot USING btree (component_id);
+CREATE INDEX xif_slot_cmp_typ_tmp_id ON slot USING btree (component_type_slot_tmplt_id);
+
+-- CHECK CONSTRAINTS
+ALTER TABLE slot ADD CONSTRAINT ckc_slot_slot_side
+	CHECK ((slot_side)::text = ANY ((ARRAY['FRONT'::character varying, 'BACK'::character varying])::text[]));
+ALTER TABLE slot ADD CONSTRAINT checkslot_enbled__yes_no
+	CHECK (is_enabled = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+
+-- FOREIGN KEYS FROM
+-- consider FK slot and component
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE component
+--	ADD CONSTRAINT fk_component_prnt_slt_id
+--	FOREIGN KEY (parent_slot_id) REFERENCES slot(slot_id);
+
+-- consider FK slot and logical_port_slot
+ALTER TABLE logical_port_slot
+	ADD CONSTRAINT fk_lgl_port_slot_slot_id
+	FOREIGN KEY (slot_id) REFERENCES slot(slot_id);
+-- consider FK slot and component_property
+ALTER TABLE component_property
+	ADD CONSTRAINT fk_comp_prop_slt_slt_id
+	FOREIGN KEY (slot_id) REFERENCES slot(slot_id);
+-- consider FK slot and inter_component_connection
+ALTER TABLE inter_component_connection
+	ADD CONSTRAINT fk_intercomp_conn_slot1_id
+	FOREIGN KEY (slot1_id) REFERENCES slot(slot_id);
+-- consider FK slot and inter_component_connection
+ALTER TABLE inter_component_connection
+	ADD CONSTRAINT fk_intercomp_conn_slot2_id
+	FOREIGN KEY (slot2_id) REFERENCES slot(slot_id);
+
+-- FOREIGN KEYS TO
+-- consider FK slot and component_type_slot_tmplt
+ALTER TABLE slot
+	ADD CONSTRAINT fk_slot_cmp_typ_tmp_id
+	FOREIGN KEY (component_type_slot_tmplt_id) REFERENCES component_type_slot_tmplt(component_type_slot_tmplt_id);
+-- consider FK slot and component
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE slot
+--	ADD CONSTRAINT fk_slot_component_id
+--	FOREIGN KEY (component_id) REFERENCES component(component_id);
+
+-- consider FK slot and slot_type
+ALTER TABLE slot
+	ADD CONSTRAINT fk_slot_slot_type_id
+	FOREIGN KEY (slot_type_id) REFERENCES slot_type(slot_type_id);
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'slot');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'slot');
+ALTER SEQUENCE slot_slot_id_seq
+	 OWNED BY slot.slot_id;
+-- DONE DEALING WITH TABLE slot [208728]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE component_type_component_func
+CREATE TABLE component_type_component_func
+(
+	component_function	varchar(50) NOT NULL,
+	component_type_id	integer NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'component_type_component_func', true);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE component_type_component_func ADD CONSTRAINT pk_component_type_component_fu PRIMARY KEY (component_function, component_type_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_cmptypcf_comp_func ON component_type_component_func USING btree (component_function);
+CREATE INDEX xif_cmptypecf_comp_typ_id ON component_type_component_func USING btree (component_type_id);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+-- consider FK component_type_component_func and val_component_function
+ALTER TABLE component_type_component_func
+	ADD CONSTRAINT fk_cmptypcf_comp_func
+	FOREIGN KEY (component_function) REFERENCES val_component_function(component_function);
+-- consider FK component_type_component_func and component_type
+ALTER TABLE component_type_component_func
+	ADD CONSTRAINT fk_cmptypecf_comp_typ_id
+	FOREIGN KEY (component_type_id) REFERENCES component_type(component_type_id);
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'component_type_component_func');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'component_type_component_func');
+-- DONE DEALING WITH TABLE component_type_component_func [207555]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE component
+CREATE TABLE component
+(
+	component_id	integer NOT NULL,
+	component_type_id	integer NOT NULL,
+	component_name	varchar(255)  NULL,
+	rack_location_id	integer  NULL,
+	parent_slot_id	integer  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'component', true);
+ALTER TABLE component
+	ALTER component_id
+	SET DEFAULT nextval('component_component_id_seq'::regclass);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE component ADD CONSTRAINT pk_component PRIMARY KEY (component_id);
+ALTER TABLE component ADD CONSTRAINT ak_component_component_type_id UNIQUE (component_id, component_type_id);
+ALTER TABLE component ADD CONSTRAINT ak_component_parent_slot_id UNIQUE (parent_slot_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_component_rack_loc_id ON component USING btree (rack_location_id);
+CREATE INDEX xif_component_comp_type_id ON component USING btree (component_type_id);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+-- consider FK component and slot
+ALTER TABLE slot
+	ADD CONSTRAINT fk_slot_component_id
+	FOREIGN KEY (component_id) REFERENCES component(component_id);
+-- consider FK component and asset
+ALTER TABLE asset
+	ADD CONSTRAINT fk_asset_comp_id
+	FOREIGN KEY (component_id) REFERENCES component(component_id);
+-- consider FK component and component_property
+ALTER TABLE component_property
+	ADD CONSTRAINT fk_comp_prop_cmp_id
+	FOREIGN KEY (component_id) REFERENCES component(component_id);
+-- consider FK component and physicalish_volume
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE physicalish_volume
+--	ADD CONSTRAINT r_636
+--	FOREIGN KEY (component_id) REFERENCES component(component_id);
+
+-- consider FK component and device
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_comp_id
+	FOREIGN KEY (component_id) REFERENCES component(component_id);
+
+-- FOREIGN KEYS TO
+-- consider FK component and rack_location
+ALTER TABLE component
+	ADD CONSTRAINT fk_component_rack_loc_id
+	FOREIGN KEY (rack_location_id) REFERENCES rack_location(rack_location_id);
+-- consider FK component and component_type
+ALTER TABLE component
+	ADD CONSTRAINT fk_component_comp_type_i
+	FOREIGN KEY (component_type_id) REFERENCES component_type(component_type_id);
+-- consider FK component and slot
+ALTER TABLE component
+	ADD CONSTRAINT fk_component_prnt_slt_id
+	FOREIGN KEY (parent_slot_id) REFERENCES slot(slot_id);
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'component');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'component');
+ALTER SEQUENCE component_component_id_seq
+	 OWNED BY component.component_id;
+-- DONE DEALING WITH TABLE component [207500]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE physicalish_volume
+CREATE TABLE physicalish_volume
+(
+	physicalish_volume_id	integer NOT NULL,
+	logical_volume_id	integer  NULL,
+	component_id	integer  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'physicalish_volume', true);
+ALTER TABLE physicalish_volume
+	ALTER physicalish_volume_id
+	SET DEFAULT nextval('physicalish_volume_physicalish_volume_id_seq'::regclass);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE physicalish_volume ADD CONSTRAINT pk_physicalish_volume PRIMARY KEY (physicalish_volume_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif1physicalish_volume ON physicalish_volume USING btree (logical_volume_id);
+CREATE INDEX xif2physicalish_volume ON physicalish_volume USING btree (component_id);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+-- consider FK physicalish_volume and volume_group_physicalish_vol
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE volume_group_physicalish_vol
+--	ADD CONSTRAINT r_630
+--	FOREIGN KEY (physicalish_volume_id) REFERENCES physicalish_volume(physicalish_volume_id);
+
+
+-- FOREIGN KEYS TO
+-- consider FK physicalish_volume and logical_volume
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE physicalish_volume
+--	ADD CONSTRAINT r_634
+--	FOREIGN KEY (logical_volume_id) REFERENCES logical_volume(logical_volume_id);
+
+-- consider FK physicalish_volume and component
+ALTER TABLE physicalish_volume
+	ADD CONSTRAINT r_636
+	FOREIGN KEY (component_id) REFERENCES component(component_id);
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'physicalish_volume');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'physicalish_volume');
+ALTER SEQUENCE physicalish_volume_physicalish_volume_id_seq
+	 OWNED BY physicalish_volume.physicalish_volume_id;
+-- DONE DEALING WITH TABLE physicalish_volume [208545]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE volume_group_physicalish_vol
+CREATE TABLE volume_group_physicalish_vol
+(
+	physicalish_volume_id	integer NOT NULL,
+	volume_group_id	integer NOT NULL,
+	volume_group_position	integer NOT NULL,
+	volume_group_relation	varchar(50) NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'volume_group_physicalish_vol', true);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE volume_group_physicalish_vol ADD CONSTRAINT pk_volume_group_physicalish_vo PRIMARY KEY (physicalish_volume_id, volume_group_id);
+ALTER TABLE volume_group_physicalish_vol ADD CONSTRAINT ak_volgrp_pv_position UNIQUE (volume_group_id, volume_group_position);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif3volume_group_physicalish_v ON volume_group_physicalish_vol USING btree (volume_group_id);
+CREATE INDEX xif4volume_group_physicalish_v ON volume_group_physicalish_vol USING btree (volume_group_relation);
+CREATE INDEX xif1volume_group_physicalish_v ON volume_group_physicalish_vol USING btree (physicalish_volume_id);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+-- consider FK volume_group_physicalish_vol and physicalish_volume
+ALTER TABLE volume_group_physicalish_vol
+	ADD CONSTRAINT r_630
+	FOREIGN KEY (physicalish_volume_id) REFERENCES physicalish_volume(physicalish_volume_id);
+-- consider FK volume_group_physicalish_vol and volume_group
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE volume_group_physicalish_vol
+--	ADD CONSTRAINT r_633
+--	FOREIGN KEY (volume_group_id) REFERENCES volume_group(volume_group_id);
+
+-- consider FK volume_group_physicalish_vol and val_volume_group_relation
+ALTER TABLE volume_group_physicalish_vol
+	ADD CONSTRAINT r_645
+	FOREIGN KEY (volume_group_relation) REFERENCES val_volume_group_relation(volume_group_relation);
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'volume_group_physicalish_vol');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'volume_group_physicalish_vol');
+-- DONE DEALING WITH TABLE volume_group_physicalish_vol [209887]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE logical_volume
+CREATE TABLE logical_volume
+(
+	logical_volume_id	integer NOT NULL,
+	volume_group_id	integer NOT NULL,
+	logical_volume_name	varchar(50) NOT NULL,
+	logical_volume_size_in_mb	integer NOT NULL,
+	logical_volume_offset_in_mb	integer  NULL,
+	filesystem_type	varchar(50) NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'logical_volume', true);
+ALTER TABLE logical_volume
+	ALTER logical_volume_id
+	SET DEFAULT nextval('logical_volume_logical_volume_id_seq'::regclass);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE logical_volume ADD CONSTRAINT ak_logical_volume_filesystem UNIQUE (logical_volume_id, filesystem_type);
+ALTER TABLE logical_volume ADD CONSTRAINT pk_logical_volume PRIMARY KEY (logical_volume_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif2logical_volume ON logical_volume USING btree (filesystem_type);
+CREATE INDEX xif1logical_volume ON logical_volume USING btree (volume_group_id);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+-- consider FK logical_volume and physicalish_volume
+ALTER TABLE physicalish_volume
+	ADD CONSTRAINT r_634
+	FOREIGN KEY (logical_volume_id) REFERENCES logical_volume(logical_volume_id);
+-- consider FK logical_volume and logical_volume_property
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE logical_volume_property
+--	ADD CONSTRAINT r_642
+--	FOREIGN KEY (logical_volume_id, filesystem_type) REFERENCES logical_volume(logical_volume_id, filesystem_type);
+
+
+-- FOREIGN KEYS TO
+-- consider FK logical_volume and val_filesystem_type
+ALTER TABLE logical_volume
+	ADD CONSTRAINT r_638
+	FOREIGN KEY (filesystem_type) REFERENCES val_filesystem_type(filesystem_type);
+-- consider FK logical_volume and volume_group
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE logical_volume
+--	ADD CONSTRAINT r_632
+--	FOREIGN KEY (volume_group_id) REFERENCES volume_group(volume_group_id);
+
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'logical_volume');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'logical_volume');
+ALTER SEQUENCE logical_volume_logical_volume_id_seq
+	 OWNED BY logical_volume.logical_volume_id;
+-- DONE DEALING WITH TABLE logical_volume [208128]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE logical_volume_property
+CREATE TABLE logical_volume_property
+(
+	logical_volume_property_id	integer NOT NULL,
+	logical_volume_id	integer  NULL,
+	filesystem_type	varchar(50)  NULL,
+	logical_volume_property_name	varchar(50)  NULL,
+	logical_volume_property_value	varchar(255)  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'logical_volume_property', true);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE logical_volume_property ADD CONSTRAINT ak_logical_vol_prop_fs_lv_name UNIQUE (logical_volume_id, logical_volume_property_name);
+ALTER TABLE logical_volume_property ADD CONSTRAINT pk_logical_volume_property PRIMARY KEY (logical_volume_property_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif2logical_volume_property ON logical_volume_property USING btree (logical_volume_property_name, filesystem_type);
+CREATE INDEX xif1logical_volume_property ON logical_volume_property USING btree (logical_volume_id, filesystem_type);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+-- consider FK logical_volume_property and val_logical_volume_property
+ALTER TABLE logical_volume_property
+	ADD CONSTRAINT r_644
+	FOREIGN KEY (logical_volume_property_name, filesystem_type) REFERENCES val_logical_volume_property(logical_volume_property_name, filesystem_type);
+-- consider FK logical_volume_property and logical_volume
+ALTER TABLE logical_volume_property
+	ADD CONSTRAINT r_642
+	FOREIGN KEY (logical_volume_id, filesystem_type) REFERENCES logical_volume(logical_volume_id, filesystem_type);
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'logical_volume_property');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'logical_volume_property');
+-- DONE DEALING WITH TABLE logical_volume_property [208141]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE volume_group
+CREATE TABLE volume_group
+(
+	volume_group_id	integer NOT NULL,
+	volume_group_name	varchar(50) NOT NULL,
+	raid_type	varchar(50)  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'volume_group', true);
+ALTER TABLE volume_group
+	ALTER volume_group_id
+	SET DEFAULT nextval('volume_group_volume_group_id_seq'::regclass);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE volume_group ADD CONSTRAINT pk_volume_group PRIMARY KEY (volume_group_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif1volume_group ON volume_group USING btree (raid_type);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+-- consider FK volume_group and volume_group_physicalish_vol
+ALTER TABLE volume_group_physicalish_vol
+	ADD CONSTRAINT r_633
+	FOREIGN KEY (volume_group_id) REFERENCES volume_group(volume_group_id);
+-- consider FK volume_group and logical_volume
+ALTER TABLE logical_volume
+	ADD CONSTRAINT r_632
+	FOREIGN KEY (volume_group_id) REFERENCES volume_group(volume_group_id);
+
+-- FOREIGN KEYS TO
+-- consider FK volume_group and val_raid_type
+ALTER TABLE volume_group
+	ADD CONSTRAINT r_639
+	FOREIGN KEY (raid_type) REFERENCES val_raid_type(raid_type);
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'volume_group');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'volume_group');
+ALTER SEQUENCE volume_group_volume_group_id_seq
+	 OWNED BY volume_group.volume_group_id;
+-- DONE DEALING WITH TABLE volume_group [209877]
+--------------------------------------------------------------------
+-- Dropping obsoleted sequences....
+
+
+-- Dropping obsoleted audit sequences....
+
+
+-- Processing tables with no structural changes
+-- Some of these may be redundant
+-- fk constraints
+ALTER TABLE account_realm_company DROP CONSTRAINT IF EXISTS fk_acct_rlm_cmpy_cmpy_id;
+ALTER TABLE account_realm_company
+	ADD CONSTRAINT fk_acct_rlm_cmpy_cmpy_id
+	FOREIGN KEY (company_id) REFERENCES company(company_id) DEFERRABLE;
+
+ALTER TABLE circuit DROP CONSTRAINT IF EXISTS fk_circuit_aloc_companyid;
+ALTER TABLE circuit
+	ADD CONSTRAINT fk_circuit_aloc_companyid
+	FOREIGN KEY (aloc_lec_company_id) REFERENCES company(company_id) DEFERRABLE;
+
+ALTER TABLE circuit DROP CONSTRAINT IF EXISTS fk_circuit_vend_companyid;
+ALTER TABLE circuit
+	ADD CONSTRAINT fk_circuit_vend_companyid
+	FOREIGN KEY (vendor_company_id) REFERENCES company(company_id) DEFERRABLE;
+
+ALTER TABLE circuit DROP CONSTRAINT IF EXISTS fk_circuit_zloc_company_id;
+ALTER TABLE circuit
+	ADD CONSTRAINT fk_circuit_zloc_company_id
+	FOREIGN KEY (zloc_lec_company_id) REFERENCES company(company_id) DEFERRABLE;
+
+ALTER TABLE company DROP CONSTRAINT IF EXISTS fk_company_parent_company_id;
+ALTER TABLE company
+	ADD CONSTRAINT fk_company_parent_company_id
+	FOREIGN KEY (parent_company_id) REFERENCES company(company_id) DEFERRABLE;
+
+ALTER TABLE company_type DROP CONSTRAINT IF EXISTS fk_company_type_company_id;
+ALTER TABLE company_type
+	ADD CONSTRAINT fk_company_type_company_id
+	FOREIGN KEY (company_id) REFERENCES company(company_id) DEFERRABLE;
+
+ALTER TABLE contract DROP CONSTRAINT IF EXISTS fk_contract_company_id;
+ALTER TABLE contract
+	ADD CONSTRAINT fk_contract_company_id
+	FOREIGN KEY (company_id) REFERENCES company(company_id) DEFERRABLE;
+
+ALTER TABLE department DROP CONSTRAINT IF EXISTS fk_dept_company;
+ALTER TABLE department
+	ADD CONSTRAINT fk_dept_company
+	FOREIGN KEY (company_id) REFERENCES company(company_id) DEFERRABLE;
+
+ALTER TABLE netblock DROP CONSTRAINT IF EXISTS fk_netblock_company;
+ALTER TABLE netblock
+	ADD CONSTRAINT fk_netblock_company
+	FOREIGN KEY (nic_company_id) REFERENCES company(company_id) DEFERRABLE;
+
+ALTER TABLE operating_system DROP CONSTRAINT IF EXISTS fk_os_company;
+ALTER TABLE operating_system
+	ADD CONSTRAINT fk_os_company
+	FOREIGN KEY (company_id) REFERENCES company(company_id) DEFERRABLE;
+
+ALTER TABLE person_account_realm_company DROP CONSTRAINT IF EXISTS fk_ac_ac_rlm_cpy_act_rlm_cpy;
+ALTER TABLE person_account_realm_company
+	ADD CONSTRAINT fk_ac_ac_rlm_cpy_act_rlm_cpy
+	FOREIGN KEY (account_realm_id, company_id) REFERENCES account_realm_company(account_realm_id, company_id) DEFERRABLE;
+
+ALTER TABLE person_company DROP CONSTRAINT IF EXISTS fk_person_company_company_id;
+ALTER TABLE person_company
+	ADD CONSTRAINT fk_person_company_company_id
+	FOREIGN KEY (company_id) REFERENCES company(company_id) DEFERRABLE;
+
+ALTER TABLE person_contact DROP CONSTRAINT IF EXISTS fk_prsn_contect_cr_cmpyid;
+ALTER TABLE person_contact
+	ADD CONSTRAINT fk_prsn_contect_cr_cmpyid
+	FOREIGN KEY (person_contact_cr_company_id) REFERENCES company(company_id) DEFERRABLE;
+
+ALTER TABLE physical_address DROP CONSTRAINT IF EXISTS fk_physaddr_company_id;
+ALTER TABLE physical_address
+	ADD CONSTRAINT fk_physaddr_company_id
+	FOREIGN KEY (company_id) REFERENCES company(company_id) DEFERRABLE;
+
+ALTER TABLE property DROP CONSTRAINT IF EXISTS fk_property_compid;
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_compid
+	FOREIGN KEY (company_id) REFERENCES company(company_id) DEFERRABLE;
+
+ALTER TABLE property DROP CONSTRAINT IF EXISTS fk_property_pval_compid;
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_pval_compid
+	FOREIGN KEY (property_value_company_id) REFERENCES company(company_id) DEFERRABLE;
+
+ALTER TABLE site DROP CONSTRAINT IF EXISTS fk_site_colo_company_id;
+ALTER TABLE site
+	ADD CONSTRAINT fk_site_colo_company_id
+	FOREIGN KEY (colo_company_id) REFERENCES company(company_id) DEFERRABLE;
+
+-- triggers
+DROP TRIGGER IF EXISTS trigger_delete_peruser_account_collection ON account;
+DROP TRIGGER IF EXISTS trigger_update_peruser_account_collection ON account;
+--XXXX CREATE TRIGGER trigger_delete_peraccount_account_collection BEFORE DELETE ON account FOR EACH ROW EXECUTE PROCEDURE delete_peraccount_account_collection();
+--XXXX CREATE TRIGGER trigger_update_peraccount_account_collection AFTER INSERT OR UPDATE ON account FOR EACH ROW EXECUTE PROCEDURE update_peraccount_account_collection();
+
+
+--------------------------------------------------------------------
+-- END AUTOGEN DDL
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- BEGIN legacy per-user bits
+--------------------------------------------------------------------
+
+/*
 RAISE EXCEPTION 'Need to cleanup per-user stuff';
 
 -- random queries related to sorting out all the automated/usertype stuff
@@ -187,3 +2786,32 @@ where account_collection_id in (
 	select child_account_collection_id
 	from account_collection_hier
 ) and account_collection_type='automated';
+
+-- Dropping obsoleted sequences....
+
+
+-- Dropping obsoleted audit sequences....
+ */
+
+--------------------------------------------------------------------
+-- DONE legacy per-user bits
+--------------------------------------------------------------------
+
+
+-- Processing tables with no structural changes
+-- Some of these may be redundant
+-- fk constraints
+-- triggers
+
+
+-- Clean Up
+SELECT schema_support.replay_saved_grants();
+SELECT schema_support.replay_object_recreates();
+GRANT select on all tables in schema jazzhands to ro_role;
+GRANT insert,update,delete on all tables in schema jazzhands to iud_role;
+GRANT select on all sequences in schema jazzhands to ro_role;
+GRANT usage on all sequences in schema jazzhands to iud_role;
+
+select now();
+SELECT schema_support.end_maintenance();
+
