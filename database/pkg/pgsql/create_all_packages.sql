@@ -36,7 +36,6 @@
 
 -- \i system_user_util.sql
 \i person_manip.sql
-\i acct_coll_manip.sql
 -- \i unix_util.sql
 -- \i dept_member_verify.sql
 -- \i netblock_verify.sql

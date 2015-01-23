@@ -26,12 +26,12 @@
 		- device_type becomes component_type?
 		- rack becomes a component?
 	- compatibility views
-	- finish testing all the account collection triggers
-	- finish the reimplementation of the company triggers to tie to properties
+	- finish testing all the new account collection triggers
+		(write stored procedures)
 	- check init/ *.sql changes for updates that should happen
 
 	- search for XXX's
-	- trigger functions
+	- trigger functions (maybe done?)
 
  */
 
@@ -199,6 +199,11 @@ Invoked:
 
 	--scan
 	--suffix=v59
+
+	netblock_utils.calculate_intermediate_netblocks
+	netblock_manip.allocate_netblock
+	delete_peraccount_account_collection
+	update_peraccount_account_collection
 	asset
 	device_type
 	device
@@ -228,6 +233,14 @@ Invoked:
 	logical_volume
 	logical_volume_property
 	volume_group
+	delete_peruser_account_collection
+	update_peruser_account_collection
+	netblock_utils.list_unallocated_netblocks
+	person_manip.purge_account
+	automated_ac_on_account
+	automated_ac_on_person_company
+	automated_ac_on_person
+	automated_realm_site_ac_pl
 */
 
 \set ON_ERROR_STOP
@@ -244,6 +257,479 @@ CREATE SEQUENCE physicalish_volume_physicalish_volume_id_seq;
 CREATE SEQUENCE logical_volume_logical_volume_id_seq;
 CREATE SEQUENCE volume_group_volume_group_id_seq;
 
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_utils.calculate_intermediate_netblocks -> calculate_intermediate_netblocks 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('netblock_utils', 'calculate_intermediate_netblocks', 'calculate_intermediate_netblocks');
+
+-- DROP OLD FUNCTION
+-- consider old oid 265728
+DROP FUNCTION IF EXISTS netblock_utils.calculate_intermediate_netblocks(ip_block_1 inet, ip_block_2 inet);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 265728
+DROP FUNCTION IF EXISTS netblock_utils.calculate_intermediate_netblocks(ip_block_1 inet, ip_block_2 inet);
+-- consider NEW oid 258172
+CREATE OR REPLACE FUNCTION netblock_utils.calculate_intermediate_netblocks(ip_block_1 inet DEFAULT NULL::inet, ip_block_2 inet DEFAULT NULL::inet, netblock_type text DEFAULT 'default'::text, ip_universe_id integer DEFAULT 0)
+ RETURNS TABLE(ip_addr inet)
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	current_nb		inet;
+	new_nb			inet;
+	min_addr		inet;
+	max_addr		inet;
+BEGIN
+	IF ip_block_1 IS NULL OR ip_block_2 IS NULL THEN
+		RAISE EXCEPTION 'Must specify both ip_block_1 and ip_block_2';
+	END IF;
+
+	IF family(ip_block_1) != family(ip_block_2) THEN
+		RAISE EXCEPTION 'families of ip_block_1 and ip_block_2 must match';
+	END IF;
+
+	-- Make sure these are network blocks
+	ip_block_1 := network(ip_block_1);
+	ip_block_2 := network(ip_block_2);
+
+	-- If the blocks are subsets of each other, then error
+
+	IF ip_block_1 <<= ip_block_2 OR ip_block_2 <<= ip_block_1 THEN
+		RAISE EXCEPTION 'netblocks intersect each other';
+	END IF;
+
+	-- Order the blocks correctly
+
+	IF ip_block_1 > ip_block_2 THEN
+		new_nb := ip_block_1;
+		ip_block_1 := ip_block_2;
+		ip_block_2 := new_nb;
+	END IF;
+
+	current_nb := ip_block_1;
+	max_addr := broadcast(ip_block_1);
+
+	-- Loop through bumping the netmask up and seeing if the destination block is in the new block
+	LOOP
+		new_nb := network(set_masklen(current_nb, masklen(current_nb) - 1));
+
+		-- If the block is in our new larger netblock, then exit this loop
+		IF (new_nb >>= ip_block_2) THEN
+			current_nb := broadcast(current_nb) + 1;
+			EXIT;
+		END IF;
+	
+		-- If the max address of the new netblock is larger than the last one, then it's empty
+		IF set_masklen(broadcast(new_nb), 32) > set_masklen(max_addr, 32) THEN
+			ip_addr := set_masklen(max_addr + 1, masklen(current_nb));
+			-- Validate that this isn't an empty can_subnet='Y' block already
+			-- If it is, split it in half and return both halves
+			PERFORM * FROM netblock n WHERE
+				n.ip_address = ip_addr AND
+				n.ip_universe_id =
+					calculate_intermediate_netblocks.ip_universe_id AND
+				n.netblock_type =
+					calculate_intermediate_netblocks.netblock_type;
+			IF FOUND THEN
+				ip_addr := set_masklen(ip_addr, masklen(ip_addr) + 1);
+				RETURN NEXT;
+				ip_addr := broadcast(ip_addr) + 1;
+				RETURN NEXT;
+			ELSE
+				RETURN NEXT;
+			END IF;
+			max_addr := broadcast(new_nb);
+		END IF;
+		current_nb := new_nb;
+	END LOOP;
+
+	-- Now loop through there to find the unused blocks at the front
+
+	LOOP
+		IF host(current_nb) = host(ip_block_2) THEN
+			RETURN;
+		END IF;
+		current_nb := set_masklen(current_nb, masklen(current_nb) + 1);
+		IF NOT (current_nb >>= ip_block_2) THEN
+			ip_addr := current_nb;
+			-- Validate that this isn't an empty can_subnet='Y' block already
+			-- If it is, split it in half and return both halves
+			PERFORM * FROM netblock n WHERE
+				n.ip_address = ip_addr AND
+				n.ip_universe_id =
+					calculate_intermediate_netblocks.ip_universe_id AND
+				n.netblock_type =
+					calculate_intermediate_netblocks.netblock_type;
+			IF FOUND THEN
+				ip_addr := set_masklen(ip_addr, masklen(ip_addr) + 1);
+				RAISE NOTICE 'IP is %', ip_addr;
+				RETURN NEXT;
+				ip_addr := broadcast(ip_addr) + 1;
+				RETURN NEXT;
+			ELSE
+				RETURN NEXT;
+			END IF;
+			current_nb := broadcast(current_nb) + 1;
+			CONTINUE;
+		END IF;
+	END LOOP;
+	RETURN;
+END;
+$function$
+;
+
+-- DONE WITH proc netblock_utils.calculate_intermediate_netblocks -> calculate_intermediate_netblocks 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_manip.allocate_netblock -> allocate_netblock 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('netblock_manip', 'allocate_netblock', 'allocate_netblock');
+
+-- DROP OLD FUNCTION
+-- consider old oid 265733
+DROP FUNCTION IF EXISTS netblock_manip.allocate_netblock(parent_netblock_id integer, netmask_bits integer, address_type text, can_subnet boolean, allocation_method text, rnd_masklen_threshold integer, rnd_max_count integer, ip_address inet, description character varying, netblock_status character varying);
+-- consider old oid 265734
+DROP FUNCTION IF EXISTS netblock_manip.allocate_netblock(parent_netblock_list integer[], netmask_bits integer, address_type text, can_subnet boolean, allocation_method text, rnd_masklen_threshold integer, rnd_max_count integer, ip_address inet, description character varying, netblock_status character varying);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 265733
+DROP FUNCTION IF EXISTS netblock_manip.allocate_netblock(parent_netblock_id integer, netmask_bits integer, address_type text, can_subnet boolean, allocation_method text, rnd_masklen_threshold integer, rnd_max_count integer, ip_address inet, description character varying, netblock_status character varying);
+-- consider old oid 265734
+DROP FUNCTION IF EXISTS netblock_manip.allocate_netblock(parent_netblock_list integer[], netmask_bits integer, address_type text, can_subnet boolean, allocation_method text, rnd_masklen_threshold integer, rnd_max_count integer, ip_address inet, description character varying, netblock_status character varying);
+-- consider NEW oid 258177
+CREATE OR REPLACE FUNCTION netblock_manip.allocate_netblock(parent_netblock_id integer, netmask_bits integer DEFAULT NULL::integer, address_type text DEFAULT 'netblock'::text, can_subnet boolean DEFAULT true, allocation_method text DEFAULT NULL::text, rnd_masklen_threshold integer DEFAULT 110, rnd_max_count integer DEFAULT 1024, ip_address inet DEFAULT NULL::inet, description character varying DEFAULT NULL::character varying, netblock_status character varying DEFAULT 'Allocated'::character varying)
+ RETURNS netblock
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	netblock_rec	RECORD;
+BEGIN
+	SELECT * into netblock_rec FROM netblock_manip.allocate_netblock(
+		parent_netblock_list := ARRAY[parent_netblock_id],
+		netmask_bits := netmask_bits,
+		address_type := address_type,
+		can_subnet := can_subnet,
+		description := description,
+		allocation_method := allocation_method,
+		ip_address := ip_address,
+		rnd_masklen_threshold := rnd_masklen_threshold,
+		rnd_max_count := rnd_max_count,
+		netblock_status := netblock_status
+	);
+	RETURN netblock_rec;
+END;
+$function$
+;
+-- consider NEW oid 258178
+CREATE OR REPLACE FUNCTION netblock_manip.allocate_netblock(parent_netblock_list integer[], netmask_bits integer DEFAULT NULL::integer, address_type text DEFAULT 'netblock'::text, can_subnet boolean DEFAULT true, allocation_method text DEFAULT NULL::text, rnd_masklen_threshold integer DEFAULT 110, rnd_max_count integer DEFAULT 1024, ip_address inet DEFAULT NULL::inet, description character varying DEFAULT NULL::character varying, netblock_status character varying DEFAULT 'Allocated'::character varying)
+ RETURNS netblock
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	parent_rec		RECORD;
+	netblock_rec	RECORD;
+	inet_rec		RECORD;
+	loopback_bits	integer;
+	inet_family		integer;
+BEGIN
+	IF parent_netblock_list IS NULL THEN
+		RAISE 'parent_netblock_list must be specified'
+		USING ERRCODE = 'null_value_not_allowed';
+	END IF;
+
+	IF address_type NOT IN ('netblock', 'single', 'loopback') THEN
+		RAISE 'address_type must be one of netblock, single, or loopback'
+		USING ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	IF netmask_bits IS NULL AND address_type = 'netblock' THEN
+		RAISE EXCEPTION
+			'You must specify a netmask when address_type is netblock'
+			USING ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	-- Lock the parent row, which should keep parallel processes from
+	-- trying to obtain the same address
+
+	FOR parent_rec IN SELECT * FROM jazzhands.netblock WHERE netblock_id = 
+			ANY(allocate_netblock.parent_netblock_list) FOR UPDATE LOOP
+
+		IF parent_rec.is_single_address = 'Y' THEN
+			RAISE EXCEPTION 'parent_netblock_id refers to a single_address netblock'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+
+		IF inet_family IS NULL THEN
+			inet_family := family(parent_rec.ip_address);
+		ELSIF inet_family != family(parent_rec.ip_address) 
+				AND ip_address IS NULL THEN
+			RAISE EXCEPTION 'Allocation may not mix IPv4 and IPv6 addresses'
+			USING ERRCODE = 'JH10F';
+		END IF;
+
+		IF address_type = 'loopback' THEN
+			loopback_bits := 
+				CASE WHEN 
+					family(parent_rec.ip_address) = 4 THEN 32 ELSE 128 END;
+
+			IF parent_rec.can_subnet = 'N' THEN
+				RAISE EXCEPTION 'parent subnet must have can_subnet set to Y'
+					USING ERRCODE = 'JH10B';
+			END IF;
+		ELSIF address_type = 'single' THEN
+			IF parent_rec.can_subnet = 'Y' THEN
+				RAISE EXCEPTION
+					'parent subnet for single address must have can_subnet set to N'
+					USING ERRCODE = 'JH10B';
+			END IF;
+		ELSIF address_type = 'netblock' THEN
+			IF parent_rec.can_subnet = 'N' THEN
+				RAISE EXCEPTION 'parent subnet must have can_subnet set to Y'
+					USING ERRCODE = 'JH10B';
+			END IF;
+		END IF;
+	END LOOP;
+
+ 	IF NOT FOUND THEN
+ 		RETURN NULL;
+ 	END IF;
+
+	IF address_type = 'loopback' THEN
+		-- If we're allocating a loopback address, then we need to create
+		-- a new parent to hold the single loopback address
+
+		SELECT * INTO inet_rec FROM netblock_utils.find_free_netblocks(
+			parent_netblock_list := parent_netblock_list,
+			netmask_bits := loopback_bits,
+			single_address := false,
+			allocation_method := allocation_method,
+			desired_ip_address := ip_address,
+			max_addresses := 1
+			);
+
+		IF NOT FOUND THEN
+			RETURN NULL;
+		END IF;
+
+		INSERT INTO jazzhands.netblock (
+			ip_address,
+			netblock_type,
+			is_single_address,
+			can_subnet,
+			ip_universe_id,
+			description,
+			netblock_status
+		) VALUES (
+			inet_rec.ip_address,
+			inet_rec.netblock_type,
+			'N',
+			'N',
+			inet_rec.ip_universe_id,
+			allocate_netblock.description,
+			allocate_netblock.netblock_status
+		) RETURNING * INTO parent_rec;
+
+		INSERT INTO jazzhands.netblock (
+			ip_address,
+			netblock_type,
+			is_single_address,
+			can_subnet,
+			ip_universe_id,
+			description,
+			netblock_status
+		) VALUES (
+			inet_rec.ip_address,
+			parent_rec.netblock_type,
+			'Y',
+			'N',
+			inet_rec.ip_universe_id,
+			allocate_netblock.description,
+			allocate_netblock.netblock_status
+		) RETURNING * INTO netblock_rec;
+
+		RETURN netblock_rec;
+	END IF;
+
+	IF address_type = 'single' THEN
+		SELECT * INTO inet_rec FROM netblock_utils.find_free_netblocks(
+			parent_netblock_list := parent_netblock_list,
+			single_address := true,
+			allocation_method := allocation_method,
+			desired_ip_address := ip_address,
+			rnd_masklen_threshold := rnd_masklen_threshold,
+			rnd_max_count := rnd_max_count,
+			max_addresses := 1
+			);
+
+		IF NOT FOUND THEN
+			RETURN NULL;
+		END IF;
+
+		RAISE DEBUG 'ip_address is %', inet_rec.ip_address;
+
+		INSERT INTO jazzhands.netblock (
+			ip_address,
+			netblock_type,
+			is_single_address,
+			can_subnet,
+			ip_universe_id,
+			description,
+			netblock_status
+		) VALUES (
+			inet_rec.ip_address,
+			inet_rec.netblock_type,
+			'Y',
+			'N',
+			inet_rec.ip_universe_id,
+			allocate_netblock.description,
+			allocate_netblock.netblock_status
+		) RETURNING * INTO netblock_rec;
+
+		RETURN netblock_rec;
+	END IF;
+	IF address_type = 'netblock' THEN
+		SELECT * INTO inet_rec FROM netblock_utils.find_free_netblocks(
+			parent_netblock_list := parent_netblock_list,
+			netmask_bits := netmask_bits,
+			single_address := false,
+			allocation_method := allocation_method,
+			desired_ip_address := ip_address,
+			max_addresses := 1);
+
+		IF NOT FOUND THEN
+			RETURN NULL;
+		END IF;
+
+		INSERT INTO jazzhands.netblock (
+			ip_address,
+			netblock_type,
+			is_single_address,
+			can_subnet,
+			ip_universe_id,
+			description,
+			netblock_status
+		) VALUES (
+			inet_rec.ip_address,
+			inet_rec.netblock_type,
+			'N',
+			CASE WHEN can_subnet THEN 'Y' ELSE 'N' END,
+			inet_rec.ip_universe_id,
+			allocate_netblock.description,
+			allocate_netblock.netblock_status
+		) RETURNING * INTO netblock_rec;
+
+		RETURN netblock_rec;
+	END IF;
+END;
+$function$
+;
+
+-- DONE WITH proc netblock_manip.allocate_netblock -> allocate_netblock 
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- DEALING WITH proc delete_peraccount_account_collection -> delete_peraccount_account_collection 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 258201
+CREATE OR REPLACE FUNCTION jazzhands.delete_peraccount_account_collection()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	acid			account_collection.account_collection_id%TYPE;
+BEGIN
+	IF TG_OP = 'DELETE' THEN
+		SELECT	account_collection_id
+		  INTO	acid
+		  FROM	account_collection ac
+				INNER JOIN account_collection_account aca
+					USING (account_collection_id)
+		 WHERE	aca.account_id = OLD.account_Id
+		   AND	ac.account_collection_type = 'per-account';
+
+		 DELETE from account_collection_account
+		  where account_collection_id = acid;
+
+		 DELETE from account_collection
+		  where account_collection_id = acid;
+	END IF;
+	RETURN OLD;
+END;
+$function$
+;
+
+-- DONE WITH proc delete_peraccount_account_collection -> delete_peraccount_account_collection 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc update_peraccount_account_collection -> update_peraccount_account_collection 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 258203
+CREATE OR REPLACE FUNCTION jazzhands.update_peraccount_account_collection()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	def_acct_rlm	account_realm.account_realm_id%TYPE;
+	acid			account_collection.account_collection_id%TYPE;
+DECLARE
+	newname	TEXT;
+BEGIN
+	newname = concat(NEW.login, '_', NEW.account_id);
+	if TG_OP = 'INSERT' THEN
+		insert into account_collection 
+			(account_collection_name, account_collection_type)
+		values
+			(newname, 'per-account')
+		RETURNING account_collection_id INTO acid;
+		insert into account_collection_account 
+			(account_collection_id, account_id)
+		VALUES
+			(acid, NEW.account_id);
+	END IF;
+
+	IF TG_OP = 'UPDATE' AND OLD.login != NEW.login THEN
+		UPDATE	account_collection
+		    set	account_collection_name = newname
+		  where	account_collection_type = 'per-account'
+		    and	account_collection_id = (
+				SELECT	account_collection_id
+		  		FROM	account_collection ac
+						INNER JOIN account_collection_account aca
+							USING (account_collection_id)
+		 		WHERE	aca.account_id = OLD.account_Id
+		   		AND	ac.account_collection_type = 'per-account'
+			);
+	END IF;
+	return NEW;
+END;
+$function$
+;
+
+-- DONE WITH proc update_peraccount_account_collection -> update_peraccount_account_collection 
+--------------------------------------------------------------------
 
 --------------------------------------------------------------------
 -- DEALING WITH TABLE asset [216169]
@@ -2751,8 +3237,750 @@ ALTER TABLE site
 -- triggers
 DROP TRIGGER IF EXISTS trigger_delete_peruser_account_collection ON account;
 DROP TRIGGER IF EXISTS trigger_update_peruser_account_collection ON account;
---XXXX CREATE TRIGGER trigger_delete_peraccount_account_collection BEFORE DELETE ON account FOR EACH ROW EXECUTE PROCEDURE delete_peraccount_account_collection();
---XXXX CREATE TRIGGER trigger_update_peraccount_account_collection AFTER INSERT OR UPDATE ON account FOR EACH ROW EXECUTE PROCEDURE update_peraccount_account_collection();
+CREATE TRIGGER trigger_delete_peraccount_account_collection BEFORE DELETE ON account FOR EACH ROW EXECUTE PROCEDURE delete_peraccount_account_collection();
+CREATE TRIGGER trigger_update_peraccount_account_collection AFTER INSERT OR UPDATE ON account FOR EACH ROW EXECUTE PROCEDURE update_peraccount_account_collection();
+
+--------------------------------------------------------------------
+-- DEALING WITH proc delete_peruser_account_collection -> delete_peruser_account_collection 
+
+-- DROP OLD FUNCTION
+-- consider old oid 265749
+DROP FUNCTION IF EXISTS delete_peruser_account_collection();
+
+-- DONE WITH proc delete_peruser_account_collection -> delete_peruser_account_collection 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc update_peruser_account_collection -> update_peruser_account_collection 
+
+-- Save grants for later reapplication
+-- DROP OLD FUNCTION
+-- consider old oid 265751
+DROP FUNCTION IF EXISTS update_peruser_account_collection();
+
+-- DONE WITH proc update_peruser_account_collection -> update_peruser_account_collection 
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_utils.list_unallocated_netblocks -> list_unallocated_netblocks 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('netblock_utils', 'list_unallocated_netblocks', 'list_unallocated_netblocks');
+
+-- DROP OLD FUNCTION
+-- consider old oid 274736
+DROP FUNCTION IF EXISTS netblock_utils.list_unallocated_netblocks(netblock_id integer, ip_address inet, ip_universe_id integer, netblock_type text);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 274736
+DROP FUNCTION IF EXISTS netblock_utils.list_unallocated_netblocks(netblock_id integer, ip_address inet, ip_universe_id integer, netblock_type text);
+-- consider NEW oid 301336
+CREATE OR REPLACE FUNCTION netblock_utils.list_unallocated_netblocks(netblock_id integer DEFAULT NULL::integer, ip_address inet DEFAULT NULL::inet, ip_universe_id integer DEFAULT 0, netblock_type text DEFAULT 'default'::text)
+ RETURNS TABLE(ip_addr inet)
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	ip_array		inet[];
+	netblock_rec	RECORD;
+	parent_nbid		jazzhands.netblock.netblock_id%TYPE;
+	family_bits		integer;
+	idx				integer;
+BEGIN
+	IF netblock_id IS NOT NULL THEN
+		SELECT * INTO netblock_rec FROM jazzhands.netblock n WHERE n.netblock_id = 
+			list_unallocated_netblocks.netblock_id;
+		IF NOT FOUND THEN
+			RAISE EXCEPTION 'netblock_id % not found', netblock_id;
+		END IF;
+		IF netblock_rec.is_single_address = 'Y' THEN
+			RETURN;
+		END IF;
+		ip_address := netblock_rec.ip_address;
+		ip_universe_id := netblock_rec.ip_universe_id;
+		netblock_type := netblock_rec.netblock_type;
+	ELSIF ip_address IS NOT NULL THEN
+		ip_universe_id := 0;
+		netblock_type := 'default';
+	ELSE
+		RAISE EXCEPTION 'netblock_id or ip_address must be passed';
+	END IF;
+	SELECT ARRAY(
+		SELECT 
+			n.ip_address
+		FROM
+			netblock n
+		WHERE
+			n.ip_address <<= list_unallocated_netblocks.ip_address AND
+			n.ip_universe_id = list_unallocated_netblocks.ip_universe_id AND
+			n.netblock_type = list_unallocated_netblocks.netblock_type AND
+			is_single_address = 'N' AND
+			can_subnet = 'N'
+		ORDER BY
+			n.ip_address
+	) INTO ip_array;
+
+	IF array_length(ip_array, 1) IS NULL THEN
+		ip_addr := ip_address;
+		RETURN NEXT;
+		RETURN;
+	END IF;
+
+	ip_array := array_prepend(
+		list_unallocated_netblocks.ip_address - 1, 
+		array_append(
+			ip_array, 
+			broadcast(list_unallocated_netblocks.ip_address) + 1
+			));
+
+	idx := 1;
+	WHILE idx < array_length(ip_array, 1) LOOP
+		RETURN QUERY SELECT cin.ip_addr FROM
+			netblock_utils.calculate_intermediate_netblocks(ip_array[idx], ip_array[idx + 1]) cin;
+		idx := idx + 1;
+	END LOOP;
+
+	RETURN;
+END;
+$function$
+;
+
+-- DONE WITH proc netblock_utils.list_unallocated_netblocks -> list_unallocated_netblocks 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc person_manip.purge_account -> purge_account 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('person_manip', 'purge_account', 'purge_account');
+
+-- DROP OLD FUNCTION
+-- consider old oid 274690
+DROP FUNCTION IF EXISTS person_manip.purge_account(in_account_id integer);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 274690
+DROP FUNCTION IF EXISTS person_manip.purge_account(in_account_id integer);
+-- consider NEW oid 301295
+CREATE OR REPLACE FUNCTION person_manip.purge_account(in_account_id integer)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+	-- note the per-account account collection is removed in triggers
+
+	DELETE FROM account_assignd_cert where ACCOUNT_ID = in_account_id;
+	DELETE FROM account_token where ACCOUNT_ID = in_account_id;
+	DELETE FROM account_unix_info where ACCOUNT_ID = in_account_id;
+	DELETE FROM klogin where ACCOUNT_ID = in_account_id;
+	DELETE FROM property where ACCOUNT_ID = in_account_id;
+	DELETE FROM account_password where ACCOUNT_ID = in_account_id;
+	DELETE FROM unix_group where account_collection_id in
+		(select account_collection_id from account_collection 
+			where account_collection_name in
+				(select login from account where account_id = in_account_id)
+				and account_collection_type in ('unix-group')
+		);
+	DELETE FROM account_collection_account where ACCOUNT_ID = in_account_id;
+
+	DELETE FROM account_collection where account_collection_name in
+		(select login from account where account_id = in_account_id)
+		and account_collection_type in ('per-account', 'unix-group');
+
+	DELETE FROM account where ACCOUNT_ID = in_account_id;
+END;
+$function$
+;
+
+-- DONE WITH proc person_manip.purge_account -> purge_account 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc automated_ac_on_account -> automated_ac_on_account 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 301430
+CREATE OR REPLACE FUNCTION jazzhands.automated_ac_on_account()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	_tally	INTEGER;
+	_r		RECORD;
+BEGIN
+	IF TG_OP = 'DELETE' THEN
+		IF OLD.account_role != 'primary' THEN
+			RETURN OLD;
+		END IF;
+	ELSIF TG_OP = 'INSERT' THEN
+		IF NEW.account_role != 'primary' THEN
+			RETURN NEW;
+		END IF;
+	ELSIF TG_OP = 'UPDATE' THEN
+		IF NEW.account_role != 'primary' AND OLD.account_role != 'primary' THEN
+			RETURN NEW;
+		END IF;
+	END IF;
+
+
+	SELECT  count(*)
+	  INTO  _tally
+	  FROM  pg_catalog.pg_class
+	 WHERE  relname = '__automated_ac__'
+	   AND  relpersistence = 't';
+
+	IF _tally = 0 THEN
+		CREATE TEMPORARY TABLE IF NOT EXISTS __automated_ac__ (account_collection_id integer, account_id integer, direction text);
+	END IF;
+
+
+	--
+	-- based on the old and new values, check for account collections that
+	-- may need to be changed based on data.  Note that this may end up being
+	-- a no-op.
+	-- 
+	IF TG_OP = 'INSERT' or TG_OP = 'UPDATE' THEN
+		WITH acct AS (
+			    SELECT  a.account_id, a.account_type, a.account_role, parc.*,
+				    pc.is_management, pc.is_full_time, pc.is_exempt,
+				    p.gender
+			     FROM   account a
+				    INNER JOIN person_account_realm_company parc
+					    USING (person_id, company_id, account_realm_id)
+				    INNER JOIN person_company pc USING (person_id,company_id)
+				    INNER JOIN person p USING (person_id)
+			),
+		list AS (
+			SELECT  p.account_collection_id, a.account_id, a.account_type,
+				a.account_role,
+				a.person_id, a.company_id
+			FROM    property p
+			    INNER JOIN acct a
+				ON a.account_realm_id = p.account_realm_id
+			WHERE   (p.company_id is NULL or a.company_id = p.company_id)
+			    AND     property_type = 'auto_acct_coll'
+			    AND     (
+				    property_name =
+					CASE WHEN a.is_exempt = 'N'
+					    THEN 'non_exempt'
+					    ELSE 'exempt' END
+				OR
+				    property_name =
+					CASE WHEN a.is_management = 'N'
+					    THEN 'non_management'
+					    ELSE 'management' END
+				OR
+				    property_name =
+					CASE WHEN a.is_full_time = 'N'
+					    THEN 'non_full_time'
+					    ELSE 'full_time' END
+				OR
+				    property_name =
+					CASE WHEN a.gender = 'M' THEN 'male'
+					    WHEN a.gender = 'F' THEN 'female'
+					    ELSE 'unspecified_gender' END
+				OR (
+				    property_name = 'account_type'
+				    AND property_value = a.account_type
+				    )
+				)
+		) 
+		INSERT INTO __automated_ac__ (
+			account_collection_id, account_id, direction
+		) select account_collection_id, account_id, 'add'
+		FROM list 
+		WHERE account_id = NEW.account_id
+		AND NEW.account_role = 'primary'
+		;
+	END IF;
+	IF TG_OP = 'UPDATE' or TG_OP = 'DELETE' THEN
+		WITH acct AS (
+			    SELECT  a.account_id, a.account_type, a.account_role, parc.*,
+				    pc.is_management, pc.is_full_time, pc.is_exempt,
+				    p.gender
+			     FROM   account a
+				    INNER JOIN person_account_realm_company parc
+					    USING (person_id, company_id, account_realm_id)
+				    INNER JOIN person_company pc USING (person_id,company_id)
+				    INNER JOIN person p USING (person_id)
+			),
+		list AS (
+			SELECT  p.account_collection_id, a.account_id, a.account_type,
+				a.account_role,
+				a.person_id, a.company_id
+			FROM    property p
+			    INNER JOIN acct a
+				ON a.account_realm_id = p.account_realm_id
+			WHERE   (p.company_id is NULL or a.company_id = p.company_id)
+			    AND     property_type = 'auto_acct_coll'
+				AND (
+					( account_role != 'primary' AND
+						property_name in ('non_exempt', 'exempt',
+						'management', 'non_management', 'full_time',
+						'non_full_time', 'male', 'female', 'unspecified_gender')
+				) OR (
+					account_role != 'primary'
+				    AND property_name = 'account_type'
+				    AND property_value = a.account_type
+				    )
+				)
+		) 
+		INSERT INTO __automated_ac__ (
+			account_collection_id, account_id, direction
+		) select account_collection_id, account_id, 'remove'
+		FROM list 
+		WHERE account_id = OLD.account_id
+		;
+	END IF;
+
+	/*
+		FOR _r IN SELECT * from __automated_ac__
+		LOOP
+			RAISE NOTICE '%', _r;
+		END LOOP;
+	 */
+
+	--
+	-- Remove rows from the temporary table that are in "remove" but not in
+	-- "add".
+	--
+	DELETE FROM account_collection_account
+	WHERE (account_collection_id, account_id) IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'remove'
+		)
+	AND (account_collection_id, account_id) NOT IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'add'
+	)
+	;
+	--
+	-- Add rows from the temporary table that are in 'add" but not "remove"
+	-- "add".
+	--
+	INSERT INTO account_collection_account (
+		account_collection_id, account_id)
+	SELECT account_collection_id, account_id 
+	FROM __automated_ac__
+	WHERE direction = 'add'
+	AND (account_collection_id, account_id) NOT IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'remove'
+	)
+	AND (account_collection_id, account_id) NOT IN
+		(select account_collection_id, account_id FROM account_collection_account)
+	;
+
+	DROP TABLE IF EXISTS __automated_ac__;
+
+	IF TG_OP = 'DELETE' THEN
+		RETURN OLD;
+	ELSE
+		RETURN NEW;
+	END IF;
+END;
+$function$
+;
+
+-- DONE WITH proc automated_ac_on_account -> automated_ac_on_account 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc automated_ac_on_person_company -> automated_ac_on_person_company 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'automated_ac_on_person_company', 'automated_ac_on_person_company');
+
+-- DROP OLD FUNCTION
+-- consider old oid 274839
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 274839
+-- consider NEW oid 301433
+CREATE OR REPLACE FUNCTION jazzhands.automated_ac_on_person_company()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	_tally	INTEGER;
+BEGIN
+	SELECT  count(*)
+	  INTO  _tally
+	  FROM  pg_catalog.pg_class
+	 WHERE  relname = '__automated_ac__'
+	   AND  relpersistence = 't';
+
+	IF _tally = 0 THEN
+		CREATE TEMPORARY TABLE IF NOT EXISTS __automated_ac__ (account_collection_id integer, account_id integer, direction text);
+	END IF;
+
+
+	--
+	-- based on the old and new values, check for account collections that
+	-- may need to be changed based on data.  Note that this may end up being
+	-- a no-op.
+	-- 
+	IF TG_OP = 'INSERT' or TG_OP = 'UPDATE' THEN
+		INSERT INTO __automated_ac__ (
+			account_collection_id, account_id, direction
+		)
+		SELECT	p.account_collection_id, a.account_id, 'add'
+		FROM    property p
+			INNER JOIN account_realm_company arc USING (account_realm_id)
+			INNER JOIN account a 
+				ON a.account_realm_id = arc.account_realm_id
+				AND a.company_id = arc.company_id
+		WHERE	arc.company_id = NEW.company_id
+		AND     (p.company_id is NULL or arc.company_id = p.company_id)
+			AND	a.person_id = NEW.person_id
+			AND     property_type = 'auto_acct_coll'
+			AND     (
+				    property_name =
+				    CASE WHEN NEW.is_exempt = 'N'
+					THEN 'non_exempt'
+					ELSE 'exempt' END
+				OR
+				    property_name =
+				    CASE WHEN NEW.is_management = 'N'
+					THEN 'non_management'
+					ELSE 'management' END
+				OR
+				    property_name =
+				    CASE WHEN NEW.is_full_time = 'N'
+					THEN 'non_full_time'
+					ELSE 'full_time' END
+				);
+	END IF;
+	IF TG_OP = 'UPDATE' or TG_OP = 'DELETE' THEN
+		INSERT INTO __automated_ac__ (
+			account_collection_id, account_id, direction
+		)
+		SELECT	p.account_collection_id, a.account_id, 'remove'
+		FROM    property p
+			INNER JOIN account_realm_company arc USING (account_realm_id)
+			INNER JOIN account a 
+				ON a.account_realm_id = arc.account_realm_id
+				AND a.company_id = arc.company_id
+		WHERE	arc.company_id = OLD.company_id
+		AND     (p.company_id is NULL or arc.company_id = p.company_id)
+			AND	a.person_id = OLD.person_id
+			AND     property_type = 'auto_acct_coll'
+			AND     (
+				    property_name =
+				    CASE WHEN OLD.is_exempt = 'N'
+					THEN 'non_exempt'
+					ELSE 'exempt' END
+				OR
+				    property_name =
+				    CASE WHEN OLD.is_management = 'N'
+					THEN 'non_management'
+					ELSE 'management' END
+				OR
+				    property_name =
+				    CASE WHEN OLD.is_full_time = 'N'
+					THEN 'non_full_time'
+					ELSE 'full_time' END
+				);
+	END IF;
+
+	--
+	-- Remove rows from the temporary table that are in "remove" but not in
+	-- "add".
+	--
+	DELETE FROM account_collection_account
+	WHERE (account_collection_id, account_id) IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'remove'
+		)
+	AND (account_collection_id, account_id) NOT IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'add'
+	);
+
+	--
+	-- Add rows from the temporary table that are in 'add" but not "remove"
+	-- "add".
+	--
+	INSERT INTO account_collection_account (
+		account_collection_id, account_id)
+	SELECT account_collection_id, account_id 
+	FROM __automated_ac__
+	WHERE direction = 'add'
+	AND (account_collection_id, account_id) NOT IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'remove'
+	);
+
+	DROP TABLE IF EXISTS __automated_ac__;
+
+	IF TG_OP = 'DELETE' THEN
+		RETURN OLD;
+	ELSE
+		RETURN NEW;
+	END IF;
+END;
+$function$
+;
+
+-- DONE WITH proc automated_ac_on_person_company -> automated_ac_on_person_company 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc automated_ac_on_person -> automated_ac_on_person 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'automated_ac_on_person', 'automated_ac_on_person');
+
+-- DROP OLD FUNCTION
+-- consider old oid 274841
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 274841
+-- consider NEW oid 301435
+CREATE OR REPLACE FUNCTION jazzhands.automated_ac_on_person()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	_tally	INTEGER;
+BEGIN
+	SELECT  count(*)
+	  INTO  _tally
+	  FROM  pg_catalog.pg_class
+	 WHERE  relname = '__automated_ac__'
+	   AND  relpersistence = 't';
+
+	IF _tally = 0 THEN
+		CREATE TEMPORARY TABLE IF NOT EXISTS __automated_ac__ (account_collection_id integer, account_id integer, direction text);
+	END IF;
+
+
+	--
+	-- based on the old and new values, check for account collections that
+	-- may need to be changed based on data.  Note that this may end up being
+	-- a no-op.
+	-- 
+	IF TG_OP = 'UPDATE' THEN
+		INSERT INTO __automated_ac__ (
+			account_collection_id, account_id, direction
+		)
+		SELECT	p.account_collection_id, a.account_id, 'add'
+		FROM    property p
+			INNER JOIN account_realm_company arc USING (account_realm_id)
+			INNER JOIN account a 
+				ON a.account_realm_id = arc.account_realm_id
+				AND a.company_id = arc.company_id
+		WHERE	arc.company_id = NEW.company_id
+		AND     (p.company_id is NULL or arc.company_id = p.company_id)
+			AND	a.person_id = NEW.person_id
+			AND     property_type = 'auto_acct_coll'
+			AND     (
+				    property_name =
+				    	CASE WHEN NEW.gender = 'M' THEN 'male'
+				    		WHEN NEW.gender = 'F' THEN 'female'
+							ELSE 'unspecified_gender' END
+					);
+
+		INSERT INTO __automated_ac__ (
+			account_collection_id, account_id, direction
+		)
+		SELECT	p.account_collection_id, a.account_id, 'remove'
+		FROM    property p
+			INNER JOIN account_realm_company arc USING (account_realm_id)
+			INNER JOIN account a 
+				ON a.account_realm_id = arc.account_realm_id
+				AND a.company_id = arc.company_id
+		WHERE	arc.company_id = OLD.company_id
+		AND     (p.company_id is NULL or arc.company_id = p.company_id)
+			AND	a.person_id = OLD.person_id
+			AND     property_type = 'auto_acct_coll'
+			AND     (
+				    property_name =
+				    	CASE WHEN OLD.gender = 'M' THEN 'male'
+				    	WHEN OLD.gender = 'F' THEN 'female'
+						ELSE 'unspecified_gender' END
+				);
+	END IF;
+
+	--
+	-- Remove rows from the temporary table that are in "remove" but not in
+	-- "add".
+	--
+	DELETE FROM account_collection_account
+	WHERE (account_collection_id, account_id) IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'remove'
+		)
+	AND (account_collection_id, account_id) NOT IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'add'
+	);
+
+	--
+	-- Add rows from the temporary table that are in 'add" but not "remove"
+	-- "add".
+	--
+	INSERT INTO account_collection_account (
+		account_collection_id, account_id)
+	SELECT account_collection_id, account_id 
+	FROM __automated_ac__
+	WHERE direction = 'add'
+	AND (account_collection_id, account_id) NOT IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'remove'
+	);
+
+	DROP TABLE IF EXISTS __automated_ac__;
+
+	IF TG_OP = 'DELETE' THEN
+		RETURN OLD;
+	ELSE
+		RETURN NEW;
+	END IF;
+
+END;
+$function$
+;
+
+-- DONE WITH proc automated_ac_on_person -> automated_ac_on_person 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc automated_realm_site_ac_pl -> automated_realm_site_ac_pl 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'automated_realm_site_ac_pl', 'automated_realm_site_ac_pl');
+
+-- DROP OLD FUNCTION
+-- consider old oid 274843
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider old oid 274843
+-- consider NEW oid 301437
+CREATE OR REPLACE FUNCTION jazzhands.automated_realm_site_ac_pl()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	_tally	INTEGER;
+BEGIN
+	SELECT  count(*)
+	  INTO  _tally
+	  FROM  pg_catalog.pg_class
+	 WHERE  relname = '__automated_ac__'
+	   AND  relpersistence = 't';
+
+	IF _tally = 0 THEN
+		CREATE TEMPORARY TABLE IF NOT EXISTS __automated_ac__ (account_collection_id integer, account_id integer, direction text);
+	END IF;
+
+	--
+	-- based on the old and new values, check for account collections that
+	-- may need to be changed based on data.  Note that this may end up being
+	-- a no-op.
+	-- 
+	IF TG_OP = 'INSERT' or TG_OP = 'UPDATE' THEN
+		INSERT INTO __automated_ac__ (
+			account_collection_id, account_id, direction
+		)
+		SELECT	p.account_collection_id, a.account_id, 'add'
+		FROM    property p
+			INNER JOIN account_realm_company arc USING (account_realm_id)
+			INNER JOIN account a 
+				ON a.account_realm_id = arc.account_realm_id
+				AND a.company_id = arc.company_id
+		WHERE   (p.company_id is NULL or arc.company_id = p.company_id)
+			AND	a.person_id = NEW.person_id
+			AND		p.site_code = NEW.site_code
+			AND     property_type = 'auto_acct_coll'
+			AND     property_name = 'site'
+		;
+	END IF;
+	IF TG_OP = 'UPDATE' or TG_OP = 'DELETE' THEN
+		INSERT INTO __automated_ac__ (
+			account_collection_id, account_id, direction
+		)
+		SELECT	p.account_collection_id, a.account_id, 'remove'
+		FROM    property p
+			INNER JOIN account_realm_company arc USING (account_realm_id)
+			INNER JOIN account a 
+				ON a.account_realm_id = arc.account_realm_id
+				AND a.company_id = arc.company_id
+		WHERE   (p.company_id is NULL or arc.company_id = p.company_id)
+			AND	a.person_id = OLD.person_id
+			AND		p.site_code = OLD.site_code
+			AND     property_type = 'auto_acct_coll'
+			AND     property_name = 'site'
+		;
+	END IF;
+	--
+	-- Remove rows from the temporary table that are in "remove" but not in
+	-- "add".
+	--
+	DELETE FROM account_collection_account
+	WHERE (account_collection_id, account_id) IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'remove'
+		)
+	AND (account_collection_id, account_id) NOT IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'add'
+	);
+
+	--
+	-- Add rows from the temporary table that are in 'add" but not "remove"
+	-- "add".
+	--
+	INSERT INTO account_collection_account (
+		account_collection_id, account_id)
+	SELECT account_collection_id, account_id 
+	FROM __automated_ac__
+	WHERE direction = 'add'
+	AND (account_collection_id, account_id) NOT IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'remove'
+	);
+
+	DROP TABLE IF EXISTS __automated_ac__;
+
+	IF TG_OP = 'DELETE' THEN
+		RETURN OLD;
+	ELSE
+		RETURN NEW;
+	END IF;
+
+END;
+$function$
+;
+
+-- DONE WITH proc automated_realm_site_ac_pl -> automated_realm_site_ac_pl 
+--------------------------------------------------------------------
 
 
 --------------------------------------------------------------------
@@ -2797,21 +4025,427 @@ where account_collection_id in (
 -- DONE legacy per-user bits
 --------------------------------------------------------------------
 
+--------------------------------------------------------------------
+-- BEGIN redo account automated triggers
+--------------------------------------------------------------------
+
+DROP TRIGGER IF EXISTS trig_automated_ac ON account;
+DROP FUNCTION IF EXISTS automated_ac();
+
+DROP FUNCTION IF EXISTS acct_coll_manip.get_automated_account_collection_id(varchar);
+DROP FUNCTION IF EXISTS acct_coll_manip.insert_or_delete_automated_ac(boolean, integer, integer[]);
+DROP FUNCTION IF EXISTS acct_coll_manip.person_company_flags_to_automated_ac_name(varchar, varchar, OUT varchar, OUT varchar);
+DROP FUNCTION IF EXISTS acct_coll_manip.person_gender_char_to_automated_ac_name(varchar);
+DROP SCHEMA IF EXISTS acct_coll_manip;
+
+DROP TRIGGER IF EXISTS trigger_update_account_type_account_collection ON account;
+DROP FUNCTION IF EXISTS update_account_type_account_collection(); 
+
+
+delete from property where property_type = 'auto_acct_coll';
+delete from val_property_value where property_type = 'auto_acct_coll';
+delete from val_property where property_type = 'auto_acct_coll';
+delete from val_property_type where property_type = 'auto_acct_coll';
+
+insert into val_property_type (
+	property_type, is_multivalue,
+	description
+) values (
+	'auto_acct_coll', 'Y',
+	'properties that define how people are added to account collections automatically based on column changes'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'exempt', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'non_exempt', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'male', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'female', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'unspecified_gender', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'management', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'non_management', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'full_time', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'non_full_time', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'account_type', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'list',
+	'N'
+);
+
+insert into val_property_value (
+	property_name, property_type, valid_property_value
+) values (
+	'account_type', 'auto_acct_coll', 'person'
+);
+
+insert into val_property_value (
+	property_name, property_type, valid_property_value
+) values (
+	'account_type', 'auto_acct_coll', 'pseudouser'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'site', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'REQUIRED',
+	'none',
+	'N'
+);
+
+
+create or replace function _v60_add_person_company_ac(
+	acname text, 
+	propname text DEFAULT NULL,
+	val text DEFAULT NULL
+)
+RETURNS void
+AS
+$$
+BEGIN
+	IF propname IS NULL THEN
+		propname := acname;
+	END IF;
+	WITH acmap AS (
+		select account_realm_id, company_id,
+		array_to_string(ARRAY[account_realm_name, company_short_name,
+			acname], '_') as company_ac
+		from account_realm, company
+	), ac AS (
+		select	*
+		from	account_collection ac
+			join acmap on ac.account_collection_name = company_ac
+		where	account_collection_type = 'automated'
+	) insert into property (property_name, property_type, 
+		account_realm_id, company_id,
+		account_collection_id, property_value
+	) select propname, 'auto_acct_coll', 
+		account_realm_id, company_id,
+		account_collection_id, val
+	from ac;
+END;
+$$ LANGUAGE plpgsql;
+
+create or replace function _v60_add_account_realm_ac(
+	acname text, 
+	propname text DEFAULT NULL,
+	val text DEFAULT NULL
+)
+RETURNS void
+AS
+$$
+BEGIN
+	IF propname IS NULL THEN
+		propname := acname;
+	END IF;
+	WITH acmap AS (
+		select account_realm_id,
+		array_to_string(ARRAY[account_realm_name, acname], '_') 
+			as company_ac
+		from account_realm
+	), ac AS (
+		select	*
+		from	account_collection ac
+			join acmap on ac.account_collection_name = company_ac
+		where	account_collection_type = 'automated'
+	) insert into property (property_name, property_type, 
+		account_realm_id,
+		account_collection_id, property_value
+	) select propname, 'auto_acct_coll', 
+		account_realm_id,
+		account_collection_id, val
+	from ac;
+END;
+$$ LANGUAGE plpgsql;
+
+create or replace function _v60_add_sitecode_ac(
+	propname text DEFAULT NULL,
+	val text DEFAULT NULL
+)
+RETURNS void
+AS
+$$
+BEGIN
+	WITH acmap AS (
+		select account_realm_id, site_code,
+		array_to_string(ARRAY[account_realm_name, site_code], '_') 
+			as company_ac
+		from account_realm, site
+	), ac AS (
+		select	*
+		from	account_collection ac
+			join acmap on ac.account_collection_name = company_ac
+		where	account_collection_type = 'automated'
+	) insert into property (property_name, property_type, 
+		account_realm_id, site_code,
+		account_collection_id, property_value
+	) select propname, 'auto_acct_coll', 
+		account_realm_id, site_code,
+		account_collection_id, val
+	from ac;
+END;
+$$ LANGUAGE plpgsql;
+
+select _v60_add_person_company_ac('exempt');
+select _v60_add_person_company_ac('non_exempt');
+select _v60_add_person_company_ac('male');
+select _v60_add_person_company_ac('female');
+select _v60_add_person_company_ac('unspecified_gender');
+select _v60_add_person_company_ac('management');
+select _v60_add_person_company_ac('non_management');
+select _v60_add_person_company_ac('full_time');
+select _v60_add_person_company_ac('non_full_time');
+
+select _v60_add_person_company_ac('person', 'account_type', 'person');
+select _v60_add_person_company_ac('pseudouser', 'account_type', 'pseudouser');
+
+select _v60_add_account_realm_ac('person', 'account_type', 'person');
+select _v60_add_account_realm_ac('pseudouser', 'account_type', 'pseudouser');
+
+select _v60_add_sitecode_ac('site');
+
+drop function IF EXISTS _v60_add_person_company_ac(text, text, text);
+drop function IF EXISTS _v60_add_account_realm_ac(text, text, text);
+drop function IF EXISTS _v60_add_sitecode_ac(text, text);
+
+delete from account_collection_account where account_collection_id in (
+	select account_collection_id from account_collection
+	where account_collection_type = 'usertype'
+);
+
+delete from account_collection_hier where account_collection_id in (
+	select account_collection_id from account_collection
+	where account_collection_type = 'usertype'
+);
+
+delete from account_collection_hier where child_account_collection_id in (
+	select account_collection_id from account_collection
+	where account_collection_type = 'usertype'
+);
+
+delete from account_collection where 
+	account_collection_type = 'usertype';
+
+delete from val_account_collection_type where 
+	account_collection_type IN ('usertype', 'company');
+
+--------------------------------------------------------------------
+-- DONE redo account automated triggers
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- BEGIN dns_record_cname_checker search path
+--------------------------------------------------------------------
+alter function dns_record_cname_checker() set search_path=jazzhands;
+--------------------------------------------------------------------
+-- END dns_record_cname_checker search path
+--------------------------------------------------------------------
+
+DROP TRIGGER IF EXISTS trig_add_automated_ac_on_account ON account;
+DROP TRIGGER IF EXISTS trig_rm_automated_ac_on_account ON account;
+DROP TRIGGER IF EXISTS trig_automated_realm_site_ac_pl ON person_location;
+DROP TRIGGER IF EXISTS trigger_automated_ac_on_person ON person;
+DROP TRIGGER IF EXISTS trigger_automated_ac_on_person_company ON person_company;
+
+CREATE TRIGGER trig_add_automated_ac_on_account AFTER INSERT OR UPDATE OF account_type, account_role ON account FOR EACH ROW EXECUTE PROCEDURE automated_ac_on_account();
+CREATE TRIGGER trig_rm_automated_ac_on_account BEFORE DELETE ON account FOR EACH ROW EXECUTE PROCEDURE automated_ac_on_account();
+CREATE TRIGGER trig_automated_realm_site_ac_pl AFTER INSERT OR DELETE OR UPDATE OF site_code, person_id ON person_location FOR EACH ROW EXECUTE PROCEDURE automated_realm_site_ac_pl();
+CREATE TRIGGER trigger_automated_ac_on_person AFTER UPDATE OF gender ON person FOR EACH ROW EXECUTE PROCEDURE automated_ac_on_person();
+CREATE TRIGGER trigger_automated_ac_on_person_company AFTER UPDATE OF is_management, is_exempt, is_full_time ON person_company FOR EACH ROW EXECUTE PROCEDURE automated_ac_on_person_company();
+
+
 
 -- Processing tables with no structural changes
 -- Some of these may be redundant
 -- fk constraints
 -- triggers
 
+-- Function arguments changed, so adjust the regrant
+UPDATE __regrants SET regrant=
+	regexp_replace(regrant, 'calculate_intermediate_netblocks\([^\)]+\)',
+		'calculate_intermediate_netblocks(ip_block_1 inet, ip_block_2 inet, netblock_type text, ip_universe_id integer)');
+	
 
 -- Clean Up
-SELECT schema_support.replay_saved_grants();
 SELECT schema_support.replay_object_recreates();
+SELECT schema_support.replay_saved_grants();
 GRANT select on all tables in schema jazzhands to ro_role;
 GRANT insert,update,delete on all tables in schema jazzhands to iud_role;
 GRANT select on all sequences in schema jazzhands to ro_role;
 GRANT usage on all sequences in schema jazzhands to iud_role;
 
 select now();
-SELECT schema_support.end_maintenance();
+-- SELECT schema_support.end_maintenance();
 

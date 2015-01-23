@@ -106,10 +106,6 @@ INSERT INTO VAL_Account_Collection_Type (Account_Collection_Type, Description)
 INSERT INTO VAL_Account_Collection_Type (Account_Collection_Type, Description)
 	VALUES ('property', 'Account_Collection for storing global property values');
 INSERT INTO VAL_Account_Collection_Type (Account_Collection_Type, Description)
-	VALUES ('company', 'automatic Account_Collectiones defined by company membership');
-INSERT INTO VAL_Account_Collection_Type (Account_Collection_Type, Description)
-	VALUES ('usertype', 'automatic Account_Collectiones defined by user type');
-INSERT INTO VAL_Account_Collection_Type (Account_Collection_Type, Description)
 	VALUES ('site', 'automatic Account_Collectiones defined by user site');
 INSERT INTO VAL_Account_Collection_Type (Account_Collection_Type, Description)
 	VALUES ('automated', 'automatic Account_Collectiones managed by trigger');
@@ -1049,3 +1045,227 @@ values (
 	'DNSACLs', 'DNSZonegen',
 	'indicates netblocks that should be in a named acl', 'Y',
 	'string', 'REQUIRED');
+
+-------------------------------------------------------------------------
+-- BEGIN automated account collection infrastructure (tied to properties)
+
+insert into val_property_type (
+	property_type, is_multivalue,
+	description
+) values (
+	'auto_acct_coll', 'Y',
+	'properties that define how people are added to account collections automatically based on column changes'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'exempt', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'non_exempt', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'male', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'female', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'unspecified_gender', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'management', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'non_management', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'full_time', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'non_full_time', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'none',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'account_type', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'PROHIBITED',
+	'list',
+	'N'
+);
+
+insert into val_property_value (
+	property_name, property_type, valid_property_value
+) values (
+	'account_type', 'auto_acct_coll', 'person'
+);
+
+insert into val_property_value (
+	property_name, property_type, valid_property_value
+) values (
+	'account_type', 'auto_acct_coll', 'pseudouser'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_collection_id,
+	permit_account_realm_id,
+	permit_company_id,
+	permit_site_code,
+	property_data_type,
+	is_multivalue
+) values (
+	'site', 'auto_acct_coll',
+	'REQUIRED',
+	'REQUIRED',
+	'ALLOWED',
+	'REQUIRED',
+	'none',
+	'N'
+);
+
+-- ENDIN automated account collection infrastructure (tied to properties)
+-------------------------------------------------------------------------
