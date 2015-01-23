@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Todd Kover
+ * Copyright (c) 2015 Todd Kover
  * All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -181,106 +181,114 @@ CREATE TRIGGER trig_automated_ac
 CREATE OR REPLACE FUNCTION automated_ac_on_person_company() 
 RETURNS TRIGGER AS $_$
 DECLARE
-	ac_id INTEGER[];
-	c_name VARCHAR;
-	old_acr_c_name VARCHAR;
-	acr_c_name VARCHAR;
-	exempt_status RECORD;
-	new_exempt_status RECORD;
-	full_time_status RECORD;
-	manager_status RECORD;
-	old_r RECORD;
-	r RECORD;
+	_tally	INTEGER;
 BEGIN
-	-- at this time person_company.is_exempt column can be null.
-	-- take into account of is_exempt going from null to not null
-	IF (NEW.is_exempt IS NOT NULL AND OLD.is_exempt IS NOT NULL AND NEW.is_exempt = OLD.is_exempt OR NEW.is_exempt IS NULL AND OLD.is_exempt IS NULL)
-		AND NEW.is_management = OLD.is_management AND NEW.is_full_time = OLD.is_full_time
-		OR (NEW.person_id = 0 AND OLD.person_id = 0) THEN
+
+	SELECT  count(*)
+	  INTO  _tally
+	  FROM  pg_catalog.pg_class
+	 WHERE  relname = '__automated_ac__'
+	   AND  relpersistence = 't';
+
+	IF _tally = 0 THEN
+		CREATE TEMPORARY TABLE IF NOT EXISTS __automated_ac__ (account_collection_id integer, account_id integer, direction text);
+	END IF;
+
+
+	-- figure out all the account collections that would be removed and
+	-- added.  Parts of this query are repeated later but this part is
+	-- mostly for the property_name case statements
+	IF TG_OP = 'INSERT' or TG_OP = 'UPDATE' THEN
+		INSERT INTO __automated_ac__ (
+			account_collection_id, account_id, direction
+		)
+		SELECT	p.account_collection_id, a.account_id, 'add'
+		FROM    property p
+			INNER JOIN account_realm_company arc USING (account_realm_id)
+			INNER JOIN account a 
+				ON a.account_realm_id = arc.account_realm_id
+				AND a.company_id = arc.company_id
+		WHERE	arc.company_id = NEW.company_id
+		AND     (p.company_id is NULL or arc.company_id = p.company_id)
+			AND	a.person_id = NEW.person_id
+			AND     property_type = 'auto_acct_coll'
+			AND     (
+				    property_name =
+				    CASE WHEN NEW.is_exempt = 'N'
+					THEN 'non_exempt'
+					ELSE 'exempt' END
+				OR
+				    property_name =
+				    CASE WHEN NEW.is_management = 'N'
+					THEN 'non_management'
+					ELSE 'management' END
+				OR
+				    property_name =
+				    CASE WHEN NEW.is_full_time = 'N'
+					THEN 'non_full_time'
+					ELSE 'full_time' END
+				);
+	END IF;
+
+	IF TG_OP = 'UPDATE' or TG_OP = 'DELETE' THEN
+		INSERT INTO __automated_ac__ (
+			account_collection_id, account_id, direction
+		)
+		SELECT	p.account_collection_id, a.account_id, 'remove'
+		FROM    property p
+			INNER JOIN account_realm_company arc USING (account_realm_id)
+			INNER JOIN account a 
+				ON a.account_realm_id = arc.account_realm_id
+				AND a.company_id = arc.company_id
+		WHERE	arc.company_id = OLD.company_id
+		AND     (p.company_id is NULL or arc.company_id = p.company_id)
+			AND	a.person_id = OLD.person_id
+			AND     property_type = 'auto_acct_coll'
+			AND     (
+				    property_name =
+				    CASE WHEN OLD.is_exempt = 'N'
+					THEN 'non_exempt'
+					ELSE 'exempt' END
+				OR
+				    property_name =
+				    CASE WHEN OLD.is_management = 'N'
+					THEN 'non_management'
+					ELSE 'management' END
+				OR
+				    property_name =
+				    CASE WHEN OLD.is_full_time = 'N'
+					THEN 'non_full_time'
+					ELSE 'full_time' END
+				);
+	END IF;
+
+	DELETE FROM account_collection_account
+	WHERE (account_collection_id, account_id) IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'remove'
+		)
+	AND (account_collection_id, account_id) NOT IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'add'
+	);
+
+	INSERT INTO account_collection_account (
+		account_collection_id, account_id)
+	SELECT account_collection_id, account_id 
+	FROM __automated_ac__
+	WHERE direction = 'add'
+	AND (account_collection_id, account_id) NOT IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'remove'
+	);
+
+	DROP TABLE IF EXISTS __automated_ac__;
+
+	IF TG_OP = 'DELETE' THEN
+		RETURN OLD;
+	ELSE
 		RETURN NEW;
 	END IF;
-	IF NEW.person_id != OLD.person_id THEN
-		RAISE NOTICE 'This trigger % does not support changing person_id', TG_NAME;
-		RETURN NEW;
-	ELSIF NEW.company_id != OLD.company_id THEN
-		RAISE NOTICE 'This trigger % does not support changing company_id', TG_NAME;
-		RETURN NEW;
-	END IF;
-	SELECT company_short_name INTO c_name FROM company WHERE company_id = OLD.company_id AND company_short_name IS NOT NULL;
-	IF NOT FOUND THEN
-		RAISE NOTICE 'Company short name cannot be determined from company_id % in trigger %', OLD.company_id, TG_NAME;
-		RETURN NEW;
-	END IF;
-	FOR old_r
-		IN SELECT
-			account_realm_name, account_id
-		FROM
-			account_realm ar
-		JOIN
-			account a
-		USING
-			(account_realm_id)
-		JOIN
-			val_person_status vps
-		ON
-			account_status = vps.person_status AND vps.is_disabled='N'
-		WHERE
-			a.person_id = OLD.person_id AND a.company_id = OLD.company_id
-	LOOP
-		old_acr_c_name = old_r.account_realm_name || '_' || c_name;
-		IF coalesce(NEW.is_exempt, '') != coalesce(OLD.is_exempt, '') THEN
-			IF OLD.is_exempt IS NOT NULL THEN
-				SELECT * INTO exempt_status FROM acct_coll_manip.person_company_flags_to_automated_ac_name(OLD.is_exempt, 'exempt');
-				DELETE FROM account_collection_account WHERE account_id = old_r.account_id
-					AND account_collection_id = acct_coll_manip.get_automated_account_collection_id(old_acr_c_name || '_' || exempt_status.name);
-			END IF;
-		END IF;
-		IF NEW.is_full_time != OLD.is_full_time THEN
-			SELECT * INTO full_time_status FROM acct_coll_manip.person_company_flags_to_automated_ac_name(OLD.is_full_time, 'full_time');
-			DELETE FROM account_collection_account WHERE account_id = old_r.account_id
-				AND account_collection_id = acct_coll_manip.get_automated_account_collection_id(old_acr_c_name || '_' || full_time_status.name);
-		END IF;
-		IF NEW.is_management != OLD.is_management THEN
-			SELECT * INTO manager_status FROM acct_coll_manip.person_company_flags_to_automated_ac_name(OLD.is_management, 'management');
-			DELETE FROM account_collection_account WHERE account_id = old_r.account_id
-				AND account_collection_id = acct_coll_manip.get_automated_account_collection_id(old_acr_c_name || '_' || manager_status.name);
-		END IF;
-		-- looping over the same set of data.  TODO: optimize for speed
-		FOR r
-			IN SELECT
-				account_realm_name, account_id
-			FROM
-				account_realm ar
-			JOIN
-				account a
-			USING
-				(account_realm_id)
-			JOIN
-				val_person_status vps
-			ON
-				account_status = vps.person_status AND vps.is_disabled='N'
-			WHERE
-				a.person_id = NEW.person_id AND a.company_id = NEW.company_id
-		LOOP
-			acr_c_name = r.account_realm_name || '_' || c_name;
-			IF coalesce(NEW.is_exempt, '') != coalesce(OLD.is_exempt, '') THEN
-				IF NEW.is_exempt IS NOT NULL THEN
-					SELECT * INTO new_exempt_status FROM acct_coll_manip.person_company_flags_to_automated_ac_name(NEW.is_exempt, 'exempt');
-					ac_id[0] = acct_coll_manip.get_automated_account_collection_id(acr_c_name || '_' || new_exempt_status.name);
-					PERFORM acct_coll_manip.insert_or_delete_automated_ac('f', r.account_id, ac_id);
-				END IF;
-			END IF;
-			IF NEW.is_full_time != OLD.is_full_time THEN
-				ac_id[0] = acct_coll_manip.get_automated_account_collection_id(acr_c_name || '_' || full_time_status.non_name);
-				PERFORM acct_coll_manip.insert_or_delete_automated_ac('f', r.account_id, ac_id);
-			END IF;
-			IF NEW.is_management != OLD.is_management THEN
-				ac_id[0] = acct_coll_manip.get_automated_account_collection_id(acr_c_name || '_' || manager_status.non_name);
-				PERFORM acct_coll_manip.insert_or_delete_automated_ac('f', r.account_id, ac_id);
-			END IF;
-		END LOOP;
-	END LOOP;
-	RETURN NEW;
 END;
 $_$
 SET search_path=jazzhands
