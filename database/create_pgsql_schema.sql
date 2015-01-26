@@ -11,6 +11,8 @@ select now();
 \i ddl/schema/pgsql/create_schema_pgsql.sql
 
 CREATE SCHEMA audit;
+COMMENT ON SCHEMA audit IS 'part of jazzhands project';
+
 
 -- \i ddl/schema/pgsql/build_audit_tables.sql
 -- \i ddl/schema/pgsql/build_ins_upd_triggers.sql

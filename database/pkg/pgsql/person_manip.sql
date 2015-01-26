@@ -31,6 +31,7 @@ BEGIN
 	IF _tal = 0 THEN
 		DROP SCHEMA IF EXISTS person_manip;
 		CREATE SCHEMA person_manip AUTHORIZATION jazzhands;
+		COMMENT ON SCHEMA person_manip IS 'part of jazzhands';
 	END IF;
 END;
 $$;

@@ -1,6 +1,7 @@
 
 
 CREATE schema jazzhands;
+COMMENT ON SCHEMA jazzhands IS 'http://sourceforge.net/projects/jazzhands/';
 ALTER USER jazzhands SET search_path = jazzhands;
 set search_path = jazzhands;
 

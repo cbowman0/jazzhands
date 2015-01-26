@@ -54,3 +54,4 @@
 -- \i dbms_job_util.sql
 -- \i appgroup_util.sql
 -- \i property_verify.sql
+\i physical_address_utils.sql
