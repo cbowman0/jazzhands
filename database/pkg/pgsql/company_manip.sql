@@ -19,6 +19,8 @@
  * $Id$
  */
 
+\set ON_ERROR_STOP
+
 -- Create schema if it does not exist, do nothing otherwise.
 DO $$
 DECLARE
@@ -44,7 +46,12 @@ $$;
 --
 
 --
--- sets up the account collections for members of the corporate family
+-- sets up the automated account collections.  This assumes some carnal
+-- knowledge of some of the types.
+--
+-- This is typically only called from add_company.
+--
+-- note that there is no 'remove_auto_collections'
 --
 CREATE OR REPLACE FUNCTION company_manip.add_auto_collections(
 	_company_id		company.company_id%type,
@@ -143,9 +150,67 @@ $$
 SET search_path=jazzhands
 LANGUAGE plpgsql SECURITY DEFINER;
 
+--
+-- add site based automated account collections for the given realm to be
+-- automanaged by trigger.
+--
+-- NOTE:  There is no remove_auto_collections_site.
+--
+CREATE OR REPLACE FUNCTION company_manip.add_auto_collections_site(
+	_company_id		company.company_id%type,
+	_account_realm_id	account_realm.account_realm_id%type,
+	_site_code		site.site_code%type
+) RETURNS void AS
+$$
+DECLARE
+	_ar		account_realm.account_realm_name%TYPE;
+	_csn	company.company_short_name%TYPE;
+	acname	account_collection.account_collection_name%TYPE;
+	acid	account_collection.account_collection_id%TYPE;
+	tally	integer;
+BEGIN
+	PERFORM
+	FROM	account_realm_company
+	WHERE	company_id = _company_id
+	AND		account_realm_id = _account_realm_id;
+	IF NOT FOUND THEN
+		RAISE EXCEPTION 'Company and Account Realm are not associated together'
+			USING ERRCODE = 'not_null_violation';
+	END IF;
+
+	acname := concat(_ar, '_', _site_code);
+
+	INSERT INTO account_collection (
+		account_collection_name, account_collection_type
+	) VALUES (
+		acname, 'automated'
+	) RETURNING account_collection_id INTO acid;
+
+	INSERT INTO property (
+		property_name, property_type, account_realm_id,
+		account_collection_id,
+		site_code
+	) VALUES (
+		'site', 'auto_acct_coll', _account_realm_id,
+		acid,
+		_site_code
+	);
+	tally := tally + 1;
+END;
+$$ 
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
+
+
 
 ------------------------------------------------------------------------------
 
+--
+-- addds company types to company, and sets up any automated classes
+-- associated via company_manip.add_auto_collections.
+--
+-- note that there is no 'remove_company_types'
+--
 CREATE OR REPLACE FUNCTION company_manip.add_company_types(
 	_company_id		company.company_id%type,
 	_account_realm_id	account_realm.account_realm_id%type DEFAULT NULL,
@@ -172,6 +237,14 @@ LANGUAGE plpgsql SECURITY DEFINER;
 
 ------------------------------------------------------------------------------
 
+--
+-- primary interface to add things to the company table.  It does other
+-- necessary manipulations based on company types.
+--
+-- shortname is inferred if not set
+--
+-- NOTE: There is no remove_company.
+--
 CREATE OR REPLACE FUNCTION company_manip.add_company(
 	_company_name		text,
 	_company_types		text[] default NULL,
@@ -223,6 +296,43 @@ BEGIN
 	END IF;
 
 	RETURN _cmpid;
+END;
+$$ 
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
+
+------------------------------------------------------------------------------
+--
+-- Adds a location to a company with the given site code and address.  It will
+-- take are of any automated account collections that are needed.
+--
+-- NOTE: There is no remove_location.
+--
+CREATE OR REPLACE FUNCTION company_manip.add_location(
+	_company_id		company.company_id%type,
+	_site_code		site.site_code%type,
+	_physical_address_id	physical_address.physical_address_id%type,
+	_account_realm_id	account_realm.account_realm_id%type DEFAULT NULL,
+	_site_status		site.site_status%type DEFAULT 'ACTIVE',
+	_description		text DEFAULT NULL
+) RETURNS void AS
+$$
+DECLARE
+BEGIN
+	INSERT INTO site (site_code, colo_company_id,
+		physical_address_id, site_status, description
+	) VALUES (
+		_site_code, _company_id,
+		_physical_address_id, _site_status, _description
+	);
+
+	if _account_realm_id IS NOT NULL THEN
+		PERFORM company_manip.add_auto_collections_site(
+			_company_id,
+			_account_realm_id,
+			_site_code
+		);
+	END IF;
 END;
 $$ 
 SET search_path=jazzhands
