@@ -422,6 +422,18 @@ DROP TRIGGER C_TIUBR_LOGICAL_PORT_SLOT;
 
 DROP TRIGGER TIB_LOGICAL_PORT_SLOT;
 
+DROP TRIGGER Trigger_22564;
+
+DROP TRIGGER Trigger_22565;
+
+DROP TRIGGER Trigger_22566;
+
+DROP TRIGGER Trigger_23071;
+
+DROP TRIGGER Trigger_23072;
+
+DROP TRIGGER Trigger_23073;
+
 DROP TRIGGER TIB_MLAG_PEERING;
 
 DROP TRIGGER TUB_MLAG_PEERING;
@@ -487,6 +499,12 @@ DROP TRIGGER C_TIUBR_OPERATING_SYSTEM;
 DROP TRIGGER TIB_OPERATING_SYSTEM;
 
 DROP TRIGGER TUB_OPERATING_SYSTEM;
+
+DROP TRIGGER C_TIUBR_OPERATING_SYSTEM_SNAPS;
+
+DROP TRIGGER TIB_OPERATING_SYSTEM_SNAPSHOT;
+
+DROP TRIGGER TUB_OPERATING_SYSTEM_SNAPSHOT;
 
 DROP TRIGGER C_TIUBR_PERSON;
 
@@ -571,6 +589,12 @@ DROP TRIGGER C_TIUBR_PHYSICAL_PORT;
 DROP TRIGGER TIB_PHYSICAL_PORT;
 
 DROP TRIGGER TUB_PHYSICAL_PORT;
+
+DROP TRIGGER Trigger_22622;
+
+DROP TRIGGER Trigger_22623;
+
+DROP TRIGGER Trigger_22624;
 
 DROP TRIGGER TIB_PROPERTY;
 
@@ -880,6 +904,10 @@ DROP TRIGGER C_TIUBR_VAL_ENCRYPT_METHOD;
 
 DROP TRIGGER TUB_VAL_ENCRYPT_METHOD;
 
+DROP TRIGGER Trigger_22884;
+
+DROP TRIGGER Trigger_22885;
+
 DROP TRIGGER TUB_VAL_FLOW_CONTROL;
 
 DROP TRIGGER C_TIUBR_VAL_FLOW_CONTROL;
@@ -899,6 +927,10 @@ DROP TRIGGER TUB_REASON_FOR_ASSIGN;
 DROP TRIGGER C_TIUBR_VAL_LOGICAL_PORT_TYPE;
 
 DROP TRIGGER TUB_LOGICAL_PORT_TYPE;
+
+DROP TRIGGER Trigger_23153;
+
+DROP TRIGGER Trigger_23154;
 
 DROP TRIGGER C_TIUBR_VAL_NETBLOCK_COLLECTIO;
 
@@ -923,6 +955,14 @@ DROP TRIGGER TUB_VAL_NETWORK_INTERFACE_TYPE;
 DROP TRIGGER C_TIUBR_VAL_NETWORK_SERVICE_TY;
 
 DROP TRIGGER TUB_VAL_NETWORK_SERVICE_TYPE;
+
+DROP TRIGGER C_TIUBR_VAL_OPERATING_SYSTEM_F;
+
+DROP TRIGGER TUB_OPERATING_SYSTEM_FAMILY;
+
+DROP TRIGGER C_TIUBR_VAL_OS_SNAPSHOT_TYPE;
+
+DROP TRIGGER TUB_VAL_OS_SNAPSHOT_TYPE;
 
 DROP TRIGGER C_TIUBR_VAL_OWNERSHIP_STATUS;
 
@@ -1032,6 +1072,10 @@ DROP TRIGGER C_TIUBR_VAL_RACK_TYPE;
 
 DROP TRIGGER TUB_VAL_RACK_TYPE;
 
+DROP TRIGGER Trigger_22830;
+
+DROP TRIGGER Trigger_22831;
+
 DROP TRIGGER C_TIUBR_VAL_SVC_ENV_COLL_TYPE;
 
 DROP TRIGGER TUB_VAL_SVC_ENV_COLL_TYPE;
@@ -1088,6 +1132,10 @@ DROP TRIGGER TUB_VAL_VOE_STATE;
 
 DROP TRIGGER C_TIUBR_VAL_VOE_STATE;
 
+DROP TRIGGER Trigger_22946;
+
+DROP TRIGGER Trigger_22947;
+
 DROP TRIGGER C_TIUBR_CERT_FILE_FMT;
 
 DROP TRIGGER TUB_CERT_FILE_FMT;
@@ -1119,6 +1167,16 @@ DROP TRIGGER TIB_VOE_SYMBOLIC_TRACK;
 DROP TRIGGER TUB_VOE_SYMBOLIC_TRACK;
 
 DROP TRIGGER C_TIUBR_VOE_SYMBOLIC_TRACK;
+
+DROP TRIGGER Trigger_22686;
+
+DROP TRIGGER Trigger_22687;
+
+DROP TRIGGER Trigger_22688;
+
+DROP TRIGGER Trigger_22730;
+
+DROP TRIGGER Trigger_22731;
 
 DROP TRIGGER C_TIUBR_X509_CERTIFICATE;
 
@@ -10414,6 +10472,284 @@ ALTER TRIGGER TIB_LOGICAL_PORT_SLOT
 	ENABLE;
 
 
+CREATE  OR REPLACE  TRIGGER Trigger_22564
+ BEFORE INSERT OR UPDATE
+ ON LOGICAL_VOLUME
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+    V_CONTEXT_USER  VARCHAR2(256):=NULL;
+
+begin
+    -- Context should be used by apps to list the end-user id.
+    -- if it is filled, then concatenate it on.
+    V_CONTEXT_USER:=SYS_CONTEXT('USERENV','CLIENT_IDENTIFIER');
+    V_CONTEXT_USER:=UPPER(SUBSTR((USER||'/'||V_CONTEXT_USER),1,30));
+
+    IF INSERTING
+    THEN
+        -- Override whatever is passed with context user
+        :new.data_ins_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_ins_date:=sysdate;
+    END IF;
+
+    IF UPDATING
+    THEN
+        -- Preventing changes to insert user and date columns happens in
+        -- another trigger
+
+        -- Override whatever is passed with context user
+        :new.data_upd_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_upd_date:=sysdate;
+    END IF;
+
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22564
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_22565
+ BEFORE INSERT
+ ON LOGICAL_VOLUME
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    IF (:new.COMPONENT_ID IS NULL)
+    THEN
+        
+        select SEQ_COMPONENT_ID.NEXTVAL
+        INTO :new.COMPONENT_ID
+        from dual;
+    END IF;
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22565
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_22566
+ BEFORE UPDATE OF 
+        DATA_INS_DATE,
+        DATA_INS_USER,
+        LOGICAL_VOLUME_ID
+ ON LOGICAL_VOLUME
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    --  Non modifiable column "DATA_INS_USER" cannot be modified
+    if updating('DATA_INS_USER') and :old.DATA_INS_USER != :new.DATA_INS_USER then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_USER" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+    --  Non modifiable column "DATA_INS_DATE" cannot be modified
+    if updating('DATA_INS_DATE') and :old.DATA_INS_DATE != :new.DATA_INS_DATE then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_DATE" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22566
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_23071
+ BEFORE INSERT OR UPDATE
+ ON LOGICAL_VOLUME_PROPERTY
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+    V_CONTEXT_USER  VARCHAR2(256):=NULL;
+
+begin
+    -- Context should be used by apps to list the end-user id.
+    -- if it is filled, then concatenate it on.
+    V_CONTEXT_USER:=SYS_CONTEXT('USERENV','CLIENT_IDENTIFIER');
+    V_CONTEXT_USER:=UPPER(SUBSTR((USER||'/'||V_CONTEXT_USER),1,30));
+
+    IF INSERTING
+    THEN
+        -- Override whatever is passed with context user
+        :new.data_ins_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_ins_date:=sysdate;
+    END IF;
+
+    IF UPDATING
+    THEN
+        -- Preventing changes to insert user and date columns happens in
+        -- another trigger
+
+        -- Override whatever is passed with context user
+        :new.data_upd_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_upd_date:=sysdate;
+    END IF;
+
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_23071
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_23072
+ BEFORE INSERT
+ ON LOGICAL_VOLUME_PROPERTY
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    IF (:new.COMPONENT_ID IS NULL)
+    THEN
+        
+        select SEQ_COMPONENT_ID.NEXTVAL
+        INTO :new.COMPONENT_ID
+        from dual;
+    END IF;
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_23072
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_23073
+ BEFORE UPDATE OF 
+        DATA_INS_DATE,
+        DATA_INS_USER,
+        LOGICAL_VOLUME_PROPERTY_ID
+ ON LOGICAL_VOLUME_PROPERTY
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    --  Non modifiable column "DATA_INS_USER" cannot be modified
+    if updating('DATA_INS_USER') and :old.DATA_INS_USER != :new.DATA_INS_USER then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_USER" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+    --  Non modifiable column "DATA_INS_DATE" cannot be modified
+    if updating('DATA_INS_DATE') and :old.DATA_INS_DATE != :new.DATA_INS_DATE then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_DATE" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_23073
+	ENABLE;
+
+
 CREATE  OR REPLACE  TRIGGER C_TIUBR_MLAG_PEERING
  BEFORE INSERT OR UPDATE
  ON MLAG_PEERING
@@ -12012,6 +12348,144 @@ end;
 
 
 ALTER TRIGGER TUB_OPERATING_SYSTEM
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER C_TIUBR_OPERATING_SYSTEM_SNAPS
+ BEFORE INSERT OR UPDATE
+ ON OPERATING_SYSTEM_SNAPSHOT
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+    V_CONTEXT_USER  VARCHAR2(256):=NULL;
+
+begin
+    -- Context should be used by apps to list the end-user id.
+    -- if it is filled, then concatenate it on.
+    V_CONTEXT_USER:=SYS_CONTEXT('USERENV','CLIENT_IDENTIFIER');
+    V_CONTEXT_USER:=UPPER(SUBSTR((USER||'/'||V_CONTEXT_USER),1,30));
+
+    IF INSERTING
+    THEN
+        -- Override whatever is passed with context user
+        :new.data_ins_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_ins_date:=sysdate;
+    END IF;
+
+    IF UPDATING
+    THEN
+        -- Preventing changes to insert user and date columns happens in
+        -- another trigger
+
+        -- Override whatever is passed with context user
+        :new.data_upd_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_upd_date:=sysdate;
+    END IF;
+
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER C_TIUBR_OPERATING_SYSTEM_SNAPS
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER TIB_OPERATING_SYSTEM_SNAPSHOT
+ BEFORE INSERT
+ ON OPERATING_SYSTEM_SNAPSHOT
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    IF (:new.OPERATING_SYSTEM_SNAPSHOT_ID IS NULL)
+    THEN
+        select SEQ_OPERATING_SYSTEM_SNAP_ID.NEXTVAL
+        INTO :new.OPERATING_SYSTEM_SNAPSHOT_ID
+        from dual;
+    END IF;
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER TIB_OPERATING_SYSTEM_SNAPSHOT
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER TUB_OPERATING_SYSTEM_SNAPSHOT
+ BEFORE UPDATE OF 
+        OPERATING_SYSTEM_SNAPSHOT_ID,
+        DATA_INS_DATE,
+        DATA_INS_USER
+ ON OPERATING_SYSTEM_SNAPSHOT
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    --  Non modifiable column "DATA_INS_USER" cannot be modified
+    if updating('DATA_INS_USER') and :old.DATA_INS_USER != :new.DATA_INS_USER then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_USER" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+    --  Non modifiable column "DATA_INS_DATE" cannot be modified
+    if updating('DATA_INS_DATE') and :old.DATA_INS_DATE != :new.DATA_INS_DATE then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_DATE" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER TUB_OPERATING_SYSTEM_SNAPSHOT
 	ENABLE;
 
 
@@ -14081,6 +14555,145 @@ end;
 
 
 ALTER TRIGGER TUB_PHYSICAL_PORT
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_22622
+ BEFORE INSERT OR UPDATE
+ ON PHYSICALISH_VOLUME
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+    V_CONTEXT_USER  VARCHAR2(256):=NULL;
+
+begin
+    -- Context should be used by apps to list the end-user id.
+    -- if it is filled, then concatenate it on.
+    V_CONTEXT_USER:=SYS_CONTEXT('USERENV','CLIENT_IDENTIFIER');
+    V_CONTEXT_USER:=UPPER(SUBSTR((USER||'/'||V_CONTEXT_USER),1,30));
+
+    IF INSERTING
+    THEN
+        -- Override whatever is passed with context user
+        :new.data_ins_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_ins_date:=sysdate;
+    END IF;
+
+    IF UPDATING
+    THEN
+        -- Preventing changes to insert user and date columns happens in
+        -- another trigger
+
+        -- Override whatever is passed with context user
+        :new.data_upd_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_upd_date:=sysdate;
+    END IF;
+
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22622
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_22623
+ BEFORE INSERT
+ ON PHYSICALISH_VOLUME
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    IF (:new.COMPONENT_ID IS NULL)
+    THEN
+        
+        select SEQ_COMPONENT_ID.NEXTVAL
+        INTO :new.COMPONENT_ID
+        from dual;
+    END IF;
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22623
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_22624
+ BEFORE UPDATE OF 
+        DATA_INS_DATE,
+        DATA_INS_USER,
+        PHYSICALISH_VOLUME_ID
+ ON PHYSICALISH_VOLUME
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    --  Non modifiable column "DATA_INS_USER" cannot be modified
+    if updating('DATA_INS_USER') and :old.DATA_INS_USER != :new.DATA_INS_USER then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_USER" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+    --  Non modifiable column "DATA_INS_DATE" cannot be modified
+    if updating('DATA_INS_DATE') and :old.DATA_INS_DATE != :new.DATA_INS_DATE then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_DATE" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22624
 	ENABLE;
 
 
@@ -22135,6 +22748,109 @@ ALTER TRIGGER TUB_VAL_ENCRYPT_METHOD
 	ENABLE;
 
 
+CREATE  OR REPLACE  TRIGGER Trigger_22884
+ BEFORE INSERT OR UPDATE
+ ON VAL_FILESYSTEM_TYPE
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+    V_CONTEXT_USER  VARCHAR2(256):=NULL;
+
+begin
+    -- Context should be used by apps to list the end-user id.
+    -- if it is filled, then concatenate it on.
+    V_CONTEXT_USER:=SYS_CONTEXT('USERENV','CLIENT_IDENTIFIER');
+    V_CONTEXT_USER:=UPPER(SUBSTR((USER||'/'||V_CONTEXT_USER),1,30));
+
+    IF INSERTING
+    THEN
+        -- Override whatever is passed with context user
+        :new.data_ins_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_ins_date:=sysdate;
+    END IF;
+
+    IF UPDATING
+    THEN
+        -- Preventing changes to insert user and date columns happens in
+        -- another trigger
+
+        -- Override whatever is passed with context user
+        :new.data_upd_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_upd_date:=sysdate;
+    END IF;
+
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22884
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_22885
+ BEFORE UPDATE OF 
+        FILESYSTEM_TYPE,
+        DATA_INS_DATE,
+        DATA_INS_USER
+ ON VAL_FILESYSTEM_TYPE
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    --  Non modifiable column "DATA_INS_USER" cannot be modified
+    if updating('DATA_INS_USER') and :old.DATA_INS_USER != :new.DATA_INS_USER then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_USER" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+    --  Non modifiable column "DATA_INS_DATE" cannot be modified
+    if updating('DATA_INS_DATE') and :old.DATA_INS_DATE != :new.DATA_INS_DATE then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_DATE" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22885
+	ENABLE;
+
+
 CREATE  OR REPLACE  TRIGGER C_TIUBR_VAL_FLOW_CONTROL
  BEFORE INSERT OR UPDATE
  ON VAL_FLOW_CONTROL
@@ -22643,6 +23359,109 @@ end;
 
 
 ALTER TRIGGER TUB_LOGICAL_PORT_TYPE
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_23153
+ BEFORE INSERT OR UPDATE
+ ON VAL_LOGICAL_VOLUME_PROPERTY
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+    V_CONTEXT_USER  VARCHAR2(256):=NULL;
+
+begin
+    -- Context should be used by apps to list the end-user id.
+    -- if it is filled, then concatenate it on.
+    V_CONTEXT_USER:=SYS_CONTEXT('USERENV','CLIENT_IDENTIFIER');
+    V_CONTEXT_USER:=UPPER(SUBSTR((USER||'/'||V_CONTEXT_USER),1,30));
+
+    IF INSERTING
+    THEN
+        -- Override whatever is passed with context user
+        :new.data_ins_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_ins_date:=sysdate;
+    END IF;
+
+    IF UPDATING
+    THEN
+        -- Preventing changes to insert user and date columns happens in
+        -- another trigger
+
+        -- Override whatever is passed with context user
+        :new.data_upd_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_upd_date:=sysdate;
+    END IF;
+
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_23153
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_23154
+ BEFORE UPDATE OF 
+        LOGICAL_VOLUME_PROPERTY_NAME,
+        DATA_INS_DATE,
+        DATA_INS_USER
+ ON VAL_LOGICAL_VOLUME_PROPERTY
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    --  Non modifiable column "DATA_INS_USER" cannot be modified
+    if updating('DATA_INS_USER') and :old.DATA_INS_USER != :new.DATA_INS_USER then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_USER" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+    --  Non modifiable column "DATA_INS_DATE" cannot be modified
+    if updating('DATA_INS_DATE') and :old.DATA_INS_DATE != :new.DATA_INS_DATE then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_DATE" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_23154
 	ENABLE;
 
 
@@ -23261,6 +24080,212 @@ end;
 
 
 ALTER TRIGGER TUB_VAL_NETWORK_SERVICE_TYPE
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER C_TIUBR_VAL_OPERATING_SYSTEM_F
+ BEFORE INSERT OR UPDATE
+ ON VAL_OPERATING_SYSTEM_FAMILY
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+    V_CONTEXT_USER  VARCHAR2(256):=NULL;
+
+begin
+    -- Context should be used by apps to list the end-user id.
+    -- if it is filled, then concatenate it on.
+    V_CONTEXT_USER:=SYS_CONTEXT('USERENV','CLIENT_IDENTIFIER');
+    V_CONTEXT_USER:=UPPER(SUBSTR((USER||'/'||V_CONTEXT_USER),1,30));
+
+    IF INSERTING
+    THEN
+        -- Override whatever is passed with context user
+        :new.data_ins_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_ins_date:=sysdate;
+    END IF;
+
+    IF UPDATING
+    THEN
+        -- Preventing changes to insert user and date columns happens in
+        -- another trigger
+
+        -- Override whatever is passed with context user
+        :new.data_upd_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_upd_date:=sysdate;
+    END IF;
+
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER C_TIUBR_VAL_OPERATING_SYSTEM_F
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER TUB_OPERATING_SYSTEM_FAMILY
+ BEFORE UPDATE OF 
+        OPERATING_SYSTEM_FAMILY,
+        DATA_INS_DATE,
+        DATA_INS_USER
+ ON VAL_OPERATING_SYSTEM_FAMILY
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    --  Non modifiable column "DATA_INS_USER" cannot be modified
+    if updating('DATA_INS_USER') and :old.DATA_INS_USER != :new.DATA_INS_USER then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_USER" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+    --  Non modifiable column "DATA_INS_DATE" cannot be modified
+    if updating('DATA_INS_DATE') and :old.DATA_INS_DATE != :new.DATA_INS_DATE then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_DATE" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER TUB_OPERATING_SYSTEM_FAMILY
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER C_TIUBR_VAL_OS_SNAPSHOT_TYPE
+ BEFORE INSERT OR UPDATE
+ ON VAL_OS_SNAPSHOT_TYPE
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+    V_CONTEXT_USER  VARCHAR2(256):=NULL;
+
+begin
+    -- Context should be used by apps to list the end-user id.
+    -- if it is filled, then concatenate it on.
+    V_CONTEXT_USER:=SYS_CONTEXT('USERENV','CLIENT_IDENTIFIER');
+    V_CONTEXT_USER:=UPPER(SUBSTR((USER||'/'||V_CONTEXT_USER),1,30));
+
+    IF INSERTING
+    THEN
+        -- Override whatever is passed with context user
+        :new.data_ins_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_ins_date:=sysdate;
+    END IF;
+
+    IF UPDATING
+    THEN
+        -- Preventing changes to insert user and date columns happens in
+        -- another trigger
+
+        -- Override whatever is passed with context user
+        :new.data_upd_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_upd_date:=sysdate;
+    END IF;
+
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER C_TIUBR_VAL_OS_SNAPSHOT_TYPE
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER TUB_VAL_OS_SNAPSHOT_TYPE
+ BEFORE UPDATE OF 
+        OPERATING_SYSTEM_SNAPSHOT_TYPE,
+        DATA_INS_DATE,
+        DATA_INS_USER
+ ON VAL_OS_SNAPSHOT_TYPE
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    --  Non modifiable column "DATA_INS_USER" cannot be modified
+    if updating('DATA_INS_USER') and :old.DATA_INS_USER != :new.DATA_INS_USER then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_USER" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+    --  Non modifiable column "DATA_INS_DATE" cannot be modified
+    if updating('DATA_INS_DATE') and :old.DATA_INS_DATE != :new.DATA_INS_DATE then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_DATE" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER TUB_VAL_OS_SNAPSHOT_TYPE
 	ENABLE;
 
 
@@ -26016,6 +27041,109 @@ ALTER TRIGGER TUB_VAL_RACK_TYPE
 	ENABLE;
 
 
+CREATE  OR REPLACE  TRIGGER Trigger_22830
+ BEFORE INSERT OR UPDATE
+ ON VAL_RAID_TYPE
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+    V_CONTEXT_USER  VARCHAR2(256):=NULL;
+
+begin
+    -- Context should be used by apps to list the end-user id.
+    -- if it is filled, then concatenate it on.
+    V_CONTEXT_USER:=SYS_CONTEXT('USERENV','CLIENT_IDENTIFIER');
+    V_CONTEXT_USER:=UPPER(SUBSTR((USER||'/'||V_CONTEXT_USER),1,30));
+
+    IF INSERTING
+    THEN
+        -- Override whatever is passed with context user
+        :new.data_ins_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_ins_date:=sysdate;
+    END IF;
+
+    IF UPDATING
+    THEN
+        -- Preventing changes to insert user and date columns happens in
+        -- another trigger
+
+        -- Override whatever is passed with context user
+        :new.data_upd_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_upd_date:=sysdate;
+    END IF;
+
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22830
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_22831
+ BEFORE UPDATE OF 
+        RAID_TYPE,
+        DATA_INS_DATE,
+        DATA_INS_USER
+ ON VAL_RAID_TYPE
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    --  Non modifiable column "DATA_INS_USER" cannot be modified
+    if updating('DATA_INS_USER') and :old.DATA_INS_USER != :new.DATA_INS_USER then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_USER" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+    --  Non modifiable column "DATA_INS_DATE" cannot be modified
+    if updating('DATA_INS_DATE') and :old.DATA_INS_DATE != :new.DATA_INS_DATE then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_DATE" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22831
+	ENABLE;
+
+
 CREATE  OR REPLACE  TRIGGER C_TIUBR_VAL_SVC_ENV_COLL_TYPE
  BEFORE INSERT OR UPDATE
  ON VAL_SERVICE_ENV_COLL_TYPE
@@ -27454,6 +28582,109 @@ ALTER TRIGGER TUB_VAL_VOE_STATE
 	ENABLE;
 
 
+CREATE  OR REPLACE  TRIGGER Trigger_22946
+ BEFORE INSERT OR UPDATE
+ ON VAL_VOLUME_GROUP_RELATION
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+    V_CONTEXT_USER  VARCHAR2(256):=NULL;
+
+begin
+    -- Context should be used by apps to list the end-user id.
+    -- if it is filled, then concatenate it on.
+    V_CONTEXT_USER:=SYS_CONTEXT('USERENV','CLIENT_IDENTIFIER');
+    V_CONTEXT_USER:=UPPER(SUBSTR((USER||'/'||V_CONTEXT_USER),1,30));
+
+    IF INSERTING
+    THEN
+        -- Override whatever is passed with context user
+        :new.data_ins_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_ins_date:=sysdate;
+    END IF;
+
+    IF UPDATING
+    THEN
+        -- Preventing changes to insert user and date columns happens in
+        -- another trigger
+
+        -- Override whatever is passed with context user
+        :new.data_upd_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_upd_date:=sysdate;
+    END IF;
+
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22946
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_22947
+ BEFORE UPDATE OF 
+        VOLUME_GROUP_RELATION,
+        DATA_INS_DATE,
+        DATA_INS_USER
+ ON VAL_VOLUME_GROUP_RELATION
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    --  Non modifiable column "DATA_INS_USER" cannot be modified
+    if updating('DATA_INS_USER') and :old.DATA_INS_USER != :new.DATA_INS_USER then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_USER" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+    --  Non modifiable column "DATA_INS_DATE" cannot be modified
+    if updating('DATA_INS_DATE') and :old.DATA_INS_DATE != :new.DATA_INS_DATE then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_DATE" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22947
+	ENABLE;
+
+
 CREATE  OR REPLACE  TRIGGER C_TIUBR_CERT_FILE_FMT
  BEFORE INSERT OR UPDATE
  ON VAL_X509_CERTIFICATE_FILE_FMT
@@ -28252,6 +29483,247 @@ end;
 
 
 ALTER TRIGGER TUB_VOE_SYMBOLIC_TRACK
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_22686
+ BEFORE INSERT OR UPDATE
+ ON VOLUME_GROUP
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+    V_CONTEXT_USER  VARCHAR2(256):=NULL;
+
+begin
+    -- Context should be used by apps to list the end-user id.
+    -- if it is filled, then concatenate it on.
+    V_CONTEXT_USER:=SYS_CONTEXT('USERENV','CLIENT_IDENTIFIER');
+    V_CONTEXT_USER:=UPPER(SUBSTR((USER||'/'||V_CONTEXT_USER),1,30));
+
+    IF INSERTING
+    THEN
+        -- Override whatever is passed with context user
+        :new.data_ins_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_ins_date:=sysdate;
+    END IF;
+
+    IF UPDATING
+    THEN
+        -- Preventing changes to insert user and date columns happens in
+        -- another trigger
+
+        -- Override whatever is passed with context user
+        :new.data_upd_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_upd_date:=sysdate;
+    END IF;
+
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22686
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_22687
+ BEFORE INSERT
+ ON VOLUME_GROUP
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    IF (:new.COMPONENT_ID IS NULL)
+    THEN
+        
+        select SEQ_COMPONENT_ID.NEXTVAL
+        INTO :new.COMPONENT_ID
+        from dual;
+    END IF;
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22687
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_22688
+ BEFORE UPDATE OF 
+        DATA_INS_DATE,
+        DATA_INS_USER,
+        VOLUME_GROUP_ID
+ ON VOLUME_GROUP
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    --  Non modifiable column "DATA_INS_USER" cannot be modified
+    if updating('DATA_INS_USER') and :old.DATA_INS_USER != :new.DATA_INS_USER then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_USER" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+    --  Non modifiable column "DATA_INS_DATE" cannot be modified
+    if updating('DATA_INS_DATE') and :old.DATA_INS_DATE != :new.DATA_INS_DATE then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_DATE" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22688
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_22730
+ BEFORE INSERT OR UPDATE
+ ON VOLUME_GROUP_PHYSICALISH_VOL
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+    V_CONTEXT_USER  VARCHAR2(256):=NULL;
+
+begin
+    -- Context should be used by apps to list the end-user id.
+    -- if it is filled, then concatenate it on.
+    V_CONTEXT_USER:=SYS_CONTEXT('USERENV','CLIENT_IDENTIFIER');
+    V_CONTEXT_USER:=UPPER(SUBSTR((USER||'/'||V_CONTEXT_USER),1,30));
+
+    IF INSERTING
+    THEN
+        -- Override whatever is passed with context user
+        :new.data_ins_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_ins_date:=sysdate;
+    END IF;
+
+    IF UPDATING
+    THEN
+        -- Preventing changes to insert user and date columns happens in
+        -- another trigger
+
+        -- Override whatever is passed with context user
+        :new.data_upd_user:=V_CONTEXT_USER;
+
+        -- Force date to be sysdate
+        :new.data_upd_date:=sysdate;
+    END IF;
+
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22730
+	ENABLE;
+
+
+CREATE  OR REPLACE  TRIGGER Trigger_22731
+ BEFORE UPDATE OF 
+        DATA_INS_DATE,
+        DATA_INS_USER
+ ON VOLUME_GROUP_PHYSICALISH_VOL
+ REFERENCING OLD AS OLD NEW AS NEW
+ for each row
+ 
+declare
+    integrity_error  exception;
+    errno            integer;
+    errmsg           char(200);
+    dummy            integer;
+    found            boolean;
+
+begin
+    --  Non modifiable column "DATA_INS_USER" cannot be modified
+    if updating('DATA_INS_USER') and :old.DATA_INS_USER != :new.DATA_INS_USER then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_USER" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+    --  Non modifiable column "DATA_INS_DATE" cannot be modified
+    if updating('DATA_INS_DATE') and :old.DATA_INS_DATE != :new.DATA_INS_DATE then
+       errno  := -20001;
+       errmsg := 'Non modifiable column "DATA_INS_DATE" cannot be modified.';
+       raise integrity_error;
+    end if;
+
+
+--  Errors handling
+exception
+    when integrity_error then
+       raise_application_error(errno, errmsg);
+end;
+
+/
+
+
+
+ALTER TRIGGER Trigger_22731
 	ENABLE;
 
 
