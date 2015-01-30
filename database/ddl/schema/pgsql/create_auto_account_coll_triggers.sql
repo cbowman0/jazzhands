@@ -191,12 +191,12 @@ BEGIN
 		;
 	END IF;
 
-	/*
-		FOR _r IN SELECT * from __automated_ac__
-		LOOP
-			RAISE NOTICE '%', _r;
-		END LOOP;
-	 */
+/*
+	FOR _r IN SELECT * from __automated_ac__
+	LOOP
+		RAISE NOTICE '%', _r;
+	END LOOP;
+*/
 
 	--
 	-- Remove rows from the temporary table that are in "remove" but not in
@@ -265,6 +265,7 @@ CREATE OR REPLACE FUNCTION automated_ac_on_person_company()
 RETURNS TRIGGER AS $_$
 DECLARE
 	_tally	INTEGER;
+	_r		RECORD;
 BEGIN
 	SELECT  count(*)
 	  INTO  _tally
@@ -276,6 +277,8 @@ BEGIN
 		CREATE TEMPORARY TABLE IF NOT EXISTS __automated_ac__ (account_collection_id integer, account_id integer, direction text);
 	END IF;
 
+
+	RAISE NOTICE 'Here!';
 
 	--
 	-- based on the old and new values, check for account collections that
@@ -345,6 +348,11 @@ BEGIN
 				);
 	END IF;
 
+	FOR _r IN SELECT * from __automated_ac__
+	LOOP
+		RAISE NOTICE '%', _r;
+	END LOOP;
+
 	--
 	-- Remove rows from the temporary table that are in "remove" but not in
 	-- "add".
@@ -386,7 +394,7 @@ SET search_path=jazzhands
 LANGUAGE plpgsql SECURITY DEFINER;
 DROP TRIGGER IF EXISTS trigger_automated_ac_on_person_company ON person_company;
 CREATE TRIGGER trigger_automated_ac_on_person_company 
-	AFTER UPDATE OF is_management, is_exempt, is_full_time
+	AFTER UPDATE OF is_management, is_exempt, is_full_time, person_id,company_id
 	ON person_company 
 	FOR EACH ROW EXECUTE PROCEDURE 
 	automated_ac_on_person_company();

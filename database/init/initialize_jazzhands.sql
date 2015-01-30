@@ -908,10 +908,12 @@ INSERT INTO Device_Type (
 INSERT INTO Operating_System (
 	Operating_System_ID,
 	Operating_System_Name,
+	Major_Version,
 	Version,
 	Company_ID, processor_architecture
 ) VALUES (
 	0,
+	'unknown',
 	'unknown',
 	'unknown',
 	0, 'noarch'

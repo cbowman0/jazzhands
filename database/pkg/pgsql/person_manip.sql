@@ -629,17 +629,54 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 --------------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION person_manip.change_company(final_company_id integer, _person_id integer, initial_company_id integer)  RETURNS VOID AS $_$
+CREATE OR REPLACE FUNCTION person_manip.change_company(
+	final_company_id 	integer, 
+	_person_id		integer, 
+	initial_company_id 	integer,
+	_account_realm_id	account_realm.account_realm_id%TYPE DEFAULT NULL
+)  RETURNS VOID AS $_$
 DECLARE
 	initial_person_company  person_company%ROWTYPE;
+	_arid			account_realm.account_realm_id%TYPE;
 BEGIN
-	INSERT INTO person_account_realm_company (company_id, person_id, account_realm_id) VALUES (final_company_id, _person_id,
-		(SELECT account_realm_id FROM account_realm_company WHERE company_id = initial_company_id));
-	SELECT * INTO initial_person_company FROM person_company WHERE person_id = _person_id AND company_id = initial_company_id;
-	initial_person_company.company_id = final_company_id;
-	INSERT INTO person_company VALUES (initial_person_company.*);
-	UPDATE account SET company_id = final_company_id WHERE company_id = initial_company_id AND person_id = _person_id;
-	DELETE FROM person_company WHERE person_id = _person_id AND company_id = initial_company_id;
-	DELETE FROM person_account_realm_company WHERE person_id = _person_id AND company_id = initial_company_id;
+	IF _account_realm_id IS NULL THEN
+		SELECT	account_realm_id
+		INTO	_arid
+		FROM	property
+		WHERE	property_type = 'Defaults'
+		AND	property_name = '_root_account_realm_id';
+	ELSE
+		_arid := _account_realm_id;
+	END IF;
+	set constraints fk_ac_ac_rlm_cpy_act_rlm_cpy DEFERRED;
+	set constraints fk_account_prsn_cmpy_acct DEFERRED;
+	set constraints fk_account_company_person DEFERRED;
+
+	UPDATE person_account_realm_company
+		SET company_id = final_company_id
+	WHERE person_id = _person_id
+	AND company_id = initial_company_id
+	AND account_realm_id = _arid;
+
+	SELECT * 
+	INTO initial_person_company 
+	FROM person_company 
+	WHERE person_id = _person_id 
+	AND company_id = initial_company_id;
+
+	UPDATE person_company
+	SET company_id = final_company_id
+	WHERE company_id = initial_company_id
+	AND person_id = _person_id;
+
+	UPDATE account 
+	SET company_id = final_company_id 
+	WHERE company_id = initial_company_id 
+	AND person_id = _person_id
+	AND account_realm_id = _arid;
+
+	set constraints fk_ac_ac_rlm_cpy_act_rlm_cpy IMMEDIATE;
+	set constraints fk_account_prsn_cmpy_acct IMMEDIATE;
+	set constraints fk_account_company_person IMMEDIATE;
 END;
 $_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands, pg_temp;

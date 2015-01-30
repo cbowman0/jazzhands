@@ -61,6 +61,8 @@ BEGIN
 				(DNS_Domain_Id = NEW.DNS_Domain_Id)) AND
 			((Operating_System_Id IS NULL AND NEW.Operating_System_Id IS NULL) OR
 				(Operating_System_Id = NEW.Operating_System_Id)) AND
+			((operating_system_snapshot_id IS NULL AND NEW.operating_system_snapshot_id IS NULL) OR
+				(operating_system_snapshot_id = NEW.operating_system_snapshot_id)) AND
 			((service_env_collection_id IS NULL AND NEW.service_env_collection_id IS NULL) OR
 				(service_env_collection_id = NEW.service_env_collection_id)) AND
 			((Site_Code IS NULL AND NEW.Site_Code IS NULL) OR
@@ -108,6 +110,8 @@ BEGIN
 				(DNS_Domain_Id = NEW.DNS_Domain_Id)) AND
 			((Operating_System_Id IS NULL AND NEW.Operating_System_Id IS NULL) OR
 				(Operating_System_Id = NEW.Operating_System_Id)) AND
+			((operating_system_snapshot_id IS NULL AND NEW.operating_system_snapshot_id IS NULL) OR
+				(operating_system_snapshot_id = NEW.operating_system_snapshot_id)) AND
 			((service_env_collection_id IS NULL AND NEW.service_env_collection_id IS NULL) OR
 				(service_env_collection_id = NEW.service_env_collection_id)) AND
 			((Site_Code IS NULL AND NEW.Site_Code IS NULL) OR
@@ -381,6 +385,18 @@ BEGIN
 	ELSIF v_prop.Permit_Operating_System_Id = 'PROHIBITED' THEN
 			IF NEW.Operating_System_Id IS NOT NULL THEN
 				RAISE 'Operating_System_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.permit_os_snapshot_id = 'REQUIRED' THEN
+			IF NEW.operating_system_snapshot_id IS NULL THEN
+				RAISE 'operating_system_snapshot_id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.permit_os_snapshot_id = 'PROHIBITED' THEN
+			IF NEW.operating_system_snapshot_id IS NOT NULL THEN
+				RAISE 'operating_system_snapshot_id is prohibited.'
 					USING ERRCODE = 'invalid_parameter_value';
 			END IF;
 	END IF;
