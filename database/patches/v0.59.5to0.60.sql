@@ -8388,4 +8388,4 @@ GRANT select on all sequences in schema jazzhands to ro_role;
 GRANT usage on all sequences in schema jazzhands to iud_role;
 
 select now();
--- SELECT schema_support.end_maintenance();
+SELECT schema_support.end_maintenance();
