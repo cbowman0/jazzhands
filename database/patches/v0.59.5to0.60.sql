@@ -465,7 +465,7 @@ BEGIN
 		RAISE EXCEPTION 'Company % is not of type %', _company_id, _company_type
 			USING ERRCODE = 'not_null_violation';
 	END IF;
-	
+
 	tally := 0;
 	FOR _r IN SELECT	property_name, property_type, permit_company_id
 				FROM    property_collection_property pcp
@@ -1452,7 +1452,7 @@ BEGIN
 			current_nb := broadcast(current_nb) + 1;
 			EXIT;
 		END IF;
-	
+
 		-- If the max address of the new netblock is larger than the last one, then it's empty
 		IF set_masklen(broadcast(new_nb), 32) > set_masklen(max_addr, 32) THEN
 			ip_addr := set_masklen(max_addr + 1, masklen(current_nb));
@@ -6567,7 +6567,7 @@ BEGIN
 		device_type
 	WHERE
 		device_type_id = NEW.device_type_id;
-	
+
 	IF NOT FOUND OR dt_ctid IS NULL THEN
 		RAISE EXCEPTION 'No component_type_id set for device type'
 		USING ERRCODE = 'foreign_key_violation';
@@ -6579,7 +6579,7 @@ BEGIN
 		component
 	WHERE
 		component_id = NEW.component.id;
-	
+
 	IF NOT FOUND OR ctid IS DISTINCT FROM dt_ctid THEN
 		RAISE EXCEPTION 'Component type of component_id % does not match component_type for device_type_id % (%)',
 			ctid, dtid, dt_ctid
@@ -6668,7 +6668,7 @@ BEGIN
 	WHERE
 		stpct.slot_type_id = NEW.slot_type_id AND
 		c.component_id = NEW.component_id;
-	
+
 	IF NOT FOUND THEN
 		RAISE EXCEPTION 'Component type % is not permitted in slot %',
 			NEW.component_type_id, NEW.slot_id
@@ -6750,7 +6750,7 @@ BEGIN
 				USING ERRCODE = 'unique_violation';
 		END IF;
 	END IF;
-		
+
 	PERFORM
 		*
 	FROM
@@ -6767,7 +6767,7 @@ BEGIN
 				cs2.slot_type_id = pst.remote_slot_type_id) OR
 			(cs2.slot_type_id = pst.slot_type_id AND
 				cs1.slot_type_id = pst.remote_slot_type_id));
-	
+
 	IF NOT FOUND THEN
 		RAISE EXCEPTION 'Slot types are not allowed to be connected'
 			USING ERRCODE = 'check_violation';
@@ -6882,7 +6882,7 @@ BEGIN
 			slot_type_id IS NOT DISTINCT FROM NEW.slot_type_id AND
 			slot_function IS NOT DISTINCT FROM NEW.slot_function AND
 			slot_id IS NOT DISTINCT FROM NEW.slot_id;
-			
+
 		IF FOUND THEN
 			RAISE EXCEPTION 
 				'Property with name % and type % already exists for given LHS and property is not multivalue',
@@ -7211,7 +7211,7 @@ BEGIN
 				USING ERRCODE = 'invalid_parameter_value';
 		END IF;
 	END IF;
-		
+
 	RETURN NEW;
 END;
 $function$
@@ -7253,7 +7253,7 @@ UNION ALL
 			x.array_path				as array_path,
 		uch.child_netblock_collection_id =
 			ANY(x.array_path)			as cycle
-		
+
 	  FROM	var_recurse x
 		inner join netblock_collection_hier uch
 			on x.child_netblock_collection_id =
@@ -8308,11 +8308,22 @@ $$
 UPDATE __regrants SET regrant=
 	regexp_replace(regrant, 'calculate_intermediate_netblocks\([^\)]+\)',
 		'calculate_intermediate_netblocks(ip_block_1 inet, ip_block_2 inet, netblock_type text, ip_universe_id integer)');
-	
+
 UPDATE __regrants SET regrant=
 	regexp_replace(regrant, 'person_manip.change_company\([^\)]+\)',
 		'person_manip.change_company(final_company_id integer, _person_id integer, initial_company_id integer, _account_realm_id integer)');
-	
+
+INSERT INTO company_type (company_id, company_type)
+	SELECT company_id, 'corporate family'
+	FROM company
+	WHERE is_corporate_family = 'Y'
+	AND company_id NOT IN (
+		SELECT company_id 
+		FROM company_type 
+		WHERE company_type = 'corporate family'
+	)
+; 
+
 -- random comments
 COMMENT ON SCHEMA audit IS 'part of jazzhands project';
 COMMENT ON SCHEMA jazzhands IS 'http://sourceforge.net/projects/jazzhands/';
