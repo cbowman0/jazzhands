@@ -8448,3 +8448,23 @@ ALTER TABLE X509_KEY_USAGE_CATEGORIZATION
 
 ALTER TABLE X509_KEY_USAGE_CATEGORIZATION
 	ADD CONSTRAINT FK_X509_KEY_USAGE FOREIGN KEY (X509_KEY_USG) REFERENCES VAL_X509_KEY_USAGE (X509_KEY_USG)  ;
+
+-- temporary
+DO $$
+DECLARE
+        foo integer;
+BEGIN
+        select coalesce(max(device_type_id),0)+1 into foo from device_type;
+
+        ALTER TABLE device_type ALTER COLUMN device_type_id
+        SET DEFAULT nextval('component_type_component_type_id_seq'::regclass);
+
+        EXECUTE
+        'ALTER SEQUENCE component_type_component_type_id_seq START WITH ' ||
+        foo;
+
+END;
+$$
+;
+
+

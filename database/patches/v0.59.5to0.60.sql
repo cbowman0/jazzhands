@@ -6294,32 +6294,35 @@ DROP TABLE IF EXISTS audit.val_property_v59;
 --------------------------------------------------------------------
 -- DEALING WITH TABLE v_company_hier [892176]
 -- Save grants for later reapplication
-SELECT schema_support.save_grants_for_replay('jazzhands', 'v_company_hier', 'v_company_hier');
-CREATE VIEW v_company_hier AS
- WITH RECURSIVE var_recurse(level, root_company_id, company_id, person_id, array_path, cycle) AS (
-         SELECT 0 AS level,
-            c.company_id AS root_company_id,
-            c.company_id,
-            pc.person_id,
-            ARRAY[c.company_id] AS array_path,
-            false AS cycle
-           FROM company c
-             JOIN person_company pc USING (company_id)
-        UNION ALL
-         SELECT x.level + 1 AS level,
-            x.root_company_id,
-            c.company_id,
-            pc.person_id,
-            c.company_id || x.array_path AS array_path,
-            c.company_id = ANY (x.array_path) AS cycle
-           FROM var_recurse x
-             JOIN company c ON c.parent_company_id = x.company_id
-             JOIN person_company pc ON c.company_id = pc.company_id
-          WHERE NOT x.cycle
-        )
- SELECT DISTINCT var_recurse.root_company_id,
-    var_recurse.company_id
-   FROM var_recurse;
+
+CREATE OR REPLACE VIEW v_company_hier AS
+WITH RECURSIVE var_recurse (
+	level,
+	root_company_id,
+	company_id,
+	array_path,
+	cycle
+) as (
+	SELECT	
+		0				as level,
+		c.company_id			as root_company_id,
+		c.company_id			as company_id,
+		ARRAY[c.company_id]		as array_path,
+		false				as cycle
+	  FROM	company c
+UNION ALL
+	SELECT	
+		x.level + 1			as level,
+		x.root_company_id		as root_company_id,
+		c.company_id			as company_id,
+		c.company_id || x.array_path	as array_path,
+		c.company_id = ANY(x.array_path) as cycle
+	  FROM	var_recurse x
+		inner join company c
+			on c.parent_company_id = x.company_id
+	WHERE	NOT x.cycle
+) SELECT	distinct root_company_id as root_company_id, company_id
+  from 		var_recurse;
 
 delete from __recreate where type = 'view' and object = 'v_company_hier';
 GRANT INSERT,UPDATE,DELETE ON v_company_hier TO iud_role;
@@ -8254,15 +8257,15 @@ CREATE TRIGGER trigger_automated_ac_on_person_company AFTER UPDATE OF is_managem
 
 -------------------------------------------------------------------------
 DROP TRIGGER IF EXISTS trigger_validate_device_component_assignment
-        ON jazzhands.device;
+	ON jazzhands.device;
 DROP TRIGGER IF EXISTS trigger_validate_slot_component
-        ON slot;
+	ON slot;
 DROP TRIGGER IF EXISTS trigger_validate_inter_component_connection
-        ON inter_component_connection;
+	ON inter_component_connection;
 DROP TRIGGER IF EXISTS trigger_validate_component_rack_location
-        ON jazzhands.component;
+	ON jazzhands.component;
 DROP TRIGGER IF EXISTS trigger_validate_component_property ON
-        component_property;
+	component_property;
 
 CREATE CONSTRAINT TRIGGER trigger_validate_device_component_assignment
 	AFTER INSERT OR UPDATE OF device_type_id, component_id
@@ -8271,33 +8274,33 @@ CREATE CONSTRAINT TRIGGER trigger_validate_device_component_assignment
  	FOR EACH ROW 
 	EXECUTE PROCEDURE jazzhands.validate_device_component_assignment();
 CREATE CONSTRAINT TRIGGER trigger_validate_asset_component_assignment
-        AFTER INSERT OR UPDATE OF component_id
-        ON asset
-        DEFERRABLE INITIALLY IMMEDIATE
-        FOR EACH ROW EXECUTE PROCEDURE validate_asset_component_assignment();
+	AFTER INSERT OR UPDATE OF component_id
+	ON asset
+	DEFERRABLE INITIALLY IMMEDIATE
+	FOR EACH ROW EXECUTE PROCEDURE validate_asset_component_assignment();
 CREATE CONSTRAINT TRIGGER trigger_validate_slot_component
-        AFTER INSERT OR UPDATE OF component_id
-        ON slot
-        DEFERRABLE INITIALLY IMMEDIATE
-        FOR EACH ROW
-        EXECUTE PROCEDURE validate_slot_component_id();
+	AFTER INSERT OR UPDATE OF component_id
+	ON slot
+	DEFERRABLE INITIALLY IMMEDIATE
+	FOR EACH ROW
+	EXECUTE PROCEDURE validate_slot_component_id();
 CREATE CONSTRAINT TRIGGER trigger_validate_inter_component_connection
-        AFTER INSERT OR UPDATE
-        ON inter_component_connection
-        DEFERRABLE INITIALLY IMMEDIATE
-        FOR EACH ROW
-        EXECUTE PROCEDURE validate_inter_component_connection();
+	AFTER INSERT OR UPDATE
+	ON inter_component_connection
+	DEFERRABLE INITIALLY IMMEDIATE
+	FOR EACH ROW
+	EXECUTE PROCEDURE validate_inter_component_connection();
 CREATE CONSTRAINT TRIGGER trigger_validate_component_rack_location
-        AFTER INSERT OR UPDATE OF rack_location_id
-        ON component
-        DEFERRABLE INITIALLY IMMEDIATE
-        FOR EACH ROW
-        EXECUTE PROCEDURE validate_component_rack_location();
+	AFTER INSERT OR UPDATE OF rack_location_id
+	ON component
+	DEFERRABLE INITIALLY IMMEDIATE
+	FOR EACH ROW
+	EXECUTE PROCEDURE validate_component_rack_location();
 CREATE CONSTRAINT TRIGGER trigger_validate_component_property
-        AFTER INSERT OR UPDATE
-        ON component_property
-        DEFERRABLE INITIALLY IMMEDIATE
-        FOR EACH ROW EXECUTE PROCEDURE validate_component_property();
+	AFTER INSERT OR UPDATE
+	ON component_property
+	DEFERRABLE INITIALLY IMMEDIATE
+	FOR EACH ROW EXECUTE PROCEDURE validate_component_property();
 
 -------------------------------------------------------------------------
 
@@ -8312,11 +8315,32 @@ ALTER TABLE ONLY rack_location
 
 ALTER TABLE RACK_LOCATION DROP CONSTRAINT IF EXISTS CKC_RACK_SIDE_LOCATION;
 ALTER TABLE RACK_LOCATION
-        ADD CONSTRAINT  CKC_RACK_SIDE_LOCATION CHECK (RACK_SIDE in ('FRONT','BACK'));
+	ADD CONSTRAINT  CKC_RACK_SIDE_LOCATION CHECK (RACK_SIDE in ('FRONT','BACK'));
 
 
 -- fk constraints
 -- triggers
+
+-- temporarily deal with device_type moving to component_type in the
+-- next release
+
+DO $$
+DECLARE
+	foo integer;
+BEGIN
+	select coalesce(max(device_type_id),0)+1 into foo from device_type;
+
+	ALTER TABLE device_type ALTER COLUMN device_type_id
+	SET DEFAULT nextval('component_type_component_type_id_seq'::regclass);
+
+	EXECUTE
+	'ALTER SEQUENCE component_type_component_type_id_seq START WITH ' ||
+	foo;
+END;
+$$
+;
+
+
 
 -- Function arguments changed, so adjust the regrant
 UPDATE __regrants SET regrant=
