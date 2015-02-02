@@ -32,6 +32,70 @@
 
  */
 
+/*
+Invoked:
+	--scan-tables
+	--suffix=v59
+	netblock_utils.calculate_intermediate_netblocks
+	netblock_manip.allocate_netblock
+	delete_peraccount_account_collection
+	update_peraccount_account_collection
+	asset
+	device_type
+	device
+	val_volume_group_relation
+	val_logical_volume_property
+	val_component_property
+	val_raid_type
+	val_slot_function
+	val_component_function
+	val_filesystem_type
+	val_slot_physical_interface
+	val_component_property_value
+	val_component_property_type
+	slot_type_prmt_rem_slot_type
+	inter_component_connection
+	component_type
+	component_property
+	component_type_slot_tmplt
+	slot_type_prmt_comp_slot_type
+	slot_type
+	logical_port_slot
+	slot
+	component_type_component_func
+	component
+	physicalish_volume
+	volume_group_physicalish_vol
+	logical_volume
+	logical_volume_property
+	volume_group
+	delete_peruser_account_collection
+	update_peruser_account_collection
+	netblock_utils.list_unallocated_netblocks
+	person_manip.purge_account
+	automated_ac_on_account
+	automated_ac_on_person_company
+	automated_ac_on_person
+	automated_realm_site_ac_pl
+	val_operating_system_family
+	val_os_snapshot_type
+	operating_system_snapshot
+	operating_system
+	property
+	val_property
+	v_company_hier
+	person_manip.change_company
+	person_manip.change_company
+	v_property
+	validate_device_component_assignment
+	validate_asset_component_assignment
+	validate_slot_component_id
+	validate_inter_component_connection
+	validate_component_rack_location
+	validate_component_property
+	v_nblk_coll_netblock_expanded
+*/
+
 SELECT schema_support.begin_maintenance();
 \set ON_ERROR_STOP
 
@@ -741,70 +805,6 @@ WITH RECURSIVE pc_recurse (
 --------------------------------------------------------------------
 -- BEGIN AUTOGEN DDL
 --------------------------------------------------------------------
-
-/*
-Invoked:
-
-	--scan-tables
-	--suffix=v59
-	netblock_utils.calculate_intermediate_netblocks
-	netblock_manip.allocate_netblock
-	delete_peraccount_account_collection
-	update_peraccount_account_collection
-	asset
-	device_type
-	device
-	val_volume_group_relation
-	val_logical_volume_property
-	val_component_property
-	val_raid_type
-	val_slot_function
-	val_component_function
-	val_filesystem_type
-	val_slot_physical_interface
-	val_component_property_value
-	val_component_property_type
-	slot_type_prmt_rem_slot_type
-	inter_component_connection
-	component_type
-	component_property
-	component_type_slot_tmplt
-	slot_type_prmt_comp_slot_type
-	slot_type
-	logical_port_slot
-	slot
-	component_type_component_func
-	component
-	physicalish_volume
-	volume_group_physicalish_vol
-	logical_volume
-	logical_volume_property
-	volume_group
-	delete_peruser_account_collection
-	update_peruser_account_collection
-	netblock_utils.list_unallocated_netblocks
-	person_manip.purge_account
-	automated_ac_on_account
-	automated_ac_on_person_company
-	automated_ac_on_person
-	automated_realm_site_ac_pl
-	val_operating_system_family
-	val_os_snapshot_type
-	operating_system_snapshot
-	operating_system
-	property
-	val_property
-	v_company_hier
-	person_manip.change_company
-	person_manip.change_company
-	v_property
-	validate_device_component_assignment
-	validate_asset_component_assignment
-	validate_slot_component_id
-	validate_inter_component_connection
-	validate_component_rack_location
-	validate_component_property
-*/
 
 -- Creating new sequences....
 CREATE SEQUENCE component_property_component_property_id_seq;
@@ -7216,6 +7216,56 @@ $function$
 -- triggers on this function (if applicable)
 
 -- DONE WITH proc validate_component_property -> validate_component_property 
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_nblk_coll_netblock_expanded [908145]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'v_nblk_coll_netblock_expanded', 'v_nblk_coll_netblock_expanded');
+
+CREATE OR REPLACE VIEW v_nblk_coll_netblock_expanded AS
+WITH RECURSIVE var_recurse (
+	level,
+	root_collection_id,
+	netblock_collection_id,
+	child_netblock_collection_id,
+	array_path,
+	cycle
+) as (
+	SELECT	
+		0				as level,
+		u.netblock_collection_id		as root_collection_id, 
+		u.netblock_collection_id		as netblock_collection_id, 
+		u.netblock_collection_id		as child_netblock_collection_id,
+		ARRAY[u.netblock_collection_id]	as array_path,
+		false							as cycle
+	  FROM	netblock_collection u
+UNION ALL
+	SELECT	
+		x.level + 1			as level,
+		x.netblock_collection_id		as root_netblock_collection_id, 
+		uch.child_netblock_collection_id		as netblock_collection_id, 
+		uch.child_netblock_collection_id	as child_netblock_collection_id,
+		uch.child_netblock_collection_id ||
+			x.array_path				as array_path,
+		uch.child_netblock_collection_id =
+			ANY(x.array_path)			as cycle
+		
+	  FROM	var_recurse x
+		inner join netblock_collection_hier uch
+			on x.child_netblock_collection_id =
+				uch.netblock_collection_id
+	WHERE	NOT x.cycle
+) SELECT	distinct root_collection_id as netblock_collection_id,
+		netblock_id as netblock_id
+  from 		var_recurse
+	join netblock_collection_netblock using (netblock_collection_id);
+
+delete from __recreate where type = 'view' and object = 'v_nblk_coll_netblock_expanded';
+GRANT ALL ON v_nblk_coll_netblock_expanded TO jazzhands;
+GRANT INSERT,UPDATE,DELETE ON v_nblk_coll_netblock_expanded TO iud_role;
+GRANT SELECT ON v_nblk_coll_netblock_expanded TO ro_role;
+-- DONE DEALING WITH TABLE v_nblk_coll_netblock_expanded [900552]
 --------------------------------------------------------------------
 
 --------------------------------------------------------------------
