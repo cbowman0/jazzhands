@@ -17,7 +17,7 @@
  */
 
 /*==============================================================*/
-/* triggers and such for JazzHands PostgreSQL 9.1	       */
+/* triggers and such for JazzHands PostgreSQL 9.3	       */
 /*==============================================================*/
 
 
@@ -30,7 +30,7 @@
 -- Make sure there is only one department of type 'direct' for a given user
 --
 
-/* XXX REVISIT
+/* XXX REVISIT - there is no concept of direct/indirect members now.
 
 CREATE OR REPLACE FUNCTION verify_direct_dept_member() RETURNS TRIGGER AS $$
 BEGIN
@@ -225,3 +225,41 @@ AFTER INSERT
     ON account
     FOR EACH ROW 
     EXECUTE PROCEDURE create_new_unix_account();
+
+
+----------------------------------------------------------------------------
+--
+-- Enforce one and only one of logical_volume_id or component_id needing 
+-- to be set in physicalish_volume
+--
+
+CREATE OR REPLACE FUNCTION verify_physicalish_volume() 
+RETURNS TRIGGER AS $$
+BEGIN
+	IF NEW.logical_volume_id IS NOT NULL AND NEW.component_Id IS NOT NULL THEN
+		RAISE EXCEPTION 'One and only one of logical_volume_id or component_id must be set'
+			USING ERRCODE = 'unique_violation'; 
+	END IF;
+	IF NEW.logical_volume_id IS NULL AND NEW.component_Id IS NULL THEN
+		RAISE EXCEPTION 'One and only one of logical_volume_id or component_id must be set'
+			USING ERRCODE = 'not_null_violation'; 
+	END IF;
+	RETURN NEW;
+END;
+$$ 
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trigger_verify_physicalish_volume
+	ON physicalish_volume;
+CREATE TRIGGER trigger_verify_physicalish_volume 
+	BEFORE INSERT OR UPDATE 
+	ON physicalish_volume 
+	FOR EACH ROW
+	EXECUTE PROCEDURE verify_physicalish_volume();
+
+
+--
+--
+----------------------------------------------------------------------------
+

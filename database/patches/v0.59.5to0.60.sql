@@ -19,7 +19,6 @@
 /*
   TODO before release:
 
- 	- trigger for phsicalish_volume to deal with only one of lgid/compid set
 	- check inner_device_commonet_trigger to make sure it is right
 	- mdr to finish component triggers
 	- resolve component issues
@@ -30,7 +29,6 @@
 		(write stored procedures)
 	- check init/ *.sql changes for updates that should happen 
 	- search for XXX's
-	- trigger functions (maybe done?)
 
  */
 
@@ -800,6 +798,12 @@ Invoked:
 	person_manip.change_company
 	person_manip.change_company
 	v_property
+	validate_device_component_assignment
+	validate_asset_component_assignment
+	validate_slot_component_id
+	validate_inter_component_connection
+	validate_component_rack_location
+	validate_component_property
 */
 
 -- Creating new sequences....
@@ -2275,7 +2279,6 @@ ALTER TABLE device_type
 -- TRIGGERS
 CREATE TRIGGER trigger_device_type_chassis_check BEFORE UPDATE OF is_chassis ON device_type FOR EACH ROW EXECUTE PROCEDURE device_type_chassis_check();
 
--- XXX - may need to include trigger function
 SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'device_type');
 SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'device_type');
 ALTER SEQUENCE device_type_device_type_id_seq
@@ -2775,16 +2778,12 @@ ALTER TABLE device
 -- TRIGGERS
 CREATE TRIGGER trigger_delete_per_device_device_collection BEFORE DELETE ON device FOR EACH ROW EXECUTE PROCEDURE delete_per_device_device_collection();
 
--- XXX - may need to include trigger function
 CREATE TRIGGER trigger_verify_device_voe BEFORE INSERT OR UPDATE ON device FOR EACH ROW EXECUTE PROCEDURE verify_device_voe();
 
--- XXX - may need to include trigger function
 CREATE TRIGGER trigger_device_one_location_validate BEFORE INSERT OR UPDATE ON device FOR EACH ROW EXECUTE PROCEDURE device_one_location_validate();
 
--- XXX - may need to include trigger function
 CREATE TRIGGER trigger_update_per_device_device_collection AFTER INSERT OR UPDATE ON device FOR EACH ROW EXECUTE PROCEDURE update_per_device_device_collection();
 
--- XXX - may need to include trigger function
 SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'device');
 SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'device');
 ALTER SEQUENCE device_device_id_seq
@@ -4203,6 +4202,32 @@ SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'logical_volume');
 SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'logical_volume');
 ALTER SEQUENCE logical_volume_logical_volume_id_seq
 	 OWNED BY logical_volume.logical_volume_id;
+
+CREATE OR REPLACE FUNCTION verify_physicalish_volume() 
+RETURNS TRIGGER AS $$
+BEGIN
+	IF NEW.logical_volume_id IS NOT NULL AND NEW.component_Id IS NOT NULL THEN
+		RAISE EXCEPTION 'One and only one of logical_volume_id or component_id must be set'
+			USING ERRCODE = 'unique_violation'; 
+	END IF;
+	IF NEW.logical_volume_id IS NULL AND NEW.component_Id IS NULL THEN
+		RAISE EXCEPTION 'One and only one of logical_volume_id or component_id must be set'
+			USING ERRCODE = 'not_null_violation'; 
+	END IF;
+	RETURN NEW;
+END;
+$$ 
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trigger_verify_physicalish_volume
+	ON physicalish_volume;
+CREATE TRIGGER trigger_verify_physicalish_volume 
+	BEFORE INSERT OR UPDATE 
+	ON physicalish_volume 
+	FOR EACH ROW
+	EXECUTE PROCEDURE verify_physicalish_volume();
+
 -- DONE DEALING WITH TABLE logical_volume [679508]
 --------------------------------------------------------------------
 --------------------------------------------------------------------
@@ -5836,7 +5861,6 @@ ALTER TABLE property
 -- TRIGGERS
 CREATE TRIGGER trigger_validate_property BEFORE INSERT OR UPDATE ON property FOR EACH ROW EXECUTE PROCEDURE validate_property();
 
--- XXX - may need to include trigger function
 SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'property');
 SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'property');
 ALTER SEQUENCE property_property_id_seq
@@ -6266,8 +6290,9 @@ DROP TABLE IF EXISTS val_property_v59;
 DROP TABLE IF EXISTS audit.val_property_v59;
 -- DONE DEALING WITH TABLE val_property [680985]
 --------------------------------------------------------------------
+
 --------------------------------------------------------------------
--- DEALING WITH TABLE v_company_hier [694392]
+-- DEALING WITH TABLE v_company_hier [892176]
 -- Save grants for later reapplication
 SELECT schema_support.save_grants_for_replay('jazzhands', 'v_company_hier', 'v_company_hier');
 CREATE VIEW v_company_hier AS
@@ -6282,7 +6307,7 @@ CREATE VIEW v_company_hier AS
              JOIN person_company pc USING (company_id)
         UNION ALL
          SELECT x.level + 1 AS level,
-            x.company_id AS root_company_id,
+            x.root_company_id,
             c.company_id,
             pc.person_id,
             c.company_id || x.array_path AS array_path,
@@ -6297,7 +6322,12 @@ CREATE VIEW v_company_hier AS
    FROM var_recurse;
 
 delete from __recreate where type = 'view' and object = 'v_company_hier';
--- DONE DEALING WITH TABLE v_company_hier [686820]
+GRANT INSERT,UPDATE,DELETE ON v_company_hier TO iud_role;
+GRANT ALL ON v_company_hier TO jazzhands;
+GRANT SELECT ON v_company_hier TO ro_role;
+-- DONE DEALING WITH TABLE v_company_hier [900630]
+--------------------------------------------------------------------
+
 --------------------------------------------------------------------
 -- Dropping obsoleted sequences....
 
@@ -6499,6 +6529,693 @@ GRANT ALL ON v_property TO jazzhands;
 GRANT INSERT,UPDATE,DELETE ON v_property TO iud_role;
 GRANT SELECT ON v_property TO ro_role;
 -- DONE DEALING WITH TABLE v_property [686737]
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- DEALING WITH proc validate_device_component_assignment -> validate_device_component_assignment 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 885759
+CREATE OR REPLACE FUNCTION jazzhands.validate_device_component_assignment()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	dtid		device_type.device_type_id%TYPE;
+	dt_ctid		component.component_type_id%TYPE;
+	ctid		component.component_type_id%TYPE;
+BEGIN
+	-- If no component_id is set, then we're done
+
+	IF NEW.component_id IS NULL THEN
+		RETURN NEW;
+	END IF;
+
+	SELECT
+		device_type_id, component_type_id 
+	INTO
+		dtid, dt_ctid
+	FROM
+		device_type
+	WHERE
+		device_type_id = NEW.device_type_id;
+	
+	IF NOT FOUND OR dt_ctid IS NULL THEN
+		RAISE EXCEPTION 'No component_type_id set for device type'
+		USING ERRCODE = 'foreign_key_violation';
+	END IF;
+
+	SELECT
+		component_type_id INTO ctid
+	FROM
+		component
+	WHERE
+		component_id = NEW.component.id;
+	
+	IF NOT FOUND OR ctid IS DISTINCT FROM dt_ctid THEN
+		RAISE EXCEPTION 'Component type of component_id % does not match component_type for device_type_id % (%)',
+			ctid, dtid, dt_ctid
+		USING ERRCODE = 'foreign_key_violation';
+	END IF;
+
+	RETURN NEW;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+
+-- DONE WITH proc validate_device_component_assignment -> validate_device_component_assignment 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc validate_asset_component_assignment -> validate_asset_component_assignment 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 885762
+CREATE OR REPLACE FUNCTION jazzhands.validate_asset_component_assignment()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	asset_permitted		BOOLEAN;
+BEGIN
+	-- If no component_id is set, then we're done
+
+	IF component_id IS NULL THEN
+		RETURN NEW;
+	END IF;
+
+	SELECT
+		ct.asset_permitted INTO asset_permitted
+	FROM
+		component c JOIN
+		component_type ct USING (component_type_id)
+	WHERE
+		c.component_id = NEW.component_id;
+
+	IF asset_permitted != TRUE THEN
+		RAISE EXCEPTION 'Component type of component_id % may not be assigned to an asset',
+			NEW.component_id
+		USING ERRCODE = 'foreign_key_violation';
+	END IF;
+
+	RETURN NEW;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+
+-- DONE WITH proc validate_asset_component_assignment -> validate_asset_component_assignment 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc validate_slot_component_id -> validate_slot_component_id 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 885765
+CREATE OR REPLACE FUNCTION jazzhands.validate_slot_component_id()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+BEGIN
+	PERFORM
+		*
+	FROM
+		component c JOIN
+		component_type ct USING (component_type_id) JOIN
+		slot_type_permitted_component_slot_type stpcst ON
+			(ct.slot_type_id = stpcst.component_slot_type_id)
+	WHERE
+		stpct.slot_type_id = NEW.slot_type_id AND
+		c.component_id = NEW.component_id;
+	
+	IF NOT FOUND THEN
+		RAISE EXCEPTION 'Component type % is not permitted in slot %',
+			NEW.component_type_id, NEW.slot_id
+			USING ERRCODE = 'foreign_key_violation';
+	END IF;
+
+	RETURN NEW;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+
+-- DONE WITH proc validate_slot_component_id -> validate_slot_component_id 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc validate_inter_component_connection -> validate_inter_component_connection 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 885768
+CREATE OR REPLACE FUNCTION jazzhands.validate_inter_component_connection()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	slot_type_info	RECORD;
+	csid_rec	RECORD;
+BEGIN
+	IF NEW.slot1_id = NEW.slot2_id THEN
+		RAISE EXCEPTION 'A slot may not be connected to itself'
+			USING ERRCODE = 'check_violation';
+	END IF;
+
+	--
+	-- Validate that slot_ids are not already connected
+	-- to something else
+	--
+
+	SELECT
+		slot1_id
+		slot2_id
+	INTO
+		csid_rec
+	FROM
+		inter_component_connection icc
+	WHERE
+		icc.slot1_id = NEW.slot1_id OR
+		icc.slot1_id = NEW.slot2_id OR
+		icc.slot2_id = NEW.slot1_id OR
+		icc.slot2_id = NEW.slot2_id
+	LIMIT 1;
+
+	IF FOUND THEN
+		IF csid_rec.slot1_id = NEW.slot1_id THEN
+			RAISE EXCEPTION 
+				'slot_id % is already attached to slot_id %',
+				NEW.slot1_id, csid_rec.slot2_id
+				USING ERRCODE = 'unique_violation';
+		ELSIF csid_rec.slot1_id = NEW.slot2_id THEN
+			RAISE EXCEPTION 
+				'slot_id % is already attached to slot_id %',
+				NEW.slot1_id, csid_rec.slot1_id
+				USING ERRCODE = 'unique_violation';
+		ELSIF csid_rec.slot2_id = NEW.slot1_id THEN
+			RAISE EXCEPTION 
+				'slot_id % is already attached to slot_id %',
+				NEW.slot2_id, csid_rec.slot2_id
+				USING ERRCODE = 'unique_violation';
+		ELSIF csid_rec.slot2_id = NEW.slot2_id THEN
+			RAISE EXCEPTION 
+				'slot_id % is already attached to slot_id %',
+				NEW.slot2_id, csid_rec.slot1_id
+				USING ERRCODE = 'unique_violation';
+		END IF;
+	END IF;
+		
+	PERFORM
+		*
+	FROM
+		(slot cs1 JOIN slot_type st1 USING (slot_type_id)) slot1,
+		(slot cs2 JOIN slot_type st2 USING (slot_type_id)) slot2,
+		slot_type_prmt_rem_slot_type pst
+	WHERE
+		cs1.slot_id = NEW.slot1_id AND
+		cs2.slot_id = NEW.slot2_id AND
+		-- Remove next line if we ever decide to allow cross-function
+		-- connections
+		cs1.slot_function = cs2.slot_function AND
+		((cs1.slot_type_id = pst.slot_type_id AND
+				cs2.slot_type_id = pst.remote_slot_type_id) OR
+			(cs2.slot_type_id = pst.slot_type_id AND
+				cs1.slot_type_id = pst.remote_slot_type_id));
+	
+	IF NOT FOUND THEN
+		RAISE EXCEPTION 'Slot types are not allowed to be connected'
+			USING ERRCODE = 'check_violation';
+	END IF;
+
+	RETURN NEW;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+
+-- DONE WITH proc validate_inter_component_connection -> validate_inter_component_connection 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc validate_component_rack_location -> validate_component_rack_location 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 885771
+CREATE OR REPLACE FUNCTION jazzhands.validate_component_rack_location()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	ct_rec	BOOLEAN;
+BEGIN
+	SELECT
+		component_type_id,
+		is_rack_mountable
+	INTO
+		ct_rec
+	FROM
+		component c JOIN
+		component_type ct USING (componant_type_id)
+	WHERE
+		component_id = NEW.component_id;
+
+	IF ct_rec.is_rack_mountable != TRUE THEN
+		RAISE EXCEPTION 'component_type_id % may not be assigned a rack_location',
+			ct_rec.component_type_id
+			USING ERRCODE = 'check_violation';
+	END IF;
+
+	RETURN NEW;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+
+-- DONE WITH proc validate_component_rack_location -> validate_component_rack_location 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc validate_component_property -> validate_component_property 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 885774
+CREATE OR REPLACE FUNCTION jazzhands.validate_component_property()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	tally				INTEGER;
+	v_comp_prop			RECORD;
+	v_comp_prop_type	RECORD;
+	v_num				INTEGER;
+	v_listvalue			TEXT;
+	component_attrs		RECORD;
+BEGIN
+
+	-- Pull in the data from the property and property_type so we can
+	-- figure out what is and is not valid
+
+	BEGIN
+		SELECT * INTO STRICT v_comp_prop FROM val_component_property WHERE
+			component_property_name = NEW.component_property_name AND
+			component_property_type = NEW.component_property_type;
+
+		SELECT * INTO STRICT v_comp_prop_type FROM val_component_property_type 
+			WHERE component_property_type = NEW.component_property_type;
+	EXCEPTION
+		WHEN NO_DATA_FOUND THEN
+			RAISE EXCEPTION 
+				'Component property name or type does not exist'
+				USING ERRCODE = 'foreign_key_violation';
+			RETURN NULL;
+	END;
+
+	-- Check to see if the property itself is multivalue.  That is, if only
+	-- one value can be set for this property for a specific property LHS
+
+	IF (v_comp_prop.is_multivalue != 'Y') THEN
+		PERFORM 1 FROM component_property WHERE
+			component_property_id != NEW.component_property_id AND
+			component_property_name = NEW.component_property_name AND
+			component_property_type = NEW.component_property_type AND
+			component_type_id IS NOT DISTINCT FROM NEW.component_type_id AND
+			component_function IS NOT DISTINCT FROM NEW.component_function AND
+			component_id iS NOT DISTINCT FROM NEW.component_id AND
+			slot_type_id IS NOT DISTINCT FROM NEW.slot_type_id AND
+			slot_function IS NOT DISTINCT FROM NEW.slot_function AND
+			slot_id IS NOT DISTINCT FROM NEW.slot_id;
+			
+		IF FOUND THEN
+			RAISE EXCEPTION 
+				'Property with name % and type % already exists for given LHS and property is not multivalue',
+				NEW.component_property_name,
+				NEW.component_property_type
+				USING ERRCODE = 'unique_violation';
+			RETURN NULL;
+		END IF;
+	END IF;
+
+	-- Check to see if the property type is multivalue.  That is, if only
+	-- one property and value can be set for any properties with this type
+	-- for a specific property LHS
+
+	IF (v_comp_prop_type.is_multivalue != 'Y') THEN
+		PERFORM 1 FROM component_property WHERE
+			component_property_id != NEW.component_property_id AND
+			component_property_type = NEW.component_property_type AND
+			component_type_id IS NOT DISTINCT FROM NEW.component_type_id AND
+			component_function IS NOT DISTINCT FROM NEW.component_function AND
+			component_id iS NOT DISTINCT FROM NEW.component_id AND
+			slot_type_id IS NOT DISTINCT FROM NEW.slot_type_id AND
+			slot_function IS NOT DISTINCT FROM NEW.slot_function AND
+			slot_id IS NOT DISTINCT FROM NEW.slot_id;
+
+		IF FOUND THEN
+			RAISE EXCEPTION 
+				'Property % of type % already exists for given LHS and property type is not multivalue',
+				NEW.component_property_name, NEW.component_property_type
+				USING ERRCODE = 'unique_violation';
+			RETURN NULL;
+		END IF;
+	END IF;
+
+	-- now validate the property_value columns.
+	tally := 0;
+
+	--
+	-- first determine if the property_value is set properly.
+	--
+
+	-- at this point, tally will be set to 1 if one of the other property
+	-- values is set to something valid.  Now, check the various options for
+	-- PROPERTY_VALUE itself.  If a new type is added to the val table, this
+	-- trigger needs to be updated or it will be considered invalid.  If a
+	-- new PROPERTY_VALUE_* column is added, then it will pass through without
+	-- trigger modification.  This should be considered bad.
+
+	IF NEW.property_value IS NOT NULL THEN
+		tally := tally + 1;
+		IF v_comp_prop.property_data_type = 'boolean' THEN
+			IF NEW.Property_Value != 'Y' AND NEW.Property_Value != 'N' THEN
+				RAISE 'Boolean property_value must be Y or N' USING
+					ERRCODE = 'invalid_parameter_value';
+			END IF;
+		ELSIF v_comp_prop.property_data_type = 'number' THEN
+			BEGIN
+				v_num := to_number(NEW.property_value, '9');
+			EXCEPTION
+				WHEN OTHERS THEN
+					RAISE 'property_value must be numeric' USING
+						ERRCODE = 'invalid_parameter_value';
+			END;
+		ELSIF v_comp_prop.property_data_type = 'list' THEN
+			BEGIN
+				SELECT valid_property_value INTO STRICT v_listvalue FROM 
+					val_component_property_value WHERE
+						property_name = NEW.property_name AND
+						property_type = NEW.property_type AND
+						valid_property_value = NEW.property_value;
+			EXCEPTION
+				WHEN NO_DATA_FOUND THEN
+					RAISE 'property_value must be a valid value' USING
+						ERRCODE = 'invalid_parameter_value';
+			END;
+		ELSIF v_comp_prop.property_data_type != 'string' THEN
+			RAISE 'property_data_type is not a known type' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF v_comp_prop.property_data_type != 'none' AND tally = 0 THEN
+		RAISE 'One of the property_value fields must be set.' USING
+			ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	IF tally > 1 THEN
+		RAISE 'Only one of the property_value fields may be set.' USING
+			ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	--
+	-- At this point, the value itself is valid for this property, now
+	-- determine whether the property is allowed on the target
+	--
+	-- There needs to be a stanza here for every "lhs".  If a new column is
+	-- added to the component_property table, a new stanza needs to be added
+	-- here, otherwise it will not be validated.  This should be considered bad.
+
+	IF v_comp_prop.permit_component_type_id = 'REQUIRED' THEN
+		IF NEW.component_type_id IS NULL THEN
+			RAISE 'component_type_id is required.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	ELSIF v_comp_prop.permit_component_type_id = 'PROHIBITED' THEN
+		IF NEW.component_type_id IS NOT NULL THEN
+			RAISE 'component_type_id is prohibited.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF v_comp_prop.permit_component_function = 'REQUIRED' THEN
+		IF NEW.component_function IS NULL THEN
+			RAISE 'component_function is required.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	ELSIF v_comp_prop.permit_component_function = 'PROHIBITED' THEN
+		IF NEW.component_function IS NOT NULL THEN
+			RAISE 'component_function is prohibited.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF v_comp_prop.permit_component_id = 'REQUIRED' THEN
+		IF NEW.component_id IS NULL THEN
+			RAISE 'component_id is required.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	ELSIF v_comp_prop.permit_component_id = 'PROHIBITED' THEN
+		IF NEW.component_id IS NOT NULL THEN
+			RAISE 'component_id is prohibited.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF v_comp_prop.permit_slot_type_id = 'REQUIRED' THEN
+		IF NEW.slot_type_id IS NULL THEN
+			RAISE 'slot_type_id is required.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	ELSIF v_comp_prop.permit_slot_type_id = 'PROHIBITED' THEN
+		IF NEW.slot_type_id IS NOT NULL THEN
+			RAISE 'slot_type_id is prohibited.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF v_comp_prop.permit_slot_function = 'REQUIRED' THEN
+		IF NEW.slot_function IS NULL THEN
+			RAISE 'slot_function is required.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	ELSIF v_comp_prop.permit_slot_function = 'PROHIBITED' THEN
+		IF NEW.slot_function IS NOT NULL THEN
+			RAISE 'slot_function is prohibited.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF v_comp_prop.permit_slot_id = 'REQUIRED' THEN
+		IF NEW.slot_id IS NULL THEN
+			RAISE 'slot_id is required.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	ELSIF v_comp_prop.permit_slot_id = 'PROHIBITED' THEN
+		IF NEW.slot_id IS NOT NULL THEN
+			RAISE 'slot_id is prohibited.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	--
+	-- LHS population is verified; now validate any particular restrictions
+	-- on individual values
+	--
+
+	--
+	-- For slot_id, validate that the component_type, component_function,
+	-- slot_type, and slot_function are all valid
+	--
+	IF NEW.slot_id IS NOT NULL AND COALESCE(
+			v_comp_prop.required_component_type_id::text,
+			v_comp_prop.required_component_function,
+			v_comp_prop.required_slot_type_id::text,
+			v_comp_prop.required_slot_function) IS NOT NULL THEN
+
+		WITH x AS (
+			SELECT
+				component_type_id,
+				array_agg(component_function) as component_function
+			FROM
+				component_type_component_func
+			GROUP BY
+				component_type_id
+		) SELECT
+			component_type_id,
+			component_function,
+			st.slot_type_id,
+			slot_function
+		INTO
+			component_attrs
+		FROM
+			slot cs JOIN
+			slot_type st USING (slot_type_id) JOIN
+			component c USING (component_id) JOIN
+			component_type ct USING (component_type_id) LEFT JOIN
+			x USING (component_type_id)
+		WHERE
+			slot_id = NEW.slot_id;
+
+		IF v_comp_prop.required_component_type_id IS NOT NULL AND
+				v_comp_prop.required_component_type_id !=
+				component_attrs.component_type_id THEN
+			RAISE 'component_type for slot_id must be % (is: %)',
+					v_comp_prop.required_component_type_id,
+					component_attrs.component_type_id
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+
+		IF v_comp_prop.required_component_function IS NOT NULL AND
+				NOT (v_comp_prop.required_component_function =
+					ANY(component_attrs.component_function)) THEN
+			RAISE 'component_function for slot_id must be % (is: %)',
+					v_comp_prop.required_component_function,
+					component_attrs.component_function
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+
+		IF v_comp_prop.required_slot_type_id IS NOT NULL AND
+				v_comp_prop.required_slot_type_id !=
+				component_attrs.slot_type_id THEN
+			RAISE 'slot_type_id for slot_id must be % (is: %)',
+					v_comp_prop.required_slot_type_id,
+					component_attrs.slot_type_id
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+
+		IF v_comp_prop.required_slot_function IS NOT NULL AND
+				v_comp_prop.required_slot_function !=
+				component_attrs.slot_function THEN
+			RAISE 'slot_function for slot_id must be % (is: %)',
+					v_comp_prop.required_slot_function,
+					component_attrs.slot_function
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF NEW.slot_type_id IS NOT NULL AND 
+			v_comp_prop.required_slot_function IS NOT NULL THEN
+
+		SELECT
+			slot_function
+		INTO
+			component_attrs
+		FROM
+			slot_type st
+		WHERE
+			slot_type_id = NEW.slot_type_id;
+
+		IF v_comp_prop.required_slot_function !=
+				component_attrs.slot_function THEN
+			RAISE 'slot_function for slot_type_id must be % (is: %)',
+					v_comp_prop.required_slot_function,
+					component_attrs.slot_function
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF NEW.component_id IS NOT NULL AND COALESCE(
+			v_comp_prop.required_component_type_id::text,
+			v_comp_prop.required_component_function) IS NOT NULL THEN
+
+		SELECT
+			component_type_id,
+			array_agg(component_function) as component_function
+		INTO
+			component_attrs
+		FROM
+			component c JOIN
+			component_type_component_func ctcf USING (component_type_id)
+		WHERE
+			component_id = NEW.component_id
+		GROUP BY
+			component_type_id;
+
+		IF v_comp_prop.required_component_type_id IS NOT NULL AND
+				v_comp_prop.required_component_type_id !=
+				component_attrs.component_type_id THEN
+			RAISE 'component_type for component_id must be % (is: %)',
+					v_comp_prop.required_component_type_id,
+					component_attrs.component_type_id
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+
+		IF v_comp_prop.required_component_function IS NOT NULL AND
+				NOT (v_comp_prop.required_component_function =
+					ANY(component_attrs.component_function)) THEN
+			RAISE 'component_function for component_id must be % (is: %)',
+					v_comp_prop.required_component_function,
+					component_attrs.component_function
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF NEW.component_type_id IS NOT NULL AND 
+			v_comp_prop.required_component_function IS NOT NULL THEN
+
+		SELECT
+			component_type_id,
+			array_agg(component_function) as component_function
+		INTO
+			component_attrs
+		FROM
+			component_type_component_func ctcf
+		WHERE
+			component_type_id = NEW.component_type_id
+		GROUP BY
+			component_type_id;
+
+		IF v_comp_prop.required_component_function IS NOT NULL AND
+				NOT (v_comp_prop.required_component_function =
+					ANY(component_attrs.component_function)) THEN
+			RAISE 'component_function for component_type_id must be % (is: %)',
+					v_comp_prop.required_component_function,
+					component_attrs.component_function
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+		
+	RETURN NEW;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+
+-- DONE WITH proc validate_component_property -> validate_component_property 
 --------------------------------------------------------------------
 
 --------------------------------------------------------------------
@@ -7484,6 +8201,55 @@ CREATE TRIGGER trig_rm_automated_ac_on_account BEFORE DELETE ON account FOR EACH
 CREATE TRIGGER trig_automated_realm_site_ac_pl AFTER INSERT OR DELETE OR UPDATE OF site_code, person_id ON person_location FOR EACH ROW EXECUTE PROCEDURE automated_realm_site_ac_pl();
 CREATE TRIGGER trigger_automated_ac_on_person AFTER UPDATE OF gender ON person FOR EACH ROW EXECUTE PROCEDURE automated_ac_on_person();
 CREATE TRIGGER trigger_automated_ac_on_person_company AFTER UPDATE OF is_management, is_exempt, is_full_time, person_id, company_id ON person_company FOR EACH ROW EXECUTE PROCEDURE automated_ac_on_person_company();
+
+-------------------------------------------------------------------------
+DROP TRIGGER IF EXISTS trigger_validate_device_component_assignment
+        ON jazzhands.device;
+DROP TRIGGER IF EXISTS trigger_validate_slot_component
+        ON slot;
+DROP TRIGGER IF EXISTS trigger_validate_inter_component_connection
+        ON inter_component_connection;
+DROP TRIGGER IF EXISTS trigger_validate_component_rack_location
+        ON jazzhands.component;
+DROP TRIGGER IF EXISTS trigger_validate_component_property ON
+        component_property;
+
+CREATE CONSTRAINT TRIGGER trigger_validate_device_component_assignment
+	AFTER INSERT OR UPDATE OF device_type_id, component_id
+	ON jazzhands.device
+	DEFERRABLE INITIALLY IMMEDIATE
+ 	FOR EACH ROW 
+	EXECUTE PROCEDURE jazzhands.validate_device_component_assignment();
+CREATE CONSTRAINT TRIGGER trigger_validate_asset_component_assignment
+        AFTER INSERT OR UPDATE OF component_id
+        ON asset
+        DEFERRABLE INITIALLY IMMEDIATE
+        FOR EACH ROW EXECUTE PROCEDURE validate_asset_component_assignment();
+CREATE CONSTRAINT TRIGGER trigger_validate_slot_component
+        AFTER INSERT OR UPDATE OF component_id
+        ON slot
+        DEFERRABLE INITIALLY IMMEDIATE
+        FOR EACH ROW
+        EXECUTE PROCEDURE validate_slot_component_id();
+CREATE CONSTRAINT TRIGGER trigger_validate_inter_component_connection
+        AFTER INSERT OR UPDATE
+        ON inter_component_connection
+        DEFERRABLE INITIALLY IMMEDIATE
+        FOR EACH ROW
+        EXECUTE PROCEDURE validate_inter_component_connection();
+CREATE CONSTRAINT TRIGGER trigger_validate_component_rack_location
+        AFTER INSERT OR UPDATE OF rack_location_id
+        ON component
+        DEFERRABLE INITIALLY IMMEDIATE
+        FOR EACH ROW
+        EXECUTE PROCEDURE validate_component_rack_location();
+CREATE CONSTRAINT TRIGGER trigger_validate_component_property
+        AFTER INSERT OR UPDATE
+        ON component_property
+        DEFERRABLE INITIALLY IMMEDIATE
+        FOR EACH ROW EXECUTE PROCEDURE validate_component_property();
+
+-------------------------------------------------------------------------
 
 
 -- Processing tables with no structural changes

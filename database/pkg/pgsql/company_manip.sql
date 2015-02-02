@@ -70,7 +70,7 @@ DECLARE
 	propv	text;
 	tally	integer;
 BEGIN
-	PERFORM
+	PERFORM *
 	FROM	account_realm_company
 	WHERE	company_id = _company_id
 	AND		account_realm_id = _account_realm_id;
@@ -169,7 +169,7 @@ DECLARE
 	acid	account_collection.account_collection_id%TYPE;
 	tally	integer;
 BEGIN
-	PERFORM
+	PERFORM *
 	FROM	account_realm_company
 	WHERE	company_id = _company_id
 	AND		account_realm_id = _account_realm_id;
