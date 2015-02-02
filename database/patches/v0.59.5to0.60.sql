@@ -7818,44 +7818,6 @@ CREATE TRIGGER trigger_validate_property BEFORE INSERT OR UPDATE
 --------------------------------------------------------------------
 
 --------------------------------------------------------------------
--- BEGIN legacy per-user bits
---------------------------------------------------------------------
-
-/*
-RAISE EXCEPTION 'Need to cleanup per-user stuff';
-
--- random queries related to sorting out all the automated/usertype stuff
-delete from account_collection_account
-where account_collection_id in (
-	select account_collection_id
-	from account_collection
-	where account_collection_type in ('automated', 'usertype')
-);
- 
- delete from account_collection
-where account_collection_id in (
-	select account_collection_id
-	from account_collection
-	where account_collection_type in ('automated', 'usertype')
-);
- 
-select * from account_collection
-where account_collection_id in (
-	select child_account_collection_id
-	from account_collection_hier
-) and account_collection_type='automated';
-
--- Dropping obsoleted sequences....
-
-
--- Dropping obsoleted audit sequences....
- */
-
---------------------------------------------------------------------
--- DONE legacy per-user bits
---------------------------------------------------------------------
-
---------------------------------------------------------------------
 -- BEGIN redo account automated triggers
 --------------------------------------------------------------------
 
@@ -8378,6 +8340,12 @@ COMMENT ON SCHEMA schema_support IS 'part of jazzhands';
 COMMENT ON SCHEMA time_util IS 'part of jazzhands';
 COMMENT ON SCHEMA physical_address_utils IS 'part of jazzhands';
 
+-- cleanup some random bits
+update val_property_value 
+	set description = replace(description, 'per-user', 'per-account')
+	where property_name = 'UnixHomeType' 
+	and property_type = 'MclassUnixProp'
+	and description like '%per-user%';
 
 -- Clean Up
 SELECT schema_support.replay_object_recreates();

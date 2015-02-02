@@ -1269,5 +1269,5 @@ insert into val_property (
 	'N'
 );
 
--- ENDIN automated account collection infrastructure (tied to properties)
+-- END automated account collection infrastructure (tied to properties)
 -------------------------------------------------------------------------
