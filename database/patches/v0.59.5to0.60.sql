@@ -6615,7 +6615,7 @@ DECLARE
 BEGIN
 	-- If no component_id is set, then we're done
 
-	IF component_id IS NULL THEN
+	IF NEW.component_id IS NULL THEN
 		RETURN NEW;
 	END IF;
 
