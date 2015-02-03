@@ -3595,7 +3595,7 @@ CREATE TABLE component_type_slot_tmplt
 	slot_index	integer  NULL,
 	physical_label	varchar(50)  NULL,
 	slot_x_offset	integer  NULL,
-	slot_y_offset	character(18)  NULL,
+	slot_y_offset	integer  NULL,
 	slot_z_offset	integer  NULL,
 	slot_side	varchar(50)  NULL,
 	data_ins_user	varchar(255)  NULL,
@@ -3613,6 +3613,7 @@ ALTER TABLE component_type_slot_tmplt
 
 -- PRIMARY AND ALTERNATE KEYS
 ALTER TABLE component_type_slot_tmplt ADD CONSTRAINT pk_component_type_slot_tmplt PRIMARY KEY (component_type_slot_tmplt_id);
+
 
 -- Table/Column Comments
 -- INDEXES
@@ -3862,6 +3863,11 @@ ALTER TABLE slot
 -- PRIMARY AND ALTERNATE KEYS
 ALTER TABLE slot ADD CONSTRAINT ak_slot_slot_type_id UNIQUE (slot_id, slot_type_id);
 ALTER TABLE slot ADD CONSTRAINT pk_slot_id PRIMARY KEY (slot_id);
+
+ALTER TABLE SLOT
+ADD CONSTRAINT
+	AK_SLOT_CMP_SLT_TMPLT_ID UNIQUE 
+	(COMPONENT_ID,COMPONENT_TYPE_SLOT_TMPLT_ID);
 
 -- Table/Column Comments
 -- INDEXES
