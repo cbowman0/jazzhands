@@ -6650,34 +6650,39 @@ $function$
 
 
 --------------------------------------------------------------------
--- DEALING WITH proc validate_slot_component_id -> validate_slot_component_id 
+-- DEALING WITH proc validate_component_parent_slot_id -> validate_component_parent_slot_id 
 
 
 -- RECREATE FUNCTION
 
 -- DROP OLD FUNCTION (in case type changed)
 -- consider NEW oid 885765
-CREATE OR REPLACE FUNCTION jazzhands.validate_slot_component_id()
+CREATE OR REPLACE FUNCTION jazzhands.validate_component_parent_slot_id()
  RETURNS trigger
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO jazzhands
 AS $function$
+DECLARE
+	stid	integer;
 BEGIN
+	IF NEW.parent_slot_id IS NULL THEN
+		RETURN NEW;
+	END IF;
+
 	PERFORM
 		*
 	FROM
-		component c JOIN
-		component_type ct USING (component_type_id) JOIN
-		slot_type_permitted_component_slot_type stpcst ON
-			(ct.slot_type_id = stpcst.component_slot_type_id)
+		slot s JOIN
+		slot_type_prmt_comp_slot_type stpcst USING (slot_type_id)
 	WHERE
-		stpct.slot_type_id = NEW.slot_type_id AND
-		c.component_id = NEW.component_id;
+		stpcst.component_slot_type_id = NEW.slot_type_id AND
+		s.slot_id = NEW.parent_slot_id;
 
 	IF NOT FOUND THEN
-		RAISE EXCEPTION 'Component type % is not permitted in slot %',
-			NEW.component_type_id, NEW.slot_id
+		SELECT slot_type_id INTO stid FROM slot WHERE slot_id = NEW.parent_slot_id;
+		RAISE EXCEPTION 'Component type % is not permitted in slot % (slot type %)',
+			NEW.component_type_id, NEW.parent_slot_id, stid
 			USING ERRCODE = 'foreign_key_violation';
 	END IF;
 
@@ -6804,8 +6809,11 @@ CREATE OR REPLACE FUNCTION jazzhands.validate_component_rack_location()
  SET search_path TO jazzhands
 AS $function$
 DECLARE
-	ct_rec	BOOLEAN;
+	ct_rec	RECORD;
 BEGIN
+	IF NEW.rack_location_id IS NULL THEN
+		RETURN NEW;
+	END IF;
 	SELECT
 		component_type_id,
 		is_rack_mountable
@@ -6813,11 +6821,11 @@ BEGIN
 		ct_rec
 	FROM
 		component c JOIN
-		component_type ct USING (componant_type_id)
+		component_type ct USING (component_type_id)
 	WHERE
 		component_id = NEW.component_id;
 
-	IF ct_rec.is_rack_mountable != TRUE THEN
+	IF ct_rec.is_rack_mountable != 'Y' THEN
 		RAISE EXCEPTION 'component_type_id % may not be assigned a rack_location',
 			ct_rec.component_type_id
 			USING ERRCODE = 'check_violation';
@@ -8226,7 +8234,7 @@ CREATE TRIGGER trigger_automated_ac_on_person_company AFTER UPDATE OF is_managem
 -------------------------------------------------------------------------
 DROP TRIGGER IF EXISTS trigger_validate_device_component_assignment
 	ON jazzhands.device;
-DROP TRIGGER IF EXISTS trigger_validate_slot_component
+DROP TRIGGER IF EXISTS trigger_validate_component_parent_slot_id
 	ON slot;
 DROP TRIGGER IF EXISTS trigger_validate_inter_component_connection
 	ON inter_component_connection;
@@ -8246,12 +8254,12 @@ CREATE CONSTRAINT TRIGGER trigger_validate_asset_component_assignment
 	ON asset
 	DEFERRABLE INITIALLY IMMEDIATE
 	FOR EACH ROW EXECUTE PROCEDURE validate_asset_component_assignment();
-CREATE CONSTRAINT TRIGGER trigger_validate_slot_component
-	AFTER INSERT OR UPDATE OF component_id
-	ON slot
+CREATE CONSTRAINT TRIGGER trigger_validate_component_parent_slot_id
+	AFTER INSERT OR UPDATE OF parent_slot_id,component_type_id
+	ON component
 	DEFERRABLE INITIALLY IMMEDIATE
 	FOR EACH ROW
-	EXECUTE PROCEDURE validate_slot_component_id();
+	EXECUTE PROCEDURE validate_component_parent_slot_id();
 CREATE CONSTRAINT TRIGGER trigger_validate_inter_component_connection
 	AFTER INSERT OR UPDATE
 	ON inter_component_connection

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Matthew Ragan
+ * Copyright (c) 2014-2015 Matthew Ragan
  * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -89,7 +89,7 @@ DECLARE
 BEGIN
 	-- If no component_id is set, then we're done
 
-	IF NEW.component_id IS NULL THEN
+	IF component_id IS NULL THEN
 		RETURN NEW;
 	END IF;
 
@@ -125,23 +125,28 @@ CREATE CONSTRAINT TRIGGER trigger_validate_asset_component_assignment
  * a component slot is valid for that slot type
  */
 
-CREATE OR REPLACE FUNCTION validate_slot_component_id()
+CREATE OR REPLACE FUNCTION validate_component_parent_slot_id()
 RETURNS TRIGGER AS $$
+DECLARE
+	stid	integer;
 BEGIN
+	IF NEW.parent_slot_id IS NULL THEN
+		RETURN NEW;
+	END IF;
+
 	PERFORM
 		*
 	FROM
-		component c JOIN
-		component_type ct USING (component_type_id) JOIN
-		slot_type_permitted_component_slot_type stpcst ON
-			(ct.slot_type_id = stpcst.component_slot_type_id)
+		slot s JOIN
+		slot_type_prmt_comp_slot_type stpcst USING (slot_type_id)
 	WHERE
-		stpct.slot_type_id = NEW.slot_type_id AND
-		c.component_id = NEW.component_id;
+		stpcst.component_slot_type_id = NEW.slot_type_id AND
+		s.slot_id = NEW.parent_slot_id;
 	
 	IF NOT FOUND THEN
-		RAISE EXCEPTION 'Component type % is not permitted in slot %',
-			NEW.component_type_id, NEW.slot_id
+		SELECT slot_type_id INTO stid FROM slot WHERE slot_id = NEW.parent_slot_id;
+		RAISE EXCEPTION 'Component type % is not permitted in slot % (slot type %)',
+			NEW.component_type_id, NEW.parent_slot_id, stid
 			USING ERRCODE = 'foreign_key_violation';
 	END IF;
 
@@ -151,14 +156,14 @@ $$
 SET search_path=jazzhands
 LANGUAGE plpgsql SECURITY DEFINER;
 
-DROP TRIGGER IF EXISTS trigger_validate_slot_component 
-	ON slot;
-CREATE CONSTRAINT TRIGGER trigger_validate_slot_component
-	AFTER INSERT OR UPDATE OF component_id
-	ON slot
+DROP TRIGGER IF EXISTS trigger_validate_component_parent_slot_id 
+	ON component;
+CREATE CONSTRAINT TRIGGER trigger_validate_component_parent_slot_id
+	AFTER INSERT OR UPDATE OF parent_slot_id,component_type_id
+	ON component
 	DEFERRABLE INITIALLY IMMEDIATE
 	FOR EACH ROW
-	EXECUTE PROCEDURE validate_slot_component_id();
+	EXECUTE PROCEDURE validate_component_parent_slot_id();
 
 /*
  * Trigger to ensure that an external slot connection (e.g. network connection,
@@ -259,8 +264,11 @@ CREATE CONSTRAINT TRIGGER trigger_validate_inter_component_connection
 CREATE OR REPLACE FUNCTION validate_component_rack_location()
 RETURNS TRIGGER AS $$
 DECLARE
-	ct_rec	BOOLEAN;
+	ct_rec	RECORD;
 BEGIN
+	IF NEW.rack_location_id IS NULL THEN
+		RETURN NEW;
+	END IF;
 	SELECT
 		component_type_id,
 		is_rack_mountable
@@ -268,11 +276,11 @@ BEGIN
 		ct_rec
 	FROM
 		component c JOIN
-		component_type ct USING (componant_type_id)
+		component_type ct USING (component_type_id)
 	WHERE
 		component_id = NEW.component_id;
 
-	IF ct_rec.is_rack_mountable != TRUE THEN
+	IF ct_rec.is_rack_mountable != 'Y' THEN
 		RAISE EXCEPTION 'component_type_id % may not be assigned a rack_location',
 			ct_rec.component_type_id
 			USING ERRCODE = 'check_violation';
@@ -684,29 +692,14 @@ CREATE CONSTRAINT TRIGGER trigger_validate_component_property
 	DEFERRABLE INITIALLY IMMEDIATE
 	FOR EACH ROW EXECUTE PROCEDURE validate_component_property();
 
---CREATE FUNCTION jazzhands.create_component_slots(
---	component_id	jazzhands.component.component_id%TYPE
---) RETURNS SETOF jazzhands.slot
---AS $$
---DECLARE
---	cs	jazzhands.slot%ROWTYPE;
---BEGIN
---	RETURN QUERY
---	INSERT INTO
---		jazzhands.slot
---END;
---$$
---SET search_path=jazzhands
----- Unsure if this should be SECURITY INVOKER or SECURITY DEFINER.  Ponder.
---LANGUAGE plpgsql;
---
---CREATE FUNCTION jazzhands.create_component_slots_on_insert()
---RETURNS TRIGGER
---AS $$
---BEGIN
---	PERFORM jazzhands.create_component_slots(component_id := NEW.component_id);
---	RETURN NEW;
---END;
---$$
---SET search_path=jazzhands
---LANGUAGE plpgsql SECURITY DEFINER;
+CREATE OR REPLACE FUNCTION jazzhands.create_component_slots_on_insert()
+RETURNS TRIGGER
+AS $$
+BEGIN
+	PERFORM component_utils.create_component_slots(
+		component_id := NEW.component_id);
+	RETURN NEW;
+END;
+$$
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
