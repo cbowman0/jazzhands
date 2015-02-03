@@ -8298,6 +8298,7 @@ BEGIN
 	EXECUTE
 	'ALTER SEQUENCE component_type_component_type_id_seq START WITH ' ||
 	foo;
+	EXECUTE 'ALTER SEQUENCE component_type_component_type_id_seq restart';
 END;
 $$
 ;
