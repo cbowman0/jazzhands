@@ -118,7 +118,7 @@ CREATE CONSTRAINT TRIGGER trigger_validate_asset_component_assignment
 	AFTER INSERT OR UPDATE OF component_id
 	ON asset
 	DEFERRABLE INITIALLY IMMEDIATE
-	FOR EACH ROW EXECUTE PROCEDURE validate_asset_component_assignment();
+	FOR EACH ROW EXECUTE PROCEDURE jazzhands.validate_asset_component_assignment();
 
 /*
  * Trigger to ensure that the component type of the component being added to
@@ -138,9 +138,10 @@ BEGIN
 		*
 	FROM
 		slot s JOIN
-		slot_type_prmt_comp_slot_type stpcst USING (slot_type_id)
+		slot_type_prmt_comp_slot_type stpcst USING (slot_type_id) JOIN
+		component_type ct ON (stpcst.component_slot_type_id = ct.slot_type_id)
 	WHERE
-		stpcst.component_slot_type_id = NEW.slot_type_id AND
+		ct.component_type_id = NEW.component_type_id AND
 		s.slot_id = NEW.parent_slot_id;
 	
 	IF NOT FOUND THEN
@@ -163,7 +164,7 @@ CREATE CONSTRAINT TRIGGER trigger_validate_component_parent_slot_id
 	ON component
 	DEFERRABLE INITIALLY IMMEDIATE
 	FOR EACH ROW
-	EXECUTE PROCEDURE validate_component_parent_slot_id();
+	EXECUTE PROCEDURE jazzhands.validate_component_parent_slot_id();
 
 /*
  * Trigger to ensure that an external slot connection (e.g. network connection,
@@ -259,7 +260,7 @@ CREATE CONSTRAINT TRIGGER trigger_validate_inter_component_connection
 	ON inter_component_connection
 	DEFERRABLE INITIALLY IMMEDIATE
 	FOR EACH ROW
-	EXECUTE PROCEDURE validate_inter_component_connection();
+	EXECUTE PROCEDURE jazzhands.validate_inter_component_connection();
 
 CREATE OR REPLACE FUNCTION validate_component_rack_location()
 RETURNS TRIGGER AS $$
@@ -299,7 +300,7 @@ CREATE CONSTRAINT TRIGGER trigger_validate_component_rack_location
 	ON component
 	DEFERRABLE INITIALLY IMMEDIATE
 	FOR EACH ROW
-	EXECUTE PROCEDURE validate_component_rack_location();
+	EXECUTE PROCEDURE jazzhands.validate_component_rack_location();
 
 /*
  * Trigger to validate component_property
@@ -690,9 +691,9 @@ CREATE CONSTRAINT TRIGGER trigger_validate_component_property
 	AFTER INSERT OR UPDATE
 	ON component_property
 	DEFERRABLE INITIALLY IMMEDIATE
-	FOR EACH ROW EXECUTE PROCEDURE validate_component_property();
+	FOR EACH ROW EXECUTE PROCEDURE jazzhands.validate_component_property();
 
-CREATE OR REPLACE FUNCTION jazzhands.create_component_slots_on_insert()
+CREATE OR REPLACE FUNCTION jazzhands.create_component_slots_by_trigger()
 RETURNS TRIGGER
 AS $$
 BEGIN
@@ -703,3 +704,37 @@ END;
 $$
 SET search_path=jazzhands
 LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trigger_create_component_slots ON component;
+
+CREATE TRIGGER trigger_create_component_slots
+	AFTER INSERT OR UPDATE OF component_type_id
+	ON component
+	FOR EACH ROW EXECUTE PROCEDURE
+		jazzhands.create_component_slots_by_trigger();
+
+CREATE OR REPLACE FUNCTION jazzhands.set_slot_names_by_trigger()
+RETURNS TRIGGER
+AS $$
+BEGIN
+	PERFORM component_utils.set_slot_names(
+		slot_id_list := ARRAY(
+				SELECT slot_id FROM slot WHERE component_id = NEW.component_id
+			)
+	);
+	RETURN NEW;
+END;
+$$
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
+
+--
+-- This trigger needs to run after the trigger_create_component_slots one
+--
+DROP TRIGGER IF EXISTS trigger_zzz_generate_slot_names ON component;
+CREATE TRIGGER trigger_zzz_generate_slot_names
+	AFTER INSERT OR UPDATE OF parent_slot_id
+	ON component
+	FOR EACH ROW EXECUTE PROCEDURE
+		jazzhands.set_slot_names_by_trigger();
+

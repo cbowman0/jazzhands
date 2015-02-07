@@ -14,18 +14,4 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 --
-
-\ir components/generic_things.sql
-\ir components/CPU.sql
-\ir components/memory.sql
-\ir components/PCI.sql
-\ir components/network.sql
-\ir components/serial.sql
-\ir components/power.sql
-
-\ir components/Juniper/Juniper.sql
-\ir components/Arista/Arista.sql
-
-\ir components/Dell/Dell.sql
-
-\ir components/OpenGear/OpenGear.sql
+\ir OpenGear_IMX4248.sql
