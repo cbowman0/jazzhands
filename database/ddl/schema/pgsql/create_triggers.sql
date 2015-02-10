@@ -206,14 +206,28 @@ BEFORE INSERT
 CREATE OR REPLACE FUNCTION create_new_unix_account() 
 RETURNS TRIGGER AS $$
 DECLARE
-	unix_id INTEGER;
-	_account_collection_id integer;
+	unix_id 		INTEGER;
+	_account_collection_id 	INTEGER;
+	_arid			INTEGER;
 BEGIN
-	IF NEW.person_id != 0 THEN
-		PERFORM person_manip.setup_unix_account(
-			in_account_id := NEW.account_id,
-			in_account_type := NEW.account_type
-		);
+	--
+	-- This should be a property that shows which account collections
+	-- get unix accounts created by default, but the mapping of unix-groups
+	-- to account collection across realms needs to be resolved
+	--
+	SELECT  account_realm_id
+	INTO    _arid
+	FROM    property
+	WHERE   property_name = '_root_account_realm_id'
+	AND     property_type = 'Defaults';
+
+	IF _arid IS NOT NULL AND NEW.account_realm_id = _arid THEN
+		IF NEW.person_id != 0 THEN
+			PERFORM person_manip.setup_unix_account(
+				in_account_id := NEW.account_id,
+				in_account_type := NEW.account_type
+			);
+		END IF;
 	END IF;
 	RETURN NEW;	
 END;
