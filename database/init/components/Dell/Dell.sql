@@ -25,3 +25,4 @@ END; $$ language plpgsql;
 
 \ir Dell_PowerEdge_C6100.sql
 \ir Dell_PowerEdge_C6220.sql
+\ir Dell_PowerEdge_R720.sql

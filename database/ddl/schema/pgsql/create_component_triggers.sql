@@ -54,7 +54,7 @@ BEGIN
 	FROM
 		component
 	WHERE
-		component_id = NEW.component.id;
+		component_id = NEW.component_id;
 	
 	IF NOT FOUND OR ctid IS DISTINCT FROM dt_ctid THEN
 		RAISE EXCEPTION 'Component type of component_id % does not match component_type for device_type_id % (%)',
@@ -188,17 +188,19 @@ BEGIN
 	--
 
 	SELECT
-		slot1_id
+		slot1_id,
 		slot2_id
 	INTO
 		csid_rec
 	FROM
 		inter_component_connection icc
 	WHERE
-		icc.slot1_id = NEW.slot1_id OR
-		icc.slot1_id = NEW.slot2_id OR
-		icc.slot2_id = NEW.slot1_id OR
-		icc.slot2_id = NEW.slot2_id
+		icc.inter_component_connection_id != NEW.inter_component_connection_id
+			AND
+		(icc.slot1_id = NEW.slot1_id OR
+		 icc.slot1_id = NEW.slot2_id OR
+		 icc.slot2_id = NEW.slot1_id OR
+		 icc.slot2_id = NEW.slot2_id )
 	LIMIT 1;
 
 	IF FOUND THEN
@@ -232,15 +234,15 @@ BEGIN
 		(slot cs2 JOIN slot_type st2 USING (slot_type_id)) slot2,
 		slot_type_prmt_rem_slot_type pst
 	WHERE
-		cs1.slot_id = NEW.slot1_id AND
-		cs2.slot_id = NEW.slot2_id AND
+		slot1.slot_id = NEW.slot1_id AND
+		slot2.slot_id = NEW.slot2_id AND
 		-- Remove next line if we ever decide to allow cross-function
 		-- connections
-		cs1.slot_function = cs2.slot_function AND
-		((cs1.slot_type_id = pst.slot_type_id AND
-				cs2.slot_type_id = pst.remote_slot_type_id) OR
-			(cs2.slot_type_id = pst.slot_type_id AND
-				cs1.slot_type_id = pst.remote_slot_type_id));
+		slot1.slot_function = slot2.slot_function AND
+		((slot1.slot_type_id = pst.slot_type_id AND
+				slot2.slot_type_id = pst.remote_slot_type_id) OR
+			(slot2.slot_type_id = pst.slot_type_id AND
+				slot1.slot_type_id = pst.remote_slot_type_id));
 	
 	IF NOT FOUND THEN
 		RAISE EXCEPTION 'Slot types are not allowed to be connected'
@@ -697,7 +699,7 @@ CREATE OR REPLACE FUNCTION jazzhands.create_component_slots_by_trigger()
 RETURNS TRIGGER
 AS $$
 BEGIN
-	PERFORM component_utils.create_component_slots(
+	PERFORM component_utils.create_component_template_slots(
 		component_id := NEW.component_id);
 	RETURN NEW;
 END;
@@ -705,9 +707,9 @@ $$
 SET search_path=jazzhands
 LANGUAGE plpgsql SECURITY DEFINER;
 
-DROP TRIGGER IF EXISTS trigger_create_component_slots ON component;
+DROP TRIGGER IF EXISTS trigger_create_component_template_slots ON component;
 
-CREATE TRIGGER trigger_create_component_slots
+CREATE TRIGGER trigger_create_component_template_slots
 	AFTER INSERT OR UPDATE OF component_type_id
 	ON component
 	FOR EACH ROW EXECUTE PROCEDURE
