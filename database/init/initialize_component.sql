@@ -22,6 +22,7 @@
 \ir components/network.sql
 \ir components/serial.sql
 \ir components/power.sql
+\ir components/disks/disks.sql
 
 \ir components/Juniper/Juniper.sql
 \ir components/Arista/Arista.sql

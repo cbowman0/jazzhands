@@ -142,14 +142,37 @@ $$ LANGUAGE plpgsql;
 --
 -- These constraints need to be deferrable for this to work
 --
-ALTER TABLE component_type_component_func ALTER CONSTRAINT
-	fk_cmptypecf_comp_typ_id DEFERRABLE;
-ALTER TABLE val_component_property ALTER CONSTRAINT
-	fk_comp_prop_rqd_cmptypid DEFERRABLE;
-ALTER TABLE component_property ALTER CONSTRAINT
-	fk_comp_prop_comp_typ_id DEFERRABLE;
-ALTER TABLE component_type_slot_tmplt ALTER CONSTRAINT
-	fk_comp_typ_slt_tmplt_cmptypid DEFERRABLE;
+-- Apparently ALTER TABLE ALTER CONSTRAINT only works on 9.4+
+--
+-- ALTER TABLE component_type_component_func ALTER CONSTRAINT
+-- 	fk_cmptypecf_comp_typ_id DEFERRABLE;
+-- ALTER TABLE val_component_property ALTER CONSTRAINT
+-- 	fk_comp_prop_rqd_cmptypid DEFERRABLE;
+-- ALTER TABLE component_property ALTER CONSTRAINT
+-- 	fk_comp_prop_comp_typ_id DEFERRABLE;
+-- ALTER TABLE component_type_slot_tmplt ALTER CONSTRAINT
+-- 	fk_comp_typ_slt_tmplt_cmptypid DEFERRABLE;
+
+ALTER TABLE component_type_component_func
+	DROP CONSTRAINT fk_cmptypecf_comp_typ_id;
+ALTER TABLE component_type_component_func
+	ADD CONSTRAINT fk_cmptypecf_comp_typ_id
+	FOREIGN KEY (component_type_id) REFERENCES component_type(component_type_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE val_component_property
+	DROP CONSTRAINT fk_comp_prop_rqd_cmptypid;
+ALTER TABLE val_component_property
+	ADD CONSTRAINT fk_comp_prop_rqd_cmptypid
+	FOREIGN KEY (required_component_type_id) REFERENCES component_type(component_type_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE component_property
+	DROP CONSTRAINT fk_comp_prop_comp_typ_id;
+ALTER TABLE component_property
+	ADD CONSTRAINT fk_comp_prop_comp_typ_id
+	FOREIGN KEY (component_type_id) REFERENCES component_type(component_type_id) DEFERRABLE INITIALLY IMMEDIATE;
+ALTER TABLE component_type_slot_tmplt
+	DROP CONSTRAINT fk_comp_typ_slt_tmplt_cmptypid;
+ALTER TABLE component_type_slot_tmplt
+	ADD CONSTRAINT fk_comp_typ_slt_tmplt_cmptypid
+	FOREIGN KEY (component_type_id) REFERENCES component_type(component_type_id) DEFERRABLE INITIALLY IMMEDIATE;
 
 SET CONSTRAINTS
 		jazzhands.fk_cmptypecf_comp_typ_id,
@@ -168,7 +191,7 @@ CREATE TEMPORARY TABLE component_type_id_to_device_type_id AS
 			ct.company_id = dt.company_id AND
 			ct.model = dt.model
 		);
-	
+
 UPDATE component_type_component_func ct
 	SET component_type_id = c2d.device_type_id
 	FROM component_type_id_to_device_type_id c2d
@@ -311,7 +334,7 @@ WITH x AS (
 	SELECT
 		device_id,
 		physical_port_id,
-		CASE WHEN port_name ~ '^(em|p3p)' THEN
+		CASE WHEN port_name ~ '^(em|p\d+p)' THEN
 			'eth' || 
 			(regexp_replace(port_name, '^.*(\d+)$', '\1'))::integer - 1
 		ELSE 
@@ -343,4 +366,4 @@ FROM
 	y slot2 ON (
 		port2.device_id = slot2.device_id AND 
 		port2.port_name = slot2.slot_name
-	);
+	) order by slot1.slot_id;
