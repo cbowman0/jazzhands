@@ -849,20 +849,6 @@ SELECT person_manip.setup_unix_account(
 );
 	
 
-INSERT INTO Account_Password (
-	Account_Id,
-	Password_type,
-	Password,
-	Change_Time
-) VALUES (
-	(select account_Id from account where login = 'root'),
-	'des',
-	'T6r7sdlVHpZH2',
-	now()
-);
-
-
-
 INSERT INTO
 	Device_Collection (Device_Collection_Name, Device_Collection_Type)
 VALUES (
