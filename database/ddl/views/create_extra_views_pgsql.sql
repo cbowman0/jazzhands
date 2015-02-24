@@ -53,6 +53,9 @@
 
 -- XXX - not sure if this is still needed.  Leaving out until it is.
 -- \i create_v_limited_users.sql
+
+\i create_physical_port.sql
+\i create_layer1_connection.sql
 \i create_v_l1_all_physical_ports.sql
 
 -- XXX these need to be ported
