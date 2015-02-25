@@ -940,6 +940,161 @@ values (
 	'string', 'REQUIRED');
 
 -------------------------------------------------------------------------
+-- BEGIN legacy port related stuff used by layer1_connection and elsewhere
+
+insert into val_component_property_type (component_property_type, description)
+values ('serial-connection', 'characteristics of serial connections');
+
+insert into val_component_property (
+	component_property_name, component_property_type, is_multivalue,
+	property_data_type, permit_intcomp_conn_id
+) values (
+	'baud', 'serial-connection', 'N',
+	'list', 'REQUIRED');
+insert into val_component_property_value (
+	component_property_name, component_property_type, valid_property_value
+) SELECT 'baud', 'serial-connection',
+	unnest(ARRAY[110,300,1200,2400,4800,9600,19200,38400,57600,115200]);
+
+insert into val_component_property (
+	component_property_name, component_property_type, is_multivalue,
+	property_data_type, permit_intcomp_conn_id
+) values (
+	'flow-control', 'serial-connection', 'N',
+	'list', 'REQUIRED');
+insert into val_component_property_value (
+	component_property_name, component_property_type, 
+	valid_property_value,
+	description
+) SELECT 'flow-control', 'serial-connection',
+	unnest(ARRAY['ctsrts',	'dsrdte',	'dtrdce',	'xonxoff']),
+	unnest(ARRAY['CTS/RTS', 'DSR/DTE',	'DTE/DCE',	'Xon/Xoff'])
+;
+
+insert into val_component_property (
+	component_property_name, component_property_type, is_multivalue,
+	property_data_type, permit_intcomp_conn_id
+) values (
+	'stop-bits', 'serial-connection', 'N',
+	'list', 'REQUIRED');
+insert into val_component_property_value (
+	component_property_name, component_property_type, valid_property_value
+) SELECT 'stop-bits', 'serial-connection',
+	unnest(ARRAY['1','2','1.5'])
+;
+
+insert into val_component_property (
+	component_property_name, component_property_type, is_multivalue,
+	property_data_type, permit_intcomp_conn_id
+) values (
+	'data-bits', 'serial-connection', 'N',
+	'list', 'REQUIRED');
+insert into val_component_property_value (
+	component_property_name, component_property_type, valid_property_value
+) SELECT 'data-bits', 'serial-connection',
+	unnest(ARRAY[7,8])
+;
+
+insert into val_component_property (
+	component_property_name, component_property_type, is_multivalue,
+	property_data_type, permit_intcomp_conn_id
+) values (
+	'parity', 'serial-connection', 'N',
+	'list', 'REQUIRED');
+insert into val_component_property_value (
+	component_property_name, component_property_type, valid_property_value
+) SELECT 'parity', 'serial-connection',
+	unnest(ARRAY['none', 'even', 'odd', 'mark', 'space'])
+;
+
+
+insert into val_component_property_type (component_property_type, description)
+values ('tcpsrv-connections', 'rtty tcpsrv connection properties');
+
+-- probably want to limit to component types that are devices but that appears
+-- to be hard
+insert into val_component_property (
+	component_property_name, component_property_type, is_multivalue,
+	property_data_type, permit_intcomp_conn_id, permit_component_id
+) values (
+	'tcpsrv_device_id', 'tcpsrv-connections', 'N',
+	'none', 'REQUIRED', 'REQUIRED')
+;
+
+insert into val_component_property (
+	component_property_name, component_property_type, is_multivalue,
+	property_data_type, permit_intcomp_conn_id
+) values (
+	'tcpsrv_enabled', 'tcpsrv-connections', 'N',
+	'boolean', 'REQUIRED')
+;
+
+
+/*****************************************************************************
+
+=== Things used to be directly support that are not directly supported. ====
+
+These concepts really are connection properties, not port --
+
+insert into val_port_protocol (port_protocol) values ( 'Ethernet' );
+insert into val_port_protocol (port_protocol) values ( 'DS1' );
+insert into val_port_protocol (port_protocol) values ( 'DS3' );
+insert into val_port_protocol (port_protocol) values ( 'E1' );
+insert into val_port_protocol (port_protocol) values ( 'E3' );
+insert into val_port_protocol (port_protocol) values ( 'OC3' );
+insert into val_port_protocol (port_protocol) values ( 'OC12' );
+insert into val_port_protocol (port_protocol) values ( 'OC48' );
+insert into val_port_protocol (port_protocol) values ( 'OC192' );
+insert into val_port_protocol (port_protocol) values ( 'OC768' );
+insert into val_port_protocol (port_protocol) values ( 'serial' );
+
+insert into val_port_plug_style (port_plug_style) values ('GBIC');
+insert into val_port_plug_style (port_plug_style) values ('XENPAK');
+
+-- need to do sr, lr, cat6, cat5, twinax, etc
+insert into val_port_medium (port_medium,port_plug_style) values
+	('serial', 'db9');
+insert into val_port_medium (port_medium,port_plug_style) values
+	('serial', 'rj45');
+insert into val_port_medium (port_medium,port_plug_style) values
+	('TwinAx', 'SFP+');
+
+These concepts are likely component_functions or inferred from slot_type
+
+insert into val_port_speed (port_speed, port_speed_bps) values
+	('10Mb', 10000);
+insert into val_port_speed (port_speed, port_speed_bps) values
+	('100Mb', 1000000);
+insert into val_port_speed (port_speed, port_speed_bps) values
+	('1G', 1000000000);
+insert into val_port_speed (port_speed, port_speed_bps) values
+	('10G', 10000000000);
+insert into val_port_speed (port_speed, port_speed_bps) values
+	('40G', 40000000000);
+insert into val_port_speed (port_speed, port_speed_bps) values
+	('100G', 100000000000);
+
+These concepts are likely component_functions
+
+insert into val_port_protocol_speed (port_protocol, port_speed)
+	values ('Ethernet', '10Mb');
+insert into val_port_protocol_speed (port_protocol, port_speed)
+	values ('Ethernet', '100Mb');
+insert into val_port_protocol_speed (port_protocol, port_speed)
+	values ('Ethernet', '1G');
+insert into val_port_protocol_speed (port_protocol, port_speed)
+	values ('Ethernet', '10G');
+insert into val_port_protocol_speed (port_protocol, port_speed)
+	values ('Ethernet', '40G');
+insert into val_port_protocol_speed (port_protocol, port_speed)
+	values ('Ethernet', '100G');
+
+*****************************************************************************/
+
+-- END legacy port related stuff used by layer1_connection and elsewhere
+-------------------------------------------------------------------------
+
+-------------------------------------------------------------------------
 -- BEGIN automated account collection infrastructure (tied to properties)
 
 insert into val_property_type (

@@ -51,6 +51,8 @@ grant create on database jazzhands_new to jazzhands;
 
 \i init/initialize_country_codes.sql
 \i init/initialize_jazzhands.sql
+\i init/initialize_component.sql
+
 \i init/initialize_jazzhands_optional.sql
 -- \i init/insert_blacklist.sql
 -- \i init/oracle/submit_scheduler.sql
