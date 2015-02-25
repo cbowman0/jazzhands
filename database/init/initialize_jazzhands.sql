@@ -412,6 +412,8 @@ insert into val_property_data_type (PROPERTY_DATA_TYPE) values ('company_id');
 insert into val_property_data_type (PROPERTY_DATA_TYPE)
 	values ('dns_domain_id');
 insert into val_property_data_type (PROPERTY_DATA_TYPE) 
+	values ('device_collection_id');
+insert into val_property_data_type (PROPERTY_DATA_TYPE) 
 	values ('netblock_collection_id');
 insert into val_property_data_type (PROPERTY_DATA_TYPE)
 	values ('password_type');
