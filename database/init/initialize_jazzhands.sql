@@ -326,31 +326,6 @@ insert into val_power_plug_style (power_plug_style) values ('NEMA L6-15P');
 insert into val_power_plug_style (power_plug_style) values ('NEMA L6-20P');
 insert into val_power_plug_style (power_plug_style) values ('NEMA L6-30P');
 
-insert into val_port_type (port_type) values ('network');
-insert into val_port_type (port_type) values ('patchpanel');
-insert into val_port_type (port_type) values ('serial');
-insert into val_port_type (port_type) values ('switch');
-
-insert into val_baud (baud) values (110);
-insert into val_baud (baud) values (300);
-insert into val_baud (baud) values (1200);
-insert into val_baud (baud) values (2400);
-insert into val_baud (baud) values (4800);
-insert into val_baud (baud) values (9600);
-insert into val_baud (baud) values (19200);
-insert into val_baud (baud) values (38400);
-insert into val_baud (baud) values (57600);
-insert into val_baud (baud) values (115200);
-
-insert into val_flow_control (flow_control, description)
-	values ('ctsrts', 'CTS/RTS');
-insert into val_flow_control (flow_control, description)
-	values ('dsrdte', 'Xon/Xoff');
-insert into val_flow_control (flow_control, description)
-	values ('dtrdce', 'DSR/DTE');
-insert into val_flow_control (flow_control, description)
-	values ('xonxoff', 'DTR/DCE');
-
 insert into VAL_DEVICE_AUTO_MGMT_PROTOCOL
 	(AUTO_MGMT_PROTOCOL, CONNECTION_PORT, DESCRIPTION)
 values
@@ -360,21 +335,6 @@ insert into VAL_DEVICE_AUTO_MGMT_PROTOCOL
 	(AUTO_MGMT_PROTOCOL, CONNECTION_PORT, DESCRIPTION)
 values
 	('telnet', 23, 'standard telnet');
-
--- these probably need to just be check constraints.  oops.
-insert into val_stop_bits (stop_bits) values (7);
-insert into val_stop_bits (stop_bits) values (1);
-insert into val_stop_bits (stop_bits) values (2);
-insert into val_stop_bits (stop_bits,description) values (15, '1.5');
-
-insert into val_data_bits (data_bits) values (7);
-insert into val_data_bits (data_bits) values (8);
-
-insert into val_parity (parity) values ('none');
-insert into val_parity (parity) values ('even');
-insert into val_parity (parity) values ('odd');
-insert into val_parity (parity) values ('mark');
-insert into val_parity (parity) values ('space');
 
 insert into val_CABLE_TYPE (CABLE_TYPE) values ('straight');
 insert into val_CABLE_TYPE (CABLE_TYPE) values ('rollover');
@@ -933,61 +893,6 @@ insert into val_encapsulation_mode
 
 -- add port speed, port mediumm port protocaol (look at dropped things from
 --	interface type above)
-
-insert into val_port_protocol (port_protocol) values ( 'Ethernet' );
-insert into val_port_protocol (port_protocol) values ( 'DS1' );
-insert into val_port_protocol (port_protocol) values ( 'DS3' );
-insert into val_port_protocol (port_protocol) values ( 'E1' );
-insert into val_port_protocol (port_protocol) values ( 'E3' );
-insert into val_port_protocol (port_protocol) values ( 'OC3' );
-insert into val_port_protocol (port_protocol) values ( 'OC12' );
-insert into val_port_protocol (port_protocol) values ( 'OC48' );
-insert into val_port_protocol (port_protocol) values ( 'OC192' );
-insert into val_port_protocol (port_protocol) values ( 'OC768' );
-insert into val_port_protocol (port_protocol) values ( 'serial' );
-
-insert into val_port_plug_style (port_plug_style) values ('db9');
-insert into val_port_plug_style (port_plug_style) values ('rj45');
-insert into val_port_plug_style (port_plug_style) values ('SFP');
-insert into val_port_plug_style (port_plug_style) values ('SFP+');
-insert into val_port_plug_style (port_plug_style) values ('QSFP+');
-insert into val_port_plug_style (port_plug_style) values ('GBIC');
-insert into val_port_plug_style (port_plug_style) values ('XENPAK');
-
--- need to do sr, lr, cat6, cat5, twinax, etc
-insert into val_port_medium (port_medium,port_plug_style) values
-	('serial', 'db9');
-insert into val_port_medium (port_medium,port_plug_style) values
-	('serial', 'rj45');
-insert into val_port_medium (port_medium,port_plug_style) values
-	('TwinAx', 'SFP+');
-
-
-insert into val_port_speed (port_speed, port_speed_bps) values
-	('10Mb', 10000);
-insert into val_port_speed (port_speed, port_speed_bps) values
-	('100Mb', 1000000);
-insert into val_port_speed (port_speed, port_speed_bps) values
-	('1G', 1000000000);
-insert into val_port_speed (port_speed, port_speed_bps) values
-	('10G', 10000000000);
-insert into val_port_speed (port_speed, port_speed_bps) values
-	('40G', 40000000000);
-insert into val_port_speed (port_speed, port_speed_bps) values
-	('100G', 100000000000);
-
-insert into val_port_protocol_speed (port_protocol, port_speed)
-	values ('Ethernet', '10Mb');
-insert into val_port_protocol_speed (port_protocol, port_speed)
-	values ('Ethernet', '100Mb');
-insert into val_port_protocol_speed (port_protocol, port_speed)
-	values ('Ethernet', '1G');
-insert into val_port_protocol_speed (port_protocol, port_speed)
-	values ('Ethernet', '10G');
-insert into val_port_protocol_speed (port_protocol, port_speed)
-	values ('Ethernet', '40G');
-insert into val_port_protocol_speed (port_protocol, port_speed)
-	values ('Ethernet', '100G');
 
 insert into val_device_collection_type 
 	(device_collection_type,

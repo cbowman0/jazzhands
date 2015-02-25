@@ -486,6 +486,18 @@ BEGIN
 		END IF;
 	END IF;
 
+	IF v_comp_prop.permit_intcomp_conn_id = 'REQUIRED' THEN
+		IF NEW.inter_component_connection_id IS NULL THEN
+			RAISE 'inter_component_connection_id is required.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	ELSIF v_comp_prop.permit_intcomp_conn_id = 'PROHIBITED' THEN
+		IF NEW.inter_component_connection_id IS NOT NULL THEN
+			RAISE 'inter_component_connection_id is prohibited.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
 	IF v_comp_prop.permit_slot_type_id = 'REQUIRED' THEN
 		IF NEW.slot_type_id IS NULL THEN
 			RAISE 'slot_type_id is required.'

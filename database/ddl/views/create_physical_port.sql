@@ -20,7 +20,7 @@
 -- XXX NOTE: need to migrate network_interface.physical_port_id
 --
 
-create or replace view v_physical_port
+create or replace view physical_port
 AS
 SELECT	
 	sl.slot_id			AS physical_port_id,
@@ -29,11 +29,11 @@ SELECT
 	st.slot_function		AS port_type,
 	sl.description,
 	st.slot_physical_interface_type	AS port_plug_style,
-	'NOTYET'			AS port_medium,
-	'NOTYET'			AS port_protocol,
-	'NOTYET'			AS port_speed,
+	'NOTYET'::text			AS port_medium,
+	'NOTYET'::text			AS port_protocol,
+	'NOTYET'::text			AS port_speed,
 	sl.physical_label,
-	'NOTYET'			AS port_purpose,
+	'NOTYET'::text			AS port_purpose,
 	NULL				AS logical_port_id,
 	NULL				AS tcp_port,
 	CASE WHEN ct.is_removable = 'Y' THEN 'N' ELSE 'Y' END AS is_hardwired,

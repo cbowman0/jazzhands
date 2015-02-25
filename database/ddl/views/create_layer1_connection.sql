@@ -20,7 +20,7 @@
 -- XXX NOTE: need to migrate network_interface.physical_port_id
 --
 
-create or replace view v_layer1_connection
+create or replace view layer1_connection
 AS
 SELECT	
 	icc.inter_component_connection_id  AS layer1_connection_id,
