@@ -332,16 +332,16 @@ BEGIN
 
 	-- If the RHS contains a device_collection_id, check to see if it must be a
 	-- specific type and verify that if so
-	IF NEW.Property_Value_Dev_Coll_Id IS NOT NULL THEN
+	IF NEW.Property_Value_Device_Coll_Id IS NOT NULL THEN
 		IF v_prop.prop_val_dev_coll_type_rstrct IS NOT NULL THEN
 			BEGIN
 				SELECT * INTO STRICT v_device_collection 
 					FROM device_collection WHERE
-					device_collection_id = NEW.Property_Value_Dev_Coll_Id;
+					device_collection_id = NEW.Property_Value_Device_Coll_Id;
 				IF v_device_collection.device_collection_type != 
 					v_prop.prop_val_dev_coll_type_rstrct
 				THEN
-					RAISE 'Property_Value_Dev_Coll_Id must be of type %',
+					RAISE 'Property_Value_Device_Coll_Id must be of type %',
 					v_prop.prop_val_dev_coll_type_rstrct
 					USING ERRCODE = 'invalid_parameter_value';
 				END IF;

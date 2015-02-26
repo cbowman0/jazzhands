@@ -1802,7 +1802,7 @@ BEGIN
 	RAISE NOTICE 'Inserting Device_collection_Id value into string property';
 	BEGIN
 		INSERT INTO Property (Property_Name, Property_Type,
-			property_value_dev_coll_id
+			property_value_device_coll_id
 			) VALUES (
 			'string', 'test',
 			v_device_collection_id
@@ -1957,7 +1957,7 @@ BEGIN
 	RAISE NOTICE 'Inserting Device_Collection_id value into timestamp property';
 	BEGIN
 		INSERT INTO Property (Property_Name, Property_Type,
-			property_value_dev_coll_id
+			property_value_device_coll_id
 			) VALUES (
 			'timestamp', 'test',
 			v_device_collection_id
@@ -2112,7 +2112,7 @@ BEGIN
 	RAISE NOTICE 'Inserting Device_Collection_Id value into company_id property';
 	BEGIN
 		INSERT INTO Property (Property_Name, Property_Type,
-			property_value_dev_coll_id
+			property_value_device_coll_id
 			) VALUES (
 			'company_id', 'test',
 			v_device_collection_id
@@ -2268,7 +2268,7 @@ BEGIN
 	RAISE NOTICE 'Inserting Device_Collection_Id value into dns_domain_id property';
 	BEGIN
 		INSERT INTO Property (Property_Name, Property_Type,
-			property_value_dev_coll_id
+			property_value_device_coll_id
 			) VALUES (
 			'dns_domain_id', 'test',
 			v_device_collection_id
@@ -2423,7 +2423,7 @@ BEGIN
 	RAISE NOTICE 'Inserting Device_Collection_Id value into Netblock_Collection_Id property';
 	BEGIN
 		INSERT INTO Property (Property_Name, Property_Type,
-			Property_Value_dev_coll_id,
+			Property_Value_device_coll_id
 			) VALUES (
 			'netblock_collection_id', 'test',
 			v_device_collection_id
@@ -2577,7 +2577,7 @@ BEGIN
 	RAISE NOTICE 'Inserting Device_Collection_Id value into password_type property';
 	BEGIN
 		INSERT INTO Property (Property_Name, Property_Type,
-			property_value_dev_coll_id
+			property_value_device_coll_id
 			) VALUES (
 			'password_type', 'test',
 			v_device_collection_id
@@ -2732,7 +2732,7 @@ BEGIN
 	RAISE NOTICE 'Inserting Device_Collection_Id value into sw_package_id property';
 	BEGIN
 		INSERT INTO Property (Property_Name, Property_Type,
-			property_value_dev_coll_id
+			property_value_device_coll_id
 			) VALUES (
 			'sw_package_id', 'test',
 			v_device_collection_id
@@ -2888,7 +2888,7 @@ BEGIN
 	RAISE NOTICE 'Inserting Device_Collection_Id value into token_collection_id property';
 	BEGIN
 		INSERT INTO Property (Property_Name, Property_Type,
-			property_value_dev_coll_id
+			property_value_device_coll_id
 			) VALUES (
 			'token_collection_id', 'test',
 			v_device_collection_id
@@ -3043,7 +3043,7 @@ BEGIN
 	RAISE NOTICE 'Inserting Device_Collection_Id value into account_collection_id property';
 	BEGIN
 		INSERT INTO Property (Property_Name, Property_Type,
-			property_value_dev_coll_id
+			property_value_device_coll_id
 			) VALUES (
 			'account_collection_id', 'test',
 			v_device_collection_id
@@ -3198,7 +3198,7 @@ BEGIN
 	RAISE NOTICE 'Inserting Device_Collection_Id value into none property';
 	BEGIN
 		INSERT INTO Property (Property_Name, Property_Type,
-			property_value_dev_coll_id
+			property_value_device_coll_id
 			) VALUES (
 			'none', 'test',
 			v_device_collection_id
