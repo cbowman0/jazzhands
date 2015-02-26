@@ -303,6 +303,7 @@ insert into val_processor_architecture (PROCESSOR_ARCHITECTURE, KERNEL_BITS)
 insert into val_processor_architecture (PROCESSOR_ARCHITECTURE, KERNEL_BITS)
 	values ('sparc', 64);
 
+/*
 insert into val_power_plug_style (power_plug_style) values ('DC');
 insert into val_power_plug_style (power_plug_style) values ('Hubbell CS8365C');
 insert into val_power_plug_style (power_plug_style) values ('IEC-60320-C13');
@@ -325,6 +326,7 @@ insert into val_power_plug_style (power_plug_style) values ('NEMA L5-30P');
 insert into val_power_plug_style (power_plug_style) values ('NEMA L6-15P');
 insert into val_power_plug_style (power_plug_style) values ('NEMA L6-20P');
 insert into val_power_plug_style (power_plug_style) values ('NEMA L6-30P');
+ */
 
 insert into VAL_DEVICE_AUTO_MGMT_PROTOCOL
 	(AUTO_MGMT_PROTOCOL, CONNECTION_PORT, DESCRIPTION)
@@ -837,20 +839,10 @@ insert into val_company_type(company_type) values  ('software provider');
 --- XXX these may be optional
 INSERT INTO Device_Type (
 	Company_Id,
-	Model,
-	Has_802_3_Interface,
-	Has_802_11_Interface,
-	SNMP_Capable,
-	is_chassis,
-	rack_units
+	Device_type_Name
 ) VALUES (
 	0,
-	'unknown',
-	'N',
-	'N',
-	'N',
-	'N',
-	0
+	'unknown'
 );
 
 INSERT INTO Operating_System (

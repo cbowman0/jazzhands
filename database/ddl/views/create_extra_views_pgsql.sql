@@ -58,6 +58,9 @@
 \i create_layer1_connection.sql
 \i create_v_l1_all_physical_ports.sql
 
+\i create_device_power_connection.sql
+\i create_device_power_interface.sql
+
 -- XXX these need to be ported
 -- \i create_v_joined_acct_collection_user_detail.sql
 \i pgsql/create_v_device_coll_hier_detail.sql

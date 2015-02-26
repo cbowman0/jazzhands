@@ -16,6 +16,10 @@
  */
 
 ---------------------------------------------------------------------------
+--
+-- These need to be ported to components
+
+/*
 
 CREATE OR REPLACE FUNCTION device_power_connection_sanity() 
 RETURNS TRIGGER AS $$
@@ -137,3 +141,5 @@ CREATE TRIGGER trigger_device_power_port_sanity
 	FOR EACH ROW 
 	EXECUTE PROCEDURE device_power_port_sanity();
 
+
+*/
