@@ -1914,7 +1914,6 @@ CREATE TABLE DEVICE
 	COMPONENT_ID         NUMBER NULL ,
 	DEVICE_TYPE_ID       NUMBER NOT NULL 
 			  NOT DEFERRABLE  INITIALLY IMMEDIATE  ENABLE  VALIDATE,
-	COMPANY_ID           NUMBER NULL ,
 	ASSET_ID             NUMBER(13,0) NULL ,
 	DEVICE_NAME          VARCHAR2(255 BYTE) NULL ,
 	SITE_CODE            VARCHAR2(50 BYTE) NULL ,
@@ -2031,9 +2030,6 @@ CREATE    BITMAP INDEX IDX_DEV_ISMONITORED ON DEVICE
 
 CREATE  INDEX XIF_DEVICE_ASSET_ID ON DEVICE
 (ASSET_ID   ASC);
-
-CREATE  INDEX XIF_DEVICE_COMPANY__ID ON DEVICE
-(COMPANY_ID   ASC);
 
 CREATE  INDEX XIF_DEVICE_COMP_ID ON DEVICE
 (COMPONENT_ID   ASC);
@@ -2487,8 +2483,8 @@ CREATE TABLE DEVICE_TYPE
 	DEVICE_TYPE_NAME     varchar2(50) NOT NULL ,
 	TEMPLATE_DEVICE_ID   NUMBER NULL ,
 	DESCRIPTION          VARCHAR2(4000 BYTE) NULL ,
-	COMPANY_ID           NUMBER NULL ,
-	MODEL                VARCHAR2(255 BYTE) NULL ,
+	COMPANY_ID           NUMBER NOT NULL ,
+	MODEL                VARCHAR2(255 BYTE) NOT NULL ,
 	DEVICE_TYPE_DEPTH_IN_CM CHAR(18) NULL ,
 	PROCESSOR_ARCHITECTURE VARCHAR2(50 BYTE) NULL ,
 	CONFIG_FETCH_TYPE    VARCHAR2(50 BYTE) NULL ,
@@ -3475,8 +3471,8 @@ CREATE TABLE LOGICAL_VOLUME
 	VOLUME_GROUP_ID      NUMBER NOT NULL ,
 	DEVICE_ID            NUMBER NULL ,
 	LOGICAL_VOLUME_NAME  varchar2(50) NOT NULL ,
-	LOGICAL_VOLUME_SIZE_IN_MB INTEGER NOT NULL ,
-	LOGICAL_VOLUME_OFFSET_IN_MB INTEGER NULL ,
+	LOGICAL_VOLUME_SIZE_IN_BYTES INTEGER NOT NULL ,
+	LOGICAL_VOLUME_OFFSET_IN_BYTES INTEGER NULL ,
 	FILESYSTEM_TYPE      VARCHAR2(50 BYTE) NOT NULL ,
 	DATA_INS_USER        VARCHAR2(30 BYTE) NULL ,
 	DATA_INS_DATE        DATE NULL ,
@@ -4971,37 +4967,73 @@ CREATE TABLE PROPERTY
 	DATA_UPD_DATE        DATE NULL 
 );
 
-COMMENT ON TABLE PROPERTY IS 'generic property instance that describes system wide properties, as well as properties for various values of columns used throughout the db for configuration, acls, defaults, etc; also used to relate some tables';
+COMMENT ON TABLE PROPERTY IS 'generic mechanism to create arbitrary associations between lhs database objects and assign them to zero or one other database objects/strings/lists/etc.  They are trigger enforced based on characteristics in val_property and val_property_value where foreign key enforcement does not work.';
 
 COMMENT ON COLUMN PROPERTY.PROPERTY_ID IS 'primary key for table to uniquely identify rows.';
 
-COMMENT ON COLUMN PROPERTY.COMPANY_ID IS 'company that properties may be set on.';
+COMMENT ON COLUMN PROPERTY.COMPANY_ID IS 'LHS settable based on val_property';
 
-COMMENT ON COLUMN PROPERTY.DEVICE_COLLECTION_ID IS 'device collection that properties may be set on.';
+COMMENT ON COLUMN PROPERTY.PROPERTY_VALUE_COMPANY_ID IS 'RHS - fk to company_id,  permitted based on val_property.property_data_type.';
 
-COMMENT ON COLUMN PROPERTY.DNS_DOMAIN_ID IS 'dns domain that properties may be set on.';
+COMMENT ON COLUMN PROPERTY.DEVICE_COLLECTION_ID IS 'LHS settable based on val_property';
 
-COMMENT ON COLUMN PROPERTY.ACCOUNT_ID IS 'system user that properties may be set on.';
+COMMENT ON COLUMN PROPERTY.DNS_DOMAIN_ID IS 'LHS settable based on val_property';
 
-COMMENT ON COLUMN PROPERTY.ACCOUNT_COLLECTION_ID IS 'user collection that properties may be set on.';
+COMMENT ON COLUMN PROPERTY.PROPERTY_VALUE_DNS_DOMAIN_ID IS 'RHS - fk to dns_domain.    permitted based on val_property.property_data_type.';
 
-COMMENT ON COLUMN PROPERTY.SITE_CODE IS 'site_code that properties may be set on';
+COMMENT ON COLUMN PROPERTY.ACCOUNT_ID IS 'LHS settable based on val_property';
+
+COMMENT ON COLUMN PROPERTY.ACCOUNT_COLLECTION_ID IS 'LHS settable based on val_property';
+
+COMMENT ON COLUMN PROPERTY.PROPERTY_VALUE_ACCOUNT_COLL_ID IS 'RHS, fk to account_collection,    permitted based on val_property.property_data_type.';
+
+COMMENT ON COLUMN PROPERTY.SITE_CODE IS 'LHS settable based on val_property';
 
 COMMENT ON COLUMN PROPERTY.PROPERTY_NAME IS 'textual name of a property';
 
 COMMENT ON COLUMN PROPERTY.PROPERTY_TYPE IS 'textual type of a department';
 
-COMMENT ON COLUMN PROPERTY.PROPERTY_VALUE IS 'general purpose column for value of property not defined by other types.  This may be enforced by fk (trigger) if val_property.property_data_type is list (fk is to val_property_value).';
+COMMENT ON COLUMN PROPERTY.PROPERTY_VALUE IS 'RHS - general purpose column for value of property not defined by other types.  This may be enforced by fk (trigger) if val_property.property_data_type is list (fk is to val_property_value).   permitted based on val_property.property_data_type.';
 
-COMMENT ON COLUMN PROPERTY.PROPERTY_VALUE_TIMESTAMP IS 'property is defined as a timestamp';
+COMMENT ON COLUMN PROPERTY.PROPERTY_VALUE_TIMESTAMP IS 'RHS - value is a timestamp , permitted based on val_property.property_data_type.';
 
-COMMENT ON COLUMN PROPERTY.START_DATE IS 'date/time that the assignment takes effect';
+COMMENT ON COLUMN PROPERTY.START_DATE IS 'date/time that the assignment takes effect or NULL.  .  The view v_property filters this out.';
 
-COMMENT ON COLUMN PROPERTY.FINISH_DATE IS 'date/time that the assignment ceases taking effect';
+COMMENT ON COLUMN PROPERTY.FINISH_DATE IS 'date/time that the assignment ceases taking effect or NULL.  .  The view v_property filters this out.';
 
-COMMENT ON COLUMN PROPERTY.IS_ENABLED IS 'indiciates if the property is temporarily disabled or not.';
+COMMENT ON COLUMN PROPERTY.PROPERTY_VALUE_PASSWORD_TYPE IS 'RHS - fk to val_password_type.     permitted based on val_property.property_data_type.';
 
-COMMENT ON COLUMN PROPERTY.OPERATING_SYSTEM_ID IS 'operating system that properties may be set on.';
+COMMENT ON COLUMN PROPERTY.PROPERTY_VALUE_TOKEN_COL_ID IS 'RHS - fk to token_collection_id.     permitted based on val_property.property_data_type.';
+
+COMMENT ON COLUMN PROPERTY.IS_ENABLED IS 'indiciates if the property is temporarily disabled or not.  The view v_property filters this out.';
+
+COMMENT ON COLUMN PROPERTY.PROPERTY_VALUE_SW_PACKAGE_ID IS 'RHS - fk to sw_package.  possibly will be deprecated.     permitted based on val_property.property_data_type.';
+
+COMMENT ON COLUMN PROPERTY.OPERATING_SYSTEM_ID IS 'LHS settable based on val_property';
+
+COMMENT ON COLUMN PROPERTY.PROPERTY_VALUE_PERSON_ID IS 'RHS - fk to person.     permitted based on val_property.property_data_type.';
+
+COMMENT ON COLUMN PROPERTY.PERSON_ID IS 'LHS settable based on val_property';
+
+COMMENT ON COLUMN PROPERTY.PROPERTY_VALUE_NBLK_COLL_ID IS 'RHS - fk to network_collection.    permitted based on val_property.property_data_type.';
+
+COMMENT ON COLUMN PROPERTY.NETBLOCK_COLLECTION_ID IS 'LHS settable based on val_property';
+
+COMMENT ON COLUMN PROPERTY.PROPERTY_RANK IS 'for multivalues, specifies the order.  If set, this basically becomes part of the "ak" for the lhs.';
+
+COMMENT ON COLUMN PROPERTY.SERVICE_ENV_COLLECTION_ID IS 'LHS settable based on val_property';
+
+COMMENT ON COLUMN PROPERTY.ACCOUNT_REALM_ID IS 'LHS settable based on val_property';
+
+COMMENT ON COLUMN PROPERTY.LAYER2_NETWORK_ID IS 'LHS settable based on val_property';
+
+COMMENT ON COLUMN PROPERTY.LAYER3_NETWORK_ID IS 'LHS settable based on val_property';
+
+COMMENT ON COLUMN PROPERTY.PROPERTY_COLLECTION_ID IS 'LHS settable based on val_property.  NOTE, this is actually collections of property_name,property_type';
+
+COMMENT ON COLUMN PROPERTY.OPERATING_SYSTEM_SNAPSHOT_ID IS 'LHS settable based on val_property';
+
+COMMENT ON COLUMN PROPERTY.PROPERTY_VALUE_DEVICE_COLL_ID IS 'RHS - fk to device_collection.    permitted based on val_property.property_data_type.';
 
 CREATE UNIQUE INDEX PK_PROPERTY ON PROPERTY
 (PROPERTY_ID   ASC);
@@ -8213,25 +8245,53 @@ CREATE TABLE VAL_PROPERTY
 	DATA_UPD_DATE        DATE NULL 
 );
 
-COMMENT ON TABLE VAL_PROPERTY IS 'valid values and attributes for (name,type) pairs in the property table';
+COMMENT ON TABLE VAL_PROPERTY IS 'valid values and attributes for (name,type) pairs in the property table.  This defines how triggers enforce aspects of the property table';
 
 COMMENT ON COLUMN VAL_PROPERTY.PROPERTY_NAME IS 'property name for validation purposes';
 
 COMMENT ON COLUMN VAL_PROPERTY.PROPERTY_TYPE IS 'property type for validation purposes';
 
-COMMENT ON COLUMN VAL_PROPERTY.IS_MULTIVALUE IS 'If N, acts like an alternate key on property.(lhs,property_type)';
+COMMENT ON COLUMN VAL_PROPERTY.IS_MULTIVALUE IS 'If N, acts like an alternate key on property.(lhs,property_name,property_type)';
 
-COMMENT ON COLUMN VAL_PROPERTY.PROPERTY_DATA_TYPE IS 'which of the property_table_* columns should be used for this value';
+COMMENT ON COLUMN VAL_PROPERTY.PROPERTY_DATA_TYPE IS 'which, if any, of the property_table_* columns should be used for this value.   May turn more complex enforcement via trigger';
 
-COMMENT ON COLUMN VAL_PROPERTY.PERMIT_COMPANY_ID IS 'defines how company id should be used in the property for this (name,type)';
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_COMPANY_ID IS 'defines permissibility/requirement of company_id on LHS of property';
 
-COMMENT ON COLUMN VAL_PROPERTY.PERMIT_DEVICE_COLLECTION_ID IS 'defines how company id should be used in the property for this (name,type)';
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_DEVICE_COLLECTION_ID IS 'defines permissibility/requirement of device_collection_id on LHS of property';
 
-COMMENT ON COLUMN VAL_PROPERTY.PERMIT_DNS_DOMAIN_ID IS 'defines how company id should be used in the property for this (name,type)';
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_DNS_DOMAIN_ID IS 'defines permissibility/requirement of dns_domain_id on LHS of property';
 
-COMMENT ON COLUMN VAL_PROPERTY.PERMIT_ACCOUNT_ID IS 'defines how company id should be used in the property for this (name,type)';
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_ACCOUNT_ID IS 'defines permissibility/requirement of account_idon LHS of property';
 
-COMMENT ON COLUMN VAL_PROPERTY.PERMIT_ACCOUNT_COLLECTION_ID IS 'defines how company id should be used in the property for this (name,type)';
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_ACCOUNT_COLLECTION_ID IS 'defines permissibility/requirement of account_collection_id on LHS of property';
+
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_SITE_CODE IS 'defines permissibility/requirement of site_code on LHS of property';
+
+COMMENT ON COLUMN VAL_PROPERTY.PROP_VAL_ACCT_COLL_TYPE_RSTRCT IS 'if property_value is account_collection_Id, this limits the account_collection_types that can be used in that column.';
+
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_SERVICE_ENV_COLLECTION IS 'defines permissibility/requirement of service_env_collection_id on LHS of property';
+
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_OPERATING_SYSTEM_ID IS 'defines permissibility/requirement of operating_system_id on LHS of property';
+
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_PERSON_ID IS 'defines permissibility/requirement of person_id on LHS of property';
+
+COMMENT ON COLUMN VAL_PROPERTY.PROP_VAL_NBLK_COLL_TYPE_RSTRCT IS 'if property_value isnetblockt_collection_Id, this limits the netblockt_collection_types that can be used in that column.';
+
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_NETBLOCK_COLLECTION_ID IS 'defines permissibility/requirement of netblock_collection_id on LHS of property';
+
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_PROPERTY_RANK IS 'defines permissibility of property_rank, and if it should be part of the "lhs" of the given property';
+
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_ACCOUNT_REALM_ID IS 'defines permissibility/requirement of account_realm_id on LHS of property';
+
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_LAYER2_NETWORK_ID IS 'defines permissibility/requirement of layer2_network_id on LHS of property';
+
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_LAYER3_NETWORK_ID IS 'defines permissibility/requirement of layer3_network_id on LHS of property';
+
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_PROPERTY_COLLECTION_ID IS 'defines permissibility/requirement of property_collection_id on LHS of property';
+
+COMMENT ON COLUMN VAL_PROPERTY.PERMIT_OS_SNAPSHOT_ID IS 'defines permissibility/requirement of operating_system_snapshot_id on LHS of property';
+
+COMMENT ON COLUMN VAL_PROPERTY.PROP_VAL_DEV_COLL_TYPE_RSTRCT IS 'if property_value is devicet_collection_Id, this limits the devicet_collection_types that can be used in that column.';
 
 CREATE UNIQUE INDEX PK_VAL_PROPERTY ON VAL_PROPERTY
 (PROPERTY_NAME   ASC,PROPERTY_TYPE   ASC);
@@ -8414,7 +8474,7 @@ CREATE TABLE VAL_PROPERTY_DATA_TYPE
 	DATA_UPD_DATE        DATE NULL 
 );
 
-COMMENT ON TABLE VAL_PROPERTY_DATA_TYPE IS 'valid data types for property (name,type) pairs';
+COMMENT ON TABLE VAL_PROPERTY_DATA_TYPE IS 'valid data types for property (name,type) pairs.  This maps to property.property_value_* columns.';
 
 CREATE UNIQUE INDEX PK_VAL_PROPERTY_DATA_TYPE ON VAL_PROPERTY_DATA_TYPE
 (PROPERTY_DATA_TYPE   ASC);
@@ -8468,6 +8528,8 @@ CREATE TABLE VAL_PROPERTY_VALUE
 	DATA_UPD_USER        VARCHAR2(255) NULL ,
 	DATA_UPD_DATE        DATE NULL 
 );
+
+COMMENT ON TABLE VAL_PROPERTY_VALUE IS 'Used to simulate foreign key enforcement on property.property_value .  If a property_name,property_type is set to type list, the value must be in this table.';
 
 COMMENT ON COLUMN VAL_PROPERTY_VALUE.PROPERTY_NAME IS 'property name for validation purposes';
 
@@ -9797,9 +9859,6 @@ ALTER TABLE DEVICE
 
 ALTER TABLE DEVICE
 	ADD (CONSTRAINT FK_DEVICE_ASSET_ID FOREIGN KEY (ASSET_ID) REFERENCES ASSET (ASSET_ID));
-
-ALTER TABLE DEVICE
-	ADD (CONSTRAINT FK_DEVICE_COMPANY__ID FOREIGN KEY (COMPANY_ID) REFERENCES COMPANY (COMPANY_ID)  DEFERRABLE  INITIALLY IMMEDIATE);
 
 ALTER TABLE DEVICE
 	ADD (CONSTRAINT FK_DEVICE_COMP_ID FOREIGN KEY (COMPONENT_ID) REFERENCES COMPONENT (COMPONENT_ID));
