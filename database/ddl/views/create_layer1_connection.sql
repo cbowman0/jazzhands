@@ -50,7 +50,7 @@ WITH conn_props AS (
 	parity.property_value		AS parity,
 	flow.property_value			AS flow_control,
 	tcpsrv.device_id			AS tcpsrv_device_id,
-	coalesce(tcpsrvon.property_value,'N')		AS is_tcpsrv_enabled,
+	coalesce(tcpsrvon.property_value,'N')::char(1)	AS is_tcpsrv_enabled,
 	icc.data_ins_user,
 	icc.data_ins_date,
 	icc.data_upd_user,
