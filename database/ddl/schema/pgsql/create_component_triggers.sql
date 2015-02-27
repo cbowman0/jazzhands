@@ -761,6 +761,9 @@ AS $$
 DECLARE
 	devtype		RECORD;
 	cid			integer;
+	scarr       integer[];
+	dcarr       integer[];
+	server_ver	integer;
 BEGIN
 
 	--
@@ -804,102 +807,179 @@ BEGIN
 		NEW.component_id := cid;
 		RETURN NEW;
 	ELSE
-		--
-		-- This is pretty nasty; welcome to SQL
-		--
-		-- Because we can't return any data from the subselect in the RETURNING
-		-- clause of the INSERT within the WITH, we insert a new component for
-		-- each member of the source device and return just the component_id.
-		--
-		-- This returns data into a temporary table (ugh) that's used as a
-		-- key/value store to map each template component to the 
-		-- newly-created one
-		--
-		CREATE TEMPORARY TABLE trig_comp_ins AS
-		WITH comp_ins AS (
-			INSERT INTO component (
-				component_type_id
-			) SELECT
-				c.component_type_id
+		SELECT setting INTO server_ver FROM pg_catalog.pg_settings
+			WHERE name = 'server_version_num';
+
+		IF (server_ver < 90400) THEN
+			--
+			-- This is pretty nasty; welcome to SQL
+			--
+			--
+			-- This returns data into a temporary table (ugh) that's used as a
+			-- key/value store to map each template component to the 
+			-- newly-created one
+			--
+			CREATE TEMPORARY TABLE trig_comp_ins AS
+			WITH comp_ins AS (
+				INSERT INTO component (
+					component_type_id
+				) SELECT
+					c.component_type_id
+				FROM
+					device_type dt JOIN 
+					v_device_components dc ON
+						(dc.device_id = dt.template_device_id) JOIN
+					component c USING (component_id)
+				WHERE
+					device_type_id = NEW.device_type_id
+				ORDER BY
+					level, c.component_type_id
+				RETURNING component_id
+			)
+			SELECT 
+				src_comp.component_id as src_component_id,
+				dst_comp.component_id as dst_component_id,
+				src_comp.level as level
 			FROM
-				device_type dt JOIN 
-				v_device_components dc ON
-					(dc.device_id = dt.template_device_id) JOIN
-				component c USING (component_id)
+				(SELECT
+					c.component_id,
+					level,
+					row_number() OVER (ORDER BY level, c.component_type_id)
+						AS rownum
+				 FROM
+					device_type dt JOIN 
+					v_device_components dc ON
+						(dc.device_id = dt.template_device_id) JOIN
+					component c USING (component_id)
+				 WHERE
+					device_type_id = NEW.device_type_id
+				) src_comp,
+				(SELECT
+					component_id,
+					row_number() OVER () AS rownum
+				 FROM
+					comp_ins
+				) dst_comp
 			WHERE
-				device_type_id = NEW.device_type_id
-			ORDER BY
-				level, c.component_type_id
-			RETURNING component_id
-		)
-		SELECT 
-			src_comp.component_id as src_component_id,
-			dst_comp.component_id as dst_component_id,
-			src_comp.level as level
-		FROM
-			(SELECT
-				c.component_id,
-				level,
-				row_number() OVER (ORDER BY level, c.component_type_id) AS rownum
-			 FROM
-				device_type dt JOIN 
-				v_device_components dc ON
-					(dc.device_id = dt.template_device_id) JOIN
-				component c USING (component_id)
-			 WHERE
-				device_type_id = NEW.device_type_id
-			) src_comp,
-			(SELECT
-				component_id,
-				row_number() OVER () AS rownum
-			 FROM
-				comp_ins
-			) dst_comp
-		WHERE
-			src_comp.rownum = dst_comp.rownum;
+				src_comp.rownum = dst_comp.rownum;
 
-		/* 
-			 Now take the mapping of components that were inserted above, and
-			 tie the new components to the appropriate slot on the parent.
-			 The logic below is:
-				- Take the template component, and locate its parent slot
-				- Find the correct slot on the corresponding new parent 
-				  component by locating one with the same slot_name and
-				  slot_type_id on the mapped parent component_id
-				- Update the parent_slot_id of the component with the
-				  mapped component_id to this slot_id 
-			 
-			 This works even if the top-level component is attached to some
-			 other device, since there will not be a mapping for those in
-			 the table to locate.
-		*/
-				  
-		UPDATE
-			component dc
-		SET
-			parent_slot_id = ds.slot_id
-		FROM
-			trig_comp_ins tt,
-			trig_comp_ins ptt,
-			component sc,
-			slot ss,
-			slot ds
-		WHERE
-			tt.src_component_id = sc.component_id AND
-			tt.dst_component_id = dc.component_id AND
-			ss.slot_id = sc.parent_slot_id AND
-			ss.component_id = ptt.src_component_id AND
-			ds.component_id = ptt.dst_component_id AND
-			ss.slot_type_id = ds.slot_type_id AND
-			ss.slot_name = ds.slot_name;
+			/* 
+				 Now take the mapping of components that were inserted above,
+				 and tie the new components to the appropriate slot on the
+				 parent.
+				 The logic below is:
+					- Take the template component, and locate its parent slot
+					- Find the correct slot on the corresponding new parent 
+					  component by locating one with the same slot_name and
+					  slot_type_id on the mapped parent component_id
+					- Update the parent_slot_id of the component with the
+					  mapped component_id to this slot_id 
+				 
+				 This works even if the top-level component is attached to some
+				 other device, since there will not be a mapping for those in
+				 the table to locate.
+			*/
+					  
+			UPDATE
+				component dc
+			SET
+				parent_slot_id = ds.slot_id
+			FROM
+				trig_comp_ins tt,
+				trig_comp_ins ptt,
+				component sc,
+				slot ss,
+				slot ds
+			WHERE
+				tt.src_component_id = sc.component_id AND
+				tt.dst_component_id = dc.component_id AND
+				ss.slot_id = sc.parent_slot_id AND
+				ss.component_id = ptt.src_component_id AND
+				ds.component_id = ptt.dst_component_id AND
+				ss.slot_type_id = ds.slot_type_id AND
+				ss.slot_name = ds.slot_name;
 
-		SELECT dst_component_id INTO cid FROM trig_comp_ins WHERE level = 1;
+			SELECT dst_component_id INTO cid FROM trig_comp_ins WHERE
+				level = 1;
 
-		NEW.component_id := cid;
+			NEW.component_id := cid;
 
-		DROP TABLE trig_comp_ins;
+			DROP TABLE trig_comp_ins;
 
-		RETURN NEW;
+			RETURN NEW;
+		ELSE
+			WITH dev_comps AS (
+				SELECT
+					c.component_id,
+					c.component_type_id,
+					level,
+					row_number() OVER (ORDER BY level, c.component_type_id) AS
+						rownum
+				FROM
+					device_type dt JOIN 
+					v_device_components dc ON
+						(dc.device_id = dt.template_device_id) JOIN
+					component c USING (component_id)
+				WHERE
+					device_type_id = NEW.device_type_id
+			),
+			comp_ins AS (
+				INSERT INTO component (
+					component_type_id
+				) SELECT
+					component_type_id
+				FROM
+					dev_comps
+				ORDER BY
+					rownum
+				RETURNING component_id, component_type_id
+			),
+			comp_ins_arr AS (
+				SELECT
+					array_agg(component_id) AS dst_arr
+				FROM
+					comp_ins
+			),
+			dev_comps_arr AS (
+				SELECT
+					array_agg(component_id) as src_arr
+				FROM
+					dev_comps
+			)
+			SELECT src_arr, dst_arr INTO scarr, dcarr FROM
+				dev_comps_arr, comp_ins_arr;
+
+			UPDATE
+				component dc
+			SET
+				parent_slot_id = ds.slot_id
+			FROM
+				unnest(scarr, dcarr) AS 
+					tt(src_component_id, dst_component_id),
+				unnest(scarr, dcarr) AS 
+					ptt(src_component_id, dst_component_id),
+				component sc,
+				slot ss,
+				slot ds
+			WHERE
+				tt.src_component_id = sc.component_id AND
+				tt.dst_component_id = dc.component_id AND
+				ss.slot_id = sc.parent_slot_id AND
+				ss.component_id = ptt.src_component_id AND
+				ds.component_id = ptt.dst_component_id AND
+				ss.slot_type_id = ds.slot_type_id AND
+				ss.slot_name = ds.slot_name;
+
+			SELECT 
+				component_id INTO NEW.component_id
+			FROM 
+				component c
+			WHERE
+				component_id = ANY(dcarr) AND
+				parent_slot_id IS NULL;
+
+			RETURN NEW;
+		END IF;
 	END IF;
 	RETURN NEW;
 END;
