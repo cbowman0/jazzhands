@@ -20,6 +20,17 @@ Invoked:
 	--suffix
 	v60
 	--scan
+	schema_support.get_common_columns
+	schema_support.relation_diff
+	create_new_unix_account
+	validate_asset_component_assignment
+	validate_component_property
+	validate_device_component_assignment
+	validate_inter_component_connection
+	validate_property
+	port_utils.configure_layer1_connect
+	create_component_slots_on_insert
+	create_device_component_by_trigger
 	set_slot_names_by_trigger
 	create_component_slots_by_trigger
 	create_device_component_by_trigger
@@ -71,6 +82,7 @@ Invoked:
 	device_power_connection
 	v_l1_all_physical_ports
 	v_physical_connection
+	device_power_port_sanity
 */
 
 \set ON_ERROR_STOP
@@ -85,6 +97,1947 @@ ADD CONSTRAINT  AK_ACCT_ACCTID_REALM_ID UNIQUE (ACCOUNT_ID,ACCOUNT_REALM_ID);
 DELETE FROM account_password where account_id = 1 and password_type = 'des'
 	AND password = 'T6r7sdlVHpZH2';
 
+COMMENT ON TABLE val_property_data_type IS 'valid data types for property (name,type) pairs.  This maps to property.property_value_* columns.';
+COMMENT ON TABLE val_property_value IS 'Used to simulate foreign key enforcement on property.property_value .  If a property_name,property_type is set to type list, the value must be in this table.';
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc schema_support.get_common_columns -> get_common_columns 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 2562585
+CREATE OR REPLACE FUNCTION schema_support.get_common_columns(_schema text, _table1 text, _table2 text)
+ RETURNS text[]
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	_q			text;
+    cols        text[];
+BEGIN
+    _q := 'WITH cols AS (
+        SELECT  n.nspname as schema, c.relname as relation, a.attname as colname,
+		a.attnum
+            FROM    pg_catalog.pg_attribute a
+                INNER JOIN pg_catalog.pg_class c
+                    on a.attrelid = c.oid
+                INNER JOIN pg_catalog.pg_namespace n
+                    on c.relnamespace = n.oid
+            WHERE   a.attnum > 0
+            AND   NOT a.attisdropped
+            ORDER BY a.attnum
+       ) SELECT array_agg(colname ORDER BY o.attnum) as cols
+        FROM cols  o
+            INNER JOIN cols n USING (schema, colname)
+		WHERE
+			o.schema = $1 
+		and o.relation = $2
+		and n.relation =$3
+	';
+	EXECUTE _q INTO cols USING _schema, _table1, _table2;
+	RETURN cols;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+
+-- DONE WITH proc schema_support.get_common_columns -> get_common_columns 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc schema_support.relation_diff -> relation_diff 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 2562591
+CREATE OR REPLACE FUNCTION schema_support.relation_diff(schema text, old_rel text, new_rel text, key_relation text DEFAULT NULL::text, prikeys text[] DEFAULT NULL::text[], raise_exception boolean DEFAULT true)
+ RETURNS boolean
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	_or	RECORD;
+	_nr	RECORD;
+	_t1	integer;
+	_t2	integer;
+	_cols TEXT[];
+	_q TEXT;
+	_f TEXT;
+	_c RECORD;
+	_w TEXT[];
+	_ctl TEXT[];
+	_rv	boolean;
+BEGIN
+	-- do a simple row count
+	EXECUTE 'SELECT count(*) FROM ' || schema || '."' || old_rel || '"' INTO _t1;
+	EXECUTE 'SELECT count(*) FROM ' || schema || '."' || new_rel || '"' INTO _t2;
+
+	_rv := true;
+
+	IF _t1 IS NULL THEN
+		RAISE NOTICE 'table %.% does not seem to exist', schema, old_rel;
+		_rv := false;
+	END IF;
+	IF _t2 IS NULL THEN
+		RAISE NOTICE 'table %.% does not seem to exist', schema, new_rel;
+		_rv := false;
+	END IF;
+
+	IF _t1 != _t2 THEN
+		RAISE NOTICE 'table % has % rows; table % has % rows', old_rel, _t1, new_rel, _t2;
+		_rv := false;
+	END IF;
+
+	IF NOT _rv THEN
+		IF raise_exception THEN
+			RAISE EXCEPTION 'Relations do not match';
+		END IF;
+		RETURN false;
+	END IF;
+
+	IF prikeys IS NULL THEN
+		-- read into prikeys the primary key for the table
+		IF key_relation IS NULL THEN
+			key_relation := old_rel;
+		END IF;
+		prikeys := schema_support.get_pk_columns(schema, key_relation);
+	END IF;
+
+	-- read into _cols the column list in common between old_rel and new_rel 
+	_cols := schema_support.get_common_columns(schema, old_rel, new_rel);
+
+	FOREACH _f IN ARRAY _cols
+	LOOP
+		SELECT array_append(_ctl, 
+			quote_ident(_f) || '::text') INTO _ctl;
+	END LOOP;
+
+	_cols := _ctl;
+
+	_q := 'SELECT '|| array_to_string(_cols,',') ||' FROM ' || quote_ident(schema) || '.' ||
+		quote_ident(old_rel);
+
+	FOR _or IN EXECUTE _q
+	LOOP
+		_w = NULL;
+		FOREACH _f IN ARRAY prikeys
+		LOOP
+			FOR _c IN SELECT * FROM json_each_text( row_to_json(_or) )
+			LOOP
+				IF _c.key = _f THEN
+					SELECT array_append(_w, 
+						quote_ident(_f) || '::text = ' || quote_literal(_c.value))
+					INTO _w;
+				END IF;
+			END LOOP;
+		END LOOP;
+		_q := 'SELECT ' || array_to_string(_cols,',') || 
+			' FROM ' || quote_ident(schema) || '.' ||
+			quote_ident(new_rel) || ' WHERE ' ||
+			array_to_string(_w, ' AND ' );
+		EXECUTE _q INTO _nr;
+
+		IF _or != _nr THEN
+			RAISE NOTICE 'mismatched row:';
+			RAISE NOTICE 'OLD: %', row_to_json(_or);
+			RAISE NOTICE 'NEW: %', row_to_json(_nr);
+			_rv := false;
+		END IF;
+
+	END LOOP;
+
+	IF NOT _rv AND raise_exception THEN
+		RAISE EXCEPTION 'Relations do not match';
+	END IF;
+	return _rv;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+
+-- DONE WITH proc schema_support.relation_diff -> relation_diff 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc create_new_unix_account -> create_new_unix_account 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'create_new_unix_account', 'create_new_unix_account');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+DROP TRIGGER IF EXISTS trigger_create_new_unix_account ON jazzhands.account;
+-- consider old oid 2589613
+DROP FUNCTION IF EXISTS create_new_unix_account();
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 2570679
+CREATE OR REPLACE FUNCTION jazzhands.create_new_unix_account()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	unix_id 		INTEGER;
+	_account_collection_id 	INTEGER;
+	_arid			INTEGER;
+BEGIN
+	--
+	-- This should be a property that shows which account collections
+	-- get unix accounts created by default, but the mapping of unix-groups
+	-- to account collection across realms needs to be resolved
+	--
+	SELECT  account_realm_id
+	INTO    _arid
+	FROM    property
+	WHERE   property_name = '_root_account_realm_id'
+	AND     property_type = 'Defaults';
+
+	IF _arid IS NOT NULL AND NEW.account_realm_id = _arid THEN
+		IF NEW.person_id != 0 THEN
+			PERFORM person_manip.setup_unix_account(
+				in_account_id := NEW.account_id,
+				in_account_type := NEW.account_type
+			);
+		END IF;
+	END IF;
+	RETURN NEW;	
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+CREATE TRIGGER trigger_create_new_unix_account AFTER INSERT ON account FOR EACH ROW EXECUTE PROCEDURE create_new_unix_account();
+
+-- DONE WITH proc create_new_unix_account -> create_new_unix_account 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc validate_asset_component_assignment -> validate_asset_component_assignment 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'validate_asset_component_assignment', 'validate_asset_component_assignment');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+DROP TRIGGER IF EXISTS trigger_validate_asset_component_assignment ON jazzhands.asset;
+-- consider old oid 2589749
+DROP FUNCTION IF EXISTS validate_asset_component_assignment();
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 2570818
+CREATE OR REPLACE FUNCTION jazzhands.validate_asset_component_assignment()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	asset_permitted		BOOLEAN;
+BEGIN
+	-- If no component_id is set, then we're done
+
+	IF NEW.component_id IS NULL THEN
+		RETURN NEW;
+	END IF;
+
+	SELECT
+		ct.asset_permitted INTO asset_permitted
+	FROM
+		component c JOIN
+		component_type ct USING (component_type_id)
+	WHERE
+		c.component_id = NEW.component_id;
+
+	IF asset_permitted != TRUE THEN
+		RAISE EXCEPTION 'Component type of component_id % may not be assigned to an asset',
+			NEW.component_id
+		USING ERRCODE = 'foreign_key_violation';
+	END IF;
+
+	RETURN NEW;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+CREATE CONSTRAINT TRIGGER trigger_validate_asset_component_assignment AFTER INSERT OR UPDATE OF component_id ON asset DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE PROCEDURE validate_asset_component_assignment();
+
+-- DONE WITH proc validate_asset_component_assignment -> validate_asset_component_assignment 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc validate_component_property -> validate_component_property 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'validate_component_property', 'validate_component_property');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+DROP TRIGGER IF EXISTS trigger_validate_component_property ON jazzhands.component_property;
+-- consider old oid 2589761
+DROP FUNCTION IF EXISTS validate_component_property();
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 2570830
+CREATE OR REPLACE FUNCTION jazzhands.validate_component_property()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	tally				INTEGER;
+	v_comp_prop			RECORD;
+	v_comp_prop_type	RECORD;
+	v_num				INTEGER;
+	v_listvalue			TEXT;
+	component_attrs		RECORD;
+BEGIN
+
+	-- Pull in the data from the property and property_type so we can
+	-- figure out what is and is not valid
+
+	BEGIN
+		SELECT * INTO STRICT v_comp_prop FROM val_component_property WHERE
+			component_property_name = NEW.component_property_name AND
+			component_property_type = NEW.component_property_type;
+
+		SELECT * INTO STRICT v_comp_prop_type FROM val_component_property_type 
+			WHERE component_property_type = NEW.component_property_type;
+	EXCEPTION
+		WHEN NO_DATA_FOUND THEN
+			RAISE EXCEPTION 
+				'Component property name or type does not exist'
+				USING ERRCODE = 'foreign_key_violation';
+			RETURN NULL;
+	END;
+
+	-- Check to see if the property itself is multivalue.  That is, if only
+	-- one value can be set for this property for a specific property LHS
+
+	IF (v_comp_prop.is_multivalue != 'Y') THEN
+		PERFORM 1 FROM component_property WHERE
+			component_property_id != NEW.component_property_id AND
+			component_property_name = NEW.component_property_name AND
+			component_property_type = NEW.component_property_type AND
+			component_type_id IS NOT DISTINCT FROM NEW.component_type_id AND
+			component_function IS NOT DISTINCT FROM NEW.component_function AND
+			component_id iS NOT DISTINCT FROM NEW.component_id AND
+			slot_type_id IS NOT DISTINCT FROM NEW.slot_type_id AND
+			slot_function IS NOT DISTINCT FROM NEW.slot_function AND
+			slot_id IS NOT DISTINCT FROM NEW.slot_id;
+			
+		IF FOUND THEN
+			RAISE EXCEPTION 
+				'Property with name % and type % already exists for given LHS and property is not multivalue',
+				NEW.component_property_name,
+				NEW.component_property_type
+				USING ERRCODE = 'unique_violation';
+			RETURN NULL;
+		END IF;
+	END IF;
+
+	-- Check to see if the property type is multivalue.  That is, if only
+	-- one property and value can be set for any properties with this type
+	-- for a specific property LHS
+
+	IF (v_comp_prop_type.is_multivalue != 'Y') THEN
+		PERFORM 1 FROM component_property WHERE
+			component_property_id != NEW.component_property_id AND
+			component_property_type = NEW.component_property_type AND
+			component_type_id IS NOT DISTINCT FROM NEW.component_type_id AND
+			component_function IS NOT DISTINCT FROM NEW.component_function AND
+			component_id iS NOT DISTINCT FROM NEW.component_id AND
+			slot_type_id IS NOT DISTINCT FROM NEW.slot_type_id AND
+			slot_function IS NOT DISTINCT FROM NEW.slot_function AND
+			slot_id IS NOT DISTINCT FROM NEW.slot_id;
+
+		IF FOUND THEN
+			RAISE EXCEPTION 
+				'Property % of type % already exists for given LHS and property type is not multivalue',
+				NEW.component_property_name, NEW.component_property_type
+				USING ERRCODE = 'unique_violation';
+			RETURN NULL;
+		END IF;
+	END IF;
+
+	-- now validate the property_value columns.
+	tally := 0;
+
+	--
+	-- first determine if the property_value is set properly.
+	--
+
+	-- at this point, tally will be set to 1 if one of the other property
+	-- values is set to something valid.  Now, check the various options for
+	-- PROPERTY_VALUE itself.  If a new type is added to the val table, this
+	-- trigger needs to be updated or it will be considered invalid.  If a
+	-- new PROPERTY_VALUE_* column is added, then it will pass through without
+	-- trigger modification.  This should be considered bad.
+
+	IF NEW.property_value IS NOT NULL THEN
+		tally := tally + 1;
+		IF v_comp_prop.property_data_type = 'boolean' THEN
+			IF NEW.Property_Value != 'Y' AND NEW.Property_Value != 'N' THEN
+				RAISE 'Boolean property_value must be Y or N' USING
+					ERRCODE = 'invalid_parameter_value';
+			END IF;
+		ELSIF v_comp_prop.property_data_type = 'number' THEN
+			BEGIN
+				v_num := to_number(NEW.property_value, '9');
+			EXCEPTION
+				WHEN OTHERS THEN
+					RAISE 'property_value must be numeric' USING
+						ERRCODE = 'invalid_parameter_value';
+			END;
+		ELSIF v_comp_prop.property_data_type = 'list' THEN
+			BEGIN
+				SELECT valid_property_value INTO STRICT v_listvalue FROM 
+					val_component_property_value WHERE
+						property_name = NEW.property_name AND
+						property_type = NEW.property_type AND
+						valid_property_value = NEW.property_value;
+			EXCEPTION
+				WHEN NO_DATA_FOUND THEN
+					RAISE 'property_value must be a valid value' USING
+						ERRCODE = 'invalid_parameter_value';
+			END;
+		ELSIF v_comp_prop.property_data_type != 'string' THEN
+			RAISE 'property_data_type is not a known type' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF v_comp_prop.property_data_type != 'none' AND tally = 0 THEN
+		RAISE 'One of the property_value fields must be set.' USING
+			ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	IF tally > 1 THEN
+		RAISE 'Only one of the property_value fields may be set.' USING
+			ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	--
+	-- At this point, the value itself is valid for this property, now
+	-- determine whether the property is allowed on the target
+	--
+	-- There needs to be a stanza here for every "lhs".  If a new column is
+	-- added to the component_property table, a new stanza needs to be added
+	-- here, otherwise it will not be validated.  This should be considered bad.
+
+	IF v_comp_prop.permit_component_type_id = 'REQUIRED' THEN
+		IF NEW.component_type_id IS NULL THEN
+			RAISE 'component_type_id is required.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	ELSIF v_comp_prop.permit_component_type_id = 'PROHIBITED' THEN
+		IF NEW.component_type_id IS NOT NULL THEN
+			RAISE 'component_type_id is prohibited.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF v_comp_prop.permit_component_function = 'REQUIRED' THEN
+		IF NEW.component_function IS NULL THEN
+			RAISE 'component_function is required.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	ELSIF v_comp_prop.permit_component_function = 'PROHIBITED' THEN
+		IF NEW.component_function IS NOT NULL THEN
+			RAISE 'component_function is prohibited.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF v_comp_prop.permit_component_id = 'REQUIRED' THEN
+		IF NEW.component_id IS NULL THEN
+			RAISE 'component_id is required.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	ELSIF v_comp_prop.permit_component_id = 'PROHIBITED' THEN
+		IF NEW.component_id IS NOT NULL THEN
+			RAISE 'component_id is prohibited.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF v_comp_prop.permit_intcomp_conn_id = 'REQUIRED' THEN
+		IF NEW.inter_component_connection_id IS NULL THEN
+			RAISE 'inter_component_connection_id is required.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	ELSIF v_comp_prop.permit_intcomp_conn_id = 'PROHIBITED' THEN
+		IF NEW.inter_component_connection_id IS NOT NULL THEN
+			RAISE 'inter_component_connection_id is prohibited.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF v_comp_prop.permit_slot_type_id = 'REQUIRED' THEN
+		IF NEW.slot_type_id IS NULL THEN
+			RAISE 'slot_type_id is required.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	ELSIF v_comp_prop.permit_slot_type_id = 'PROHIBITED' THEN
+		IF NEW.slot_type_id IS NOT NULL THEN
+			RAISE 'slot_type_id is prohibited.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF v_comp_prop.permit_slot_function = 'REQUIRED' THEN
+		IF NEW.slot_function IS NULL THEN
+			RAISE 'slot_function is required.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	ELSIF v_comp_prop.permit_slot_function = 'PROHIBITED' THEN
+		IF NEW.slot_function IS NOT NULL THEN
+			RAISE 'slot_function is prohibited.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF v_comp_prop.permit_slot_id = 'REQUIRED' THEN
+		IF NEW.slot_id IS NULL THEN
+			RAISE 'slot_id is required.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	ELSIF v_comp_prop.permit_slot_id = 'PROHIBITED' THEN
+		IF NEW.slot_id IS NOT NULL THEN
+			RAISE 'slot_id is prohibited.'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	--
+	-- LHS population is verified; now validate any particular restrictions
+	-- on individual values
+	--
+
+	--
+	-- For slot_id, validate that the component_type, component_function,
+	-- slot_type, and slot_function are all valid
+	--
+	IF NEW.slot_id IS NOT NULL AND COALESCE(
+			v_comp_prop.required_component_type_id::text,
+			v_comp_prop.required_component_function,
+			v_comp_prop.required_slot_type_id::text,
+			v_comp_prop.required_slot_function) IS NOT NULL THEN
+
+		WITH x AS (
+			SELECT
+				component_type_id,
+				array_agg(component_function) as component_function
+			FROM
+				component_type_component_func
+			GROUP BY
+				component_type_id
+		) SELECT
+			component_type_id,
+			component_function,
+			st.slot_type_id,
+			slot_function
+		INTO
+			component_attrs
+		FROM
+			slot cs JOIN
+			slot_type st USING (slot_type_id) JOIN
+			component c USING (component_id) JOIN
+			component_type ct USING (component_type_id) LEFT JOIN
+			x USING (component_type_id)
+		WHERE
+			slot_id = NEW.slot_id;
+
+		IF v_comp_prop.required_component_type_id IS NOT NULL AND
+				v_comp_prop.required_component_type_id !=
+				component_attrs.component_type_id THEN
+			RAISE 'component_type for slot_id must be % (is: %)',
+					v_comp_prop.required_component_type_id,
+					component_attrs.component_type_id
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+
+		IF v_comp_prop.required_component_function IS NOT NULL AND
+				NOT (v_comp_prop.required_component_function =
+					ANY(component_attrs.component_function)) THEN
+			RAISE 'component_function for slot_id must be % (is: %)',
+					v_comp_prop.required_component_function,
+					component_attrs.component_function
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+
+		IF v_comp_prop.required_slot_type_id IS NOT NULL AND
+				v_comp_prop.required_slot_type_id !=
+				component_attrs.slot_type_id THEN
+			RAISE 'slot_type_id for slot_id must be % (is: %)',
+					v_comp_prop.required_slot_type_id,
+					component_attrs.slot_type_id
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+
+		IF v_comp_prop.required_slot_function IS NOT NULL AND
+				v_comp_prop.required_slot_function !=
+				component_attrs.slot_function THEN
+			RAISE 'slot_function for slot_id must be % (is: %)',
+					v_comp_prop.required_slot_function,
+					component_attrs.slot_function
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF NEW.slot_type_id IS NOT NULL AND 
+			v_comp_prop.required_slot_function IS NOT NULL THEN
+
+		SELECT
+			slot_function
+		INTO
+			component_attrs
+		FROM
+			slot_type st
+		WHERE
+			slot_type_id = NEW.slot_type_id;
+
+		IF v_comp_prop.required_slot_function !=
+				component_attrs.slot_function THEN
+			RAISE 'slot_function for slot_type_id must be % (is: %)',
+					v_comp_prop.required_slot_function,
+					component_attrs.slot_function
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF NEW.component_id IS NOT NULL AND COALESCE(
+			v_comp_prop.required_component_type_id::text,
+			v_comp_prop.required_component_function) IS NOT NULL THEN
+
+		SELECT
+			component_type_id,
+			array_agg(component_function) as component_function
+		INTO
+			component_attrs
+		FROM
+			component c JOIN
+			component_type_component_func ctcf USING (component_type_id)
+		WHERE
+			component_id = NEW.component_id
+		GROUP BY
+			component_type_id;
+
+		IF v_comp_prop.required_component_type_id IS NOT NULL AND
+				v_comp_prop.required_component_type_id !=
+				component_attrs.component_type_id THEN
+			RAISE 'component_type for component_id must be % (is: %)',
+					v_comp_prop.required_component_type_id,
+					component_attrs.component_type_id
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+
+		IF v_comp_prop.required_component_function IS NOT NULL AND
+				NOT (v_comp_prop.required_component_function =
+					ANY(component_attrs.component_function)) THEN
+			RAISE 'component_function for component_id must be % (is: %)',
+					v_comp_prop.required_component_function,
+					component_attrs.component_function
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF NEW.component_type_id IS NOT NULL AND 
+			v_comp_prop.required_component_function IS NOT NULL THEN
+
+		SELECT
+			component_type_id,
+			array_agg(component_function) as component_function
+		INTO
+			component_attrs
+		FROM
+			component_type_component_func ctcf
+		WHERE
+			component_type_id = NEW.component_type_id
+		GROUP BY
+			component_type_id;
+
+		IF v_comp_prop.required_component_function IS NOT NULL AND
+				NOT (v_comp_prop.required_component_function =
+					ANY(component_attrs.component_function)) THEN
+			RAISE 'component_function for component_type_id must be % (is: %)',
+					v_comp_prop.required_component_function,
+					component_attrs.component_function
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+		
+	RETURN NEW;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+CREATE CONSTRAINT TRIGGER trigger_validate_component_property AFTER INSERT OR UPDATE ON component_property DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE PROCEDURE validate_component_property();
+
+-- DONE WITH proc validate_component_property -> validate_component_property 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc validate_device_component_assignment -> validate_device_component_assignment 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'validate_device_component_assignment', 'validate_device_component_assignment');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+DROP TRIGGER IF EXISTS trigger_validate_device_component_assignment ON jazzhands.device;
+-- consider old oid 2589746
+DROP FUNCTION IF EXISTS validate_device_component_assignment();
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 2570815
+CREATE OR REPLACE FUNCTION jazzhands.validate_device_component_assignment()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	dtid		device_type.device_type_id%TYPE;
+	dt_ctid		component.component_type_id%TYPE;
+	ctid		component.component_type_id%TYPE;
+BEGIN
+	-- If no component_id is set, then we're done
+
+	IF NEW.component_id IS NULL THEN
+		RETURN NEW;
+	END IF;
+
+	SELECT
+		device_type_id, component_type_id 
+	INTO
+		dtid, dt_ctid
+	FROM
+		device_type
+	WHERE
+		device_type_id = NEW.device_type_id;
+	
+	IF NOT FOUND OR dt_ctid IS NULL THEN
+		RAISE EXCEPTION 'No component_type_id set for device type'
+		USING ERRCODE = 'foreign_key_violation';
+	END IF;
+
+	SELECT
+		component_type_id INTO ctid
+	FROM
+		component
+	WHERE
+		component_id = NEW.component_id;
+	
+	IF NOT FOUND OR ctid IS DISTINCT FROM dt_ctid THEN
+		RAISE EXCEPTION 'Component type of component_id % does not match component_type for device_type_id % (%)',
+			ctid, dtid, dt_ctid
+		USING ERRCODE = 'foreign_key_violation';
+	END IF;
+
+	RETURN NEW;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+CREATE CONSTRAINT TRIGGER trigger_validate_device_component_assignment AFTER INSERT OR UPDATE OF device_type_id, component_id ON device DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE PROCEDURE validate_device_component_assignment();
+
+-- DONE WITH proc validate_device_component_assignment -> validate_device_component_assignment 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc validate_inter_component_connection -> validate_inter_component_connection 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'validate_inter_component_connection', 'validate_inter_component_connection');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+DROP TRIGGER IF EXISTS trigger_validate_inter_component_connection ON jazzhands.inter_component_connection;
+-- consider old oid 2589755
+DROP FUNCTION IF EXISTS validate_inter_component_connection();
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 2570824
+CREATE OR REPLACE FUNCTION jazzhands.validate_inter_component_connection()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	slot_type_info	RECORD;
+	csid_rec	RECORD;
+BEGIN
+	IF NEW.slot1_id = NEW.slot2_id THEN
+		RAISE EXCEPTION 'A slot may not be connected to itself'
+			USING ERRCODE = 'check_violation';
+	END IF;
+
+	--
+	-- Validate that slot_ids are not already connected
+	-- to something else
+	--
+
+	SELECT
+		slot1_id,
+		slot2_id
+	INTO
+		csid_rec
+	FROM
+		inter_component_connection icc
+	WHERE
+		icc.inter_component_connection_id != NEW.inter_component_connection_id
+			AND
+		(icc.slot1_id = NEW.slot1_id OR
+		 icc.slot1_id = NEW.slot2_id OR
+		 icc.slot2_id = NEW.slot1_id OR
+		 icc.slot2_id = NEW.slot2_id )
+	LIMIT 1;
+
+	IF FOUND THEN
+		IF csid_rec.slot1_id = NEW.slot1_id THEN
+			RAISE EXCEPTION 
+				'slot_id % is already attached to slot_id %',
+				NEW.slot1_id, csid_rec.slot2_id
+				USING ERRCODE = 'unique_violation';
+		ELSIF csid_rec.slot1_id = NEW.slot2_id THEN
+			RAISE EXCEPTION 
+				'slot_id % is already attached to slot_id %',
+				NEW.slot1_id, csid_rec.slot1_id
+				USING ERRCODE = 'unique_violation';
+		ELSIF csid_rec.slot2_id = NEW.slot1_id THEN
+			RAISE EXCEPTION 
+				'slot_id % is already attached to slot_id %',
+				NEW.slot2_id, csid_rec.slot2_id
+				USING ERRCODE = 'unique_violation';
+		ELSIF csid_rec.slot2_id = NEW.slot2_id THEN
+			RAISE EXCEPTION 
+				'slot_id % is already attached to slot_id %',
+				NEW.slot2_id, csid_rec.slot1_id
+				USING ERRCODE = 'unique_violation';
+		END IF;
+	END IF;
+		
+	PERFORM
+		*
+	FROM
+		(slot cs1 JOIN slot_type st1 USING (slot_type_id)) slot1,
+		(slot cs2 JOIN slot_type st2 USING (slot_type_id)) slot2,
+		slot_type_prmt_rem_slot_type pst
+	WHERE
+		slot1.slot_id = NEW.slot1_id AND
+		slot2.slot_id = NEW.slot2_id AND
+		-- Remove next line if we ever decide to allow cross-function
+		-- connections
+		slot1.slot_function = slot2.slot_function AND
+		((slot1.slot_type_id = pst.slot_type_id AND
+				slot2.slot_type_id = pst.remote_slot_type_id) OR
+			(slot2.slot_type_id = pst.slot_type_id AND
+				slot1.slot_type_id = pst.remote_slot_type_id));
+	
+	IF NOT FOUND THEN
+		RAISE EXCEPTION 'Slot types are not allowed to be connected'
+			USING ERRCODE = 'check_violation';
+	END IF;
+
+	RETURN NEW;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+CREATE CONSTRAINT TRIGGER trigger_validate_inter_component_connection AFTER INSERT OR UPDATE ON inter_component_connection DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE PROCEDURE validate_inter_component_connection();
+
+-- DONE WITH proc validate_inter_component_connection -> validate_inter_component_connection 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc validate_property -> validate_property 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'validate_property', 'validate_property');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+DROP TRIGGER IF EXISTS trigger_validate_property ON jazzhands.property;
+-- consider old oid 2589633
+DROP FUNCTION IF EXISTS validate_property();
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 2570701
+CREATE OR REPLACE FUNCTION jazzhands.validate_property()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	tally			integer;
+	v_prop			VAL_Property%ROWTYPE;
+	v_proptype		VAL_Property_Type%ROWTYPE;
+	v_account_collection	account_collection%ROWTYPE;
+	v_device_collection		device_collection%ROWTYPE;
+	v_netblock_collection	netblock_collection%ROWTYPE;
+	v_num			integer;
+	v_listvalue		Property.Property_Value%TYPE;
+BEGIN
+
+	-- Pull in the data from the property and property_type so we can
+	-- figure out what is and is not valid
+
+	BEGIN
+		SELECT * INTO STRICT v_prop FROM VAL_Property WHERE
+			Property_Name = NEW.Property_Name AND
+			Property_Type = NEW.Property_Type;
+
+		SELECT * INTO STRICT v_proptype FROM VAL_Property_Type WHERE
+			Property_Type = NEW.Property_Type;
+	EXCEPTION
+		WHEN NO_DATA_FOUND THEN
+			RAISE EXCEPTION 
+				'Property name or type does not exist'
+				USING ERRCODE = 'foreign_key_violation';
+			RETURN NULL;
+	END;
+
+	-- Check to see if the property itself is multivalue.  That is, if only
+	-- one value can be set for this property for a specific property LHS
+
+	IF (v_prop.is_multivalue = 'N') THEN
+		PERFORM 1 FROM Property WHERE
+			Property_Id != NEW.Property_Id AND
+			Property_Name = NEW.Property_Name AND
+			Property_Type = NEW.Property_Type AND
+			((Company_Id IS NULL AND NEW.Company_Id IS NULL) OR
+				(Company_Id = NEW.Company_Id)) AND
+			((Device_Collection_Id IS NULL AND NEW.Device_Collection_Id IS NULL) OR
+				(Device_Collection_Id = NEW.Device_Collection_Id)) AND
+			((DNS_Domain_Id IS NULL AND NEW.DNS_Domain_Id IS NULL) OR
+				(DNS_Domain_Id = NEW.DNS_Domain_Id)) AND
+			((Operating_System_Id IS NULL AND NEW.Operating_System_Id IS NULL) OR
+				(Operating_System_Id = NEW.Operating_System_Id)) AND
+			((operating_system_snapshot_id IS NULL AND NEW.operating_system_snapshot_id IS NULL) OR
+				(operating_system_snapshot_id = NEW.operating_system_snapshot_id)) AND
+			((service_env_collection_id IS NULL AND NEW.service_env_collection_id IS NULL) OR
+				(service_env_collection_id = NEW.service_env_collection_id)) AND
+			((Site_Code IS NULL AND NEW.Site_Code IS NULL) OR
+				(Site_Code = NEW.Site_Code)) AND
+			((Account_Id IS NULL AND NEW.Account_Id IS NULL) OR
+				(Account_Id = NEW.Account_Id)) AND
+			((Account_Realm_Id IS NULL AND NEW.Account_Realm_Id IS NULL) OR
+				(Account_Realm_Id = NEW.Account_Realm_Id)) AND
+			((account_collection_Id IS NULL AND NEW.account_collection_Id IS NULL) OR
+				(account_collection_Id = NEW.account_collection_Id)) AND
+			((netblock_collection_Id IS NULL AND NEW.netblock_collection_Id IS NULL) OR
+				(netblock_collection_Id = NEW.netblock_collection_Id)) AND
+			((layer2_network_id IS NULL AND NEW.layer2_network_id IS NULL) OR
+				(layer2_network_id = NEW.layer2_network_id)) AND
+			((layer3_network_id IS NULL AND NEW.layer3_network_id IS NULL) OR
+				(layer3_network_id = NEW.layer3_network_id)) AND
+			((person_id IS NULL AND NEW.Person_id IS NULL) OR
+				(Person_Id = NEW.person_id)) AND
+			((property_collection_id IS NULL AND NEW.property_collection_id IS NULL) OR
+				(property_collection_id = NEW.property_collection_id))
+			;
+
+		IF FOUND THEN
+			RAISE EXCEPTION 
+				'Property of type % already exists for given LHS and property is not multivalue',
+				NEW.Property_Type
+				USING ERRCODE = 'unique_violation';
+			RETURN NULL;
+		END IF;
+	END IF;
+
+	-- Check to see if the property type is multivalue.  That is, if only
+	-- one property and value can be set for any properties with this type
+	-- for a specific property LHS
+
+	IF (v_proptype.is_multivalue = 'N') THEN
+		PERFORM 1 FROM Property WHERE
+			Property_Id != NEW.Property_Id AND
+			Property_Type = NEW.Property_Type AND
+			((Company_Id IS NULL AND NEW.Company_Id IS NULL) OR
+				(Company_Id = NEW.Company_Id)) AND
+			((Device_Collection_Id IS NULL AND NEW.Device_Collection_Id IS NULL) OR
+				(Device_Collection_Id = NEW.Device_Collection_Id)) AND
+			((DNS_Domain_Id IS NULL AND NEW.DNS_Domain_Id IS NULL) OR
+				(DNS_Domain_Id = NEW.DNS_Domain_Id)) AND
+			((Operating_System_Id IS NULL AND NEW.Operating_System_Id IS NULL) OR
+				(Operating_System_Id = NEW.Operating_System_Id)) AND
+			((operating_system_snapshot_id IS NULL AND NEW.operating_system_snapshot_id IS NULL) OR
+				(operating_system_snapshot_id = NEW.operating_system_snapshot_id)) AND
+			((service_env_collection_id IS NULL AND NEW.service_env_collection_id IS NULL) OR
+				(service_env_collection_id = NEW.service_env_collection_id)) AND
+			((Site_Code IS NULL AND NEW.Site_Code IS NULL) OR
+				(Site_Code = NEW.Site_Code)) AND
+			((Person_id IS NULL AND NEW.Person_id IS NULL) OR
+				(Person_Id = NEW.Person_Id)) AND
+			((Account_Id IS NULL AND NEW.Account_Id IS NULL) OR
+				(Account_Id = NEW.Account_Id)) AND
+			((Account_Id IS NULL AND NEW.Account_Id IS NULL) OR
+				(Account_Id = NEW.Account_Id)) AND
+			((Account_Realm_id IS NULL AND NEW.Account_Realm_id IS NULL) OR
+				(Account_Realm_id = NEW.Account_Realm_id)) AND
+			((account_collection_Id IS NULL AND NEW.account_collection_Id IS NULL) OR
+				(account_collection_Id = NEW.account_collection_Id)) AND
+			((layer2_network_id IS NULL AND NEW.layer2_network_id IS NULL) OR
+				(layer2_network_id = NEW.layer2_network_id)) AND
+			((layer3_network_id IS NULL AND NEW.layer3_network_id IS NULL) OR
+				(layer3_network_id = NEW.layer3_network_id)) AND
+			((netblock_collection_Id IS NULL AND NEW.netblock_collection_Id IS NULL) OR
+				(netblock_collection_Id = NEW.netblock_collection_Id)) AND
+			((property_collection_Id IS NULL AND NEW.property_collection_Id IS NULL) OR
+				(property_collection_Id = NEW.property_collection_Id))
+		;
+
+		IF FOUND THEN
+			RAISE EXCEPTION 
+				'Property % of type % already exists for given LHS and property type is not multivalue',
+				NEW.Property_Name, NEW.Property_Type
+				USING ERRCODE = 'unique_violation';
+			RETURN NULL;
+		END IF;
+	END IF;
+
+	-- now validate the property_value columns.
+	tally := 0;
+
+	--
+	-- first determine if the property_value is set properly.
+	--
+
+	-- iterate over each of fk PROPERTY_VALUE columns and if a valid
+	-- value is set, increment tally, otherwise raise an exception.
+	IF NEW.Property_Value_Company_Id IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'company_id' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be Company_Id' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_Password_Type IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'password_type' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be Password_Type' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_Token_Col_Id IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'token_collection_id' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be Token_Collection_Id' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_SW_Package_Id IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'sw_package_id' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be SW_Package_Id' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_Account_Coll_Id IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'account_collection_id' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be account_collection_id' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_nblk_Coll_Id IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'netblock_collection_id' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be nblk_collection_id' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_Timestamp IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'timestamp' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be Timestamp' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_DNS_Domain_Id IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'dns_domain_id' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be DNS_Domain_Id' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_Person_Id IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'person_id' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be Person_Id' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+	IF NEW.Property_Value_Device_Coll_Id IS NOT NULL THEN
+		IF v_prop.Property_Data_Type = 'device_collection_id' THEN
+			tally := tally + 1;
+		ELSE
+			RAISE 'Property value may not be Device_Collection_Id' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	-- at this point, tally will be set to 1 if one of the other property
+	-- values is set to something valid.  Now, check the various options for
+	-- PROPERTY_VALUE itself.  If a new type is added to the val table, this
+	-- trigger needs to be updated or it will be considered invalid.  If a
+	-- new PROPERTY_VALUE_* column is added, then it will pass through without
+	-- trigger modification.  This should be considered bad.
+
+	IF NEW.Property_Value IS NOT NULL THEN
+		tally := tally + 1;
+		IF v_prop.Property_Data_Type = 'boolean' THEN
+			IF NEW.Property_Value != 'Y' AND NEW.Property_Value != 'N' THEN
+				RAISE 'Boolean Property_Value must be Y or N' USING
+					ERRCODE = 'invalid_parameter_value';
+			END IF;
+		ELSIF v_prop.Property_Data_Type = 'number' THEN
+			BEGIN
+				v_num := to_number(NEW.property_value, '9');
+			EXCEPTION
+				WHEN OTHERS THEN
+					RAISE 'Property_Value must be numeric' USING
+						ERRCODE = 'invalid_parameter_value';
+			END;
+		ELSIF v_prop.Property_Data_Type = 'list' THEN
+			BEGIN
+				SELECT Valid_Property_Value INTO STRICT v_listvalue FROM 
+					VAL_Property_Value WHERE
+						Property_Name = NEW.Property_Name AND
+						Property_Type = NEW.Property_Type AND
+						Valid_Property_Value = NEW.Property_Value;
+			EXCEPTION
+				WHEN NO_DATA_FOUND THEN
+					RAISE 'Property_Value must be a valid value' USING
+						ERRCODE = 'invalid_parameter_value';
+			END;
+		ELSIF v_prop.Property_Data_Type != 'string' THEN
+			RAISE 'Property_Data_Type is not a known type' USING
+				ERRCODE = 'invalid_parameter_value';
+		END IF;
+	END IF;
+
+	IF v_prop.Property_Data_Type != 'none' AND tally = 0 THEN
+		RAISE 'One of the PROPERTY_VALUE fields must be set.' USING
+			ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	IF tally > 1 THEN
+		RAISE 'Only one of the PROPERTY_VALUE fields may be set.' USING
+			ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	-- If the RHS contains a account_collection_ID, check to see if it must be a
+	-- specific type (e.g. per-user), and verify that if so
+	IF NEW.Property_Value_Account_Coll_Id IS NOT NULL THEN
+		IF v_prop.prop_val_acct_coll_type_rstrct IS NOT NULL THEN
+			BEGIN
+				SELECT * INTO STRICT v_account_collection 
+					FROM account_collection WHERE
+					account_collection_Id = NEW.Property_Value_Account_Coll_Id;
+				IF v_account_collection.account_collection_Type != v_prop.prop_val_acct_coll_type_rstrct
+				THEN
+					RAISE 'Property_Value_Account_Coll_Id must be of type %',
+					v_prop.prop_val_acct_coll_type_rstrct
+					USING ERRCODE = 'invalid_parameter_value';
+				END IF;
+			EXCEPTION
+				WHEN NO_DATA_FOUND THEN
+					-- let the database deal with the fk exception later
+					NULL;
+			END;
+		END IF;
+	END IF;
+
+	-- If the RHS contains a netblock_collection_ID, check to see if it must be a
+	-- specific type and verify that if so
+	IF NEW.Property_Value_nblk_Coll_Id IS NOT NULL THEN
+		IF v_prop.prop_val_acct_coll_type_rstrct IS NOT NULL THEN
+			BEGIN
+				SELECT * INTO STRICT v_netblock_collection 
+					FROM netblock_collection WHERE
+					netblock_collection_Id = NEW.Property_Value_nblk_Coll_Id;
+				IF v_netblock_collection.netblock_collection_Type != v_prop.prop_val_acct_coll_type_rstrct
+				THEN
+					RAISE 'Property_Value_nblk_Coll_Id must be of type %',
+					v_prop.prop_val_acct_coll_type_rstrct
+					USING ERRCODE = 'invalid_parameter_value';
+				END IF;
+			EXCEPTION
+				WHEN NO_DATA_FOUND THEN
+					-- let the database deal with the fk exception later
+					NULL;
+			END;
+		END IF;
+	END IF;
+
+	-- If the RHS contains a device_collection_id, check to see if it must be a
+	-- specific type and verify that if so
+	IF NEW.Property_Value_Device_Coll_Id IS NOT NULL THEN
+		IF v_prop.prop_val_dev_coll_type_rstrct IS NOT NULL THEN
+			BEGIN
+				SELECT * INTO STRICT v_device_collection 
+					FROM device_collection WHERE
+					device_collection_id = NEW.Property_Value_Device_Coll_Id;
+				IF v_device_collection.device_collection_type != 
+					v_prop.prop_val_dev_coll_type_rstrct
+				THEN
+					RAISE 'Property_Value_Device_Coll_Id must be of type %',
+					v_prop.prop_val_dev_coll_type_rstrct
+					USING ERRCODE = 'invalid_parameter_value';
+				END IF;
+			EXCEPTION
+				WHEN NO_DATA_FOUND THEN
+					-- let the database deal with the fk exception later
+					NULL;
+			END;
+		END IF;
+	END IF;
+
+	-- At this point, the RHS has been checked, so now we verify data
+	-- set on the LHS
+
+	-- There needs to be a stanza here for every "lhs".  If a new column is
+	-- added to the property table, a new stanza needs to be added here,
+	-- otherwise it will not be validated.  This should be considered bad.
+
+	IF v_prop.Permit_Company_Id = 'REQUIRED' THEN
+			IF NEW.Company_Id IS NULL THEN
+				RAISE 'Company_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_Company_Id = 'PROHIBITED' THEN
+			IF NEW.Company_Id IS NOT NULL THEN
+				RAISE 'Company_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_Device_Collection_Id = 'REQUIRED' THEN
+			IF NEW.Device_Collection_Id IS NULL THEN
+				RAISE 'Device_Collection_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+
+	ELSIF v_prop.Permit_Device_Collection_Id = 'PROHIBITED' THEN
+			IF NEW.Device_Collection_Id IS NOT NULL THEN
+				RAISE 'Device_Collection_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_DNS_Domain_Id = 'REQUIRED' THEN
+			IF NEW.DNS_Domain_Id IS NULL THEN
+				RAISE 'DNS_Domain_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_DNS_Domain_Id = 'PROHIBITED' THEN
+			IF NEW.DNS_Domain_Id IS NOT NULL THEN
+				RAISE 'DNS_Domain_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.permit_service_env_collection = 'REQUIRED' THEN
+			IF NEW.service_env_collection_id IS NULL THEN
+				RAISE 'service_env_collection_id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.permit_service_env_collection = 'PROHIBITED' THEN
+			IF NEW.service_env_collection_id IS NOT NULL THEN
+				RAISE 'service_environment is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_Operating_System_Id = 'REQUIRED' THEN
+			IF NEW.Operating_System_Id IS NULL THEN
+				RAISE 'Operating_System_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_Operating_System_Id = 'PROHIBITED' THEN
+			IF NEW.Operating_System_Id IS NOT NULL THEN
+				RAISE 'Operating_System_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.permit_os_snapshot_id = 'REQUIRED' THEN
+			IF NEW.operating_system_snapshot_id IS NULL THEN
+				RAISE 'operating_system_snapshot_id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.permit_os_snapshot_id = 'PROHIBITED' THEN
+			IF NEW.operating_system_snapshot_id IS NOT NULL THEN
+				RAISE 'operating_system_snapshot_id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_Site_Code = 'REQUIRED' THEN
+			IF NEW.Site_Code IS NULL THEN
+				RAISE 'Site_Code is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_Site_Code = 'PROHIBITED' THEN
+			IF NEW.Site_Code IS NOT NULL THEN
+				RAISE 'Site_Code is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_Account_Id = 'REQUIRED' THEN
+			IF NEW.Account_Id IS NULL THEN
+				RAISE 'Account_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_Account_Id = 'PROHIBITED' THEN
+			IF NEW.Account_Id IS NOT NULL THEN
+				RAISE 'Account_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_Account_Realm_Id = 'REQUIRED' THEN
+			IF NEW.Account_Realm_Id IS NULL THEN
+				RAISE 'Account_Realm_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_Account_Realm_Id = 'PROHIBITED' THEN
+			IF NEW.Account_Realm_Id IS NOT NULL THEN
+				RAISE 'Account_Realm_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_account_collection_Id = 'REQUIRED' THEN
+			IF NEW.account_collection_Id IS NULL THEN
+				RAISE 'account_collection_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_account_collection_Id = 'PROHIBITED' THEN
+			IF NEW.account_collection_Id IS NOT NULL THEN
+				RAISE 'account_collection_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_layer2_network_id = 'REQUIRED' THEN
+			IF NEW.layer2_network_id IS NULL THEN
+				RAISE 'layer2_network_id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_layer2_network_id = 'PROHIBITED' THEN
+			IF NEW.layer2_network_id IS NOT NULL THEN
+				RAISE 'layer2_network_id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_layer3_network_id = 'REQUIRED' THEN
+			IF NEW.layer3_network_id IS NULL THEN
+				RAISE 'layer3_network_id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_layer3_network_id = 'PROHIBITED' THEN
+			IF NEW.layer3_network_id IS NOT NULL THEN
+				RAISE 'layer3_network_id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_netblock_collection_Id = 'REQUIRED' THEN
+			IF NEW.netblock_collection_Id IS NULL THEN
+				RAISE 'netblock_collection_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_netblock_collection_Id = 'PROHIBITED' THEN
+			IF NEW.netblock_collection_Id IS NOT NULL THEN
+				RAISE 'netblock_collection_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_property_collection_Id = 'REQUIRED' THEN
+			IF NEW.property_collection_Id IS NULL THEN
+				RAISE 'property_collection_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_property_collection_Id = 'PROHIBITED' THEN
+			IF NEW.property_collection_Id IS NOT NULL THEN
+				RAISE 'property_collection_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_Person_Id = 'REQUIRED' THEN
+			IF NEW.Person_Id IS NULL THEN
+				RAISE 'Person_Id is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_Person_Id = 'PROHIBITED' THEN
+			IF NEW.Person_Id IS NOT NULL THEN
+				RAISE 'Person_Id is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	IF v_prop.Permit_Property_Rank = 'REQUIRED' THEN
+			IF NEW.property_rank IS NULL THEN
+				RAISE 'property_rank is required.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	ELSIF v_prop.Permit_Property_Rank = 'PROHIBITED' THEN
+			IF NEW.property_rank IS NOT NULL THEN
+				RAISE 'property_rank is prohibited.'
+					USING ERRCODE = 'invalid_parameter_value';
+			END IF;
+	END IF;
+
+	RETURN NEW;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+CREATE TRIGGER trigger_validate_property BEFORE INSERT OR UPDATE ON property FOR EACH ROW EXECUTE PROCEDURE validate_property();
+
+-- DONE WITH proc validate_property -> validate_property 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc port_utils.configure_layer1_connect -> configure_layer1_connect 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('port_utils', 'configure_layer1_connect', 'configure_layer1_connect');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+-- consider old oid 2589566
+DROP FUNCTION IF EXISTS port_utils.configure_layer1_connect(physportid1 integer, physportid2 integer, baud integer, data_bits integer, stop_bits integer, parity character varying, flw_cntrl character varying, circuit_id integer);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 2570632
+CREATE OR REPLACE FUNCTION port_utils.configure_layer1_connect(physportid1 integer, physportid2 integer, baud integer DEFAULT (-99), data_bits integer DEFAULT (-99), stop_bits integer DEFAULT (-99), parity text DEFAULT '__unknown__'::text, flw_cntrl text DEFAULT '__unknown__'::text, circuit_id integer DEFAULT (-99))
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE
+	tally		integer;
+	l1_con_id	layer1_connection.layer1_connection_id%TYPE;
+	l1con		layer1_connection%ROWTYPE;
+	p1_l1_con	layer1_connection%ROWTYPE;
+	p2_l1_con	layer1_connection%ROWTYPE;
+	p1_port		physical_port%ROWTYPE;
+	p2_port		physical_port%ROWTYPE;
+	col_nams	varchar(100) [];
+	col_vals	varchar(100) [];
+	updateitr	integer;
+	i_baud		layer1_connection.baud%type;
+	i_data_bits	layer1_connection.data_bits%type;
+	i_stop_bits	layer1_connection.stop_bits%type;
+	i_parity     	layer1_connection.parity%type;
+	i_flw_cntrl	layer1_connection.flow_control%type;
+	i_circuit_id layer1_connection.circuit_id%type;
+BEGIN
+	RAISE DEBUG 'looking up % and %', physportid1, physportid2;
+
+	RAISE DEBUG 'min args %:%:% <--', physportid1, physportid2, circuit_id;
+
+	-- First make sure the physical ports exist
+	BEGIN
+		select	*
+		  into	p1_port
+		  from	physical_port
+		 where	physical_port_id = physportid1;
+
+		select	*
+		  into	p2_port
+		  from	physical_port
+		 where	physical_port_id = physportid2;
+	EXCEPTION WHEN no_data_found THEN
+		RAISE EXCEPTION 'Two physical ports must be specified'
+			USING ERRCODE = -20100;
+	END;
+
+	if p1_port.port_type <> p2_port.port_type then
+		RAISE EXCEPTION 'Port Types Must match' USING ERRCODE = -20101;
+	end if;
+
+	-- see if existing layer1_connection exists
+	-- [XXX] probably want to pull out into a cursor
+	BEGIN
+		select	*
+		  into	p1_l1_con
+		  from	layer1_connection
+		 where	physical_port1_id = physportid1
+		    or  physical_port2_id = physportid1;
+	EXCEPTION WHEN no_data_found THEN
+		NULL;
+	END;
+	BEGIN
+		select	*
+		  into	p2_l1_con
+		  from	layer1_connection
+		 where	physical_port1_id = physportid2
+		    or  physical_port2_id = physportid2;
+	
+	EXCEPTION WHEN no_data_found THEN
+		NULL;
+	END;
+
+	updateitr := 0;
+
+	--		need to figure out which ports to reset in some cases
+	--		need to check as many combinations as possible.
+	--		need to deal with new ids.
+
+	--
+	-- If a connection already exists, figure out the right one
+	-- If there are two, then remove one.  Favor ones where the left
+	-- is this port.
+	--
+	-- Also falling out of this will be the port needs to be updated,
+	-- assuming a port needs to be updated
+	--
+	RAISE DEBUG 'one is %, the other is %', p1_l1_con.layer1_connection_id,
+		p2_l1_con.layer1_connection_id;
+	if (p1_l1_con.layer1_connection_id is not NULL) then
+		if (p2_l1_con.layer1_connection_id is not NULL) then
+			if (p1_l1_con.physical_port1_id = physportid1) then
+				--
+				-- if this is not true, then the connection already
+				-- exists between these two, and layer1_params need to
+				-- be set later.  If they are already connected,
+				-- this gets discovered here
+				--
+				if(p1_l1_con.physical_port2_id != physportid2) then
+					--
+					-- physport1 is connected to something, just not this
+					--
+					RAISE DEBUG 'physport1 is connected to something, just not this';
+					l1_con_id := p1_l1_con.layer1_connection_id;
+					--
+					-- physport2 is connected to something, which needs to go away, so make it go away
+					--
+					if(p2_l1_con.layer1_connection_id is not NULL) then
+						RAISE DEBUG 'physport2 is connected to something, just not this';
+						RAISE DEBUG '>>>> removing %', 
+							p2_l1_con.layer1_connection_id;
+						delete from layer1_connection
+							where layer1_connection_id =
+								p2_l1_con.layer1_connection_id;
+					end if;
+				else
+					l1_con_id := p1_l1_con.layer1_connection_id;
+					RAISE DEBUG 'they''re already connected';
+				end if;
+			elsif (p1_l1_con.physical_port2_id = physportid1) then
+				RAISE DEBUG '>>> connection is backwards!';
+				if (p1_l1_con.physical_port1_id != physportid2) then
+					if (p2_l1_con.physical_port1_id = physportid1) then
+						l1_con_id := p2_l1_con.layer1_connection_id;
+						RAISE DEBUG '>>>>+ removing %', p1_l1_con.layer1_connection_id;
+						delete from layer1_connection
+							where layer1_connection_id =
+								p1_l1_con.layer1_connection_id;
+					else
+						if (p1_l1_con.physical_port1_id = physportid1) then
+							l1_con_id := p1_l1_con.layer1_connection_id;
+						else
+							-- p1_l1_con.physical_port2_id must be physportid1
+							l1_con_id := p1_l1_con.layer1_connection_id;
+						end if;
+						RAISE DEBUG '>>>>- removing %', p2_l1_con.layer1_connection_id;
+						delete from layer1_connection
+							where layer1_connection_id =
+								p2_l1_con.layer1_connection_id;
+					end if;
+				else
+					RAISE DEBUG 'they''re already connected, but backwards';
+					l1_con_id := p1_l1_con.layer1_connection_id;
+				end if;
+			end if;
+		else
+			RAISE DEBUG 'p1 is connected, bt p2 is not';
+			l1_con_id := p1_l1_con.layer1_connection_id;
+		end if;
+	elsif(p2_l1_con.layer1_connection_id is NULL) then
+		-- both are null in this case
+			
+		IF (circuit_id = -99) THEN
+			i_circuit_id := NULL;
+		ELSE
+			i_circuit_id := circuit_id;
+		END IF;
+		IF (baud = -99) THEN
+			i_baud := NULL;
+		ELSE
+			i_baud := baud;
+		END IF;
+		IF data_bits = -99 THEN
+			i_data_bits := NULL;
+		ELSE
+			i_data_bits := data_bits;
+		END IF;
+		IF stop_bits = -99 THEN
+			i_stop_bits := NULL;
+		ELSE
+			i_stop_bits := stop_bits;
+		END IF;
+		IF parity = '__unknown__' THEN
+			i_parity := NULL;
+		ELSE
+			i_parity := parity;
+		END IF;
+		IF flw_cntrl = '__unknown__' THEN
+			i_flw_cntrl := NULL;
+		ELSE
+			i_flw_cntrl := flw_cntrl;
+		END IF;
+		IF p1_port.port_type = 'serial' THEN
+		        insert into layer1_connection (
+			        PHYSICAL_PORT1_ID, PHYSICAL_PORT2_ID,
+			        BAUD, DATA_BITS, STOP_BITS, PARITY, FLOW_CONTROL, 
+			        CIRCUIT_ID, IS_TCPSRV_ENABLED
+		        ) values (
+			        physportid1, physportid2,
+			        i_baud, i_data_bits, i_stop_bits, i_parity, i_flw_cntrl,
+			        i_circuit_id, 'Y'
+		        ) RETURNING layer1_connection_id into l1_con_id;
+		ELSE
+		        insert into layer1_connection (
+			        PHYSICAL_PORT1_ID, PHYSICAL_PORT2_ID,
+			        BAUD, DATA_BITS, STOP_BITS, PARITY, FLOW_CONTROL, 
+			        CIRCUIT_ID
+		        ) values (
+			        physportid1, physportid2,
+			        i_baud, i_data_bits, i_stop_bits, i_parity, i_flw_cntrl,
+			        i_circuit_id
+		        ) RETURNING layer1_connection_id into l1_con_id;
+		END IF;
+		RAISE DEBUG 'added, l1_con_id is %', l1_con_id;
+		return 1;
+	else
+		RAISE DEBUG 'p2 is connected but p1 is not';
+		l1_con_id := p2_l1_con.layer1_connection_id;
+	end if;
+
+	RAISE DEBUG 'l1_con_id is %', l1_con_id;
+
+	-- check to see if both ends are the same type
+	-- see if they're already connected.  If not, zap the connection
+	--	that doesn't match this port1/port2 config (favor first port)
+	-- update various variables
+	select	*
+	  into	l1con
+	  from	layer1_connection
+	 where	layer1_connection_id = l1_con_id;
+
+	if (l1con.PHYSICAL_PORT1_ID != physportid1 OR
+			l1con.PHYSICAL_PORT2_ID != physportid2) AND
+			(l1con.PHYSICAL_PORT1_ID != physportid2 OR
+			l1con.PHYSICAL_PORT2_ID != physportid1)  THEN
+		-- this means that one end is wrong, now we need to figure out
+		-- which end.
+		if(l1con.PHYSICAL_PORT1_ID = physportid1) THEN
+			RAISE DEBUG 'update port2 to second port';
+			updateitr := updateitr + 1;
+			col_nams[updateitr] := 'PHYSICAL_PORT2_ID';
+			col_vals[updateitr] := physportid2;
+		elsif(l1con.PHYSICAL_PORT2_ID = physportid1) THEN
+			RAISE DEBUG 'update port1 to second port';
+			updateitr := updateitr + 1;
+			col_nams[updateitr] := 'PHYSICAL_PORT1_ID';
+			col_vals[updateitr] := physportid2;
+		elsif(l1con.PHYSICAL_PORT1_ID = physportid2) THEN
+			RAISE DEBUG 'update port2 to first port';
+			updateitr := updateitr + 1;
+			col_nams[updateitr] := 'PHYSICAL_PORT2_ID';
+			col_vals[updateitr] := physportid1;
+		elsif(l1con.PHYSICAL_PORT2_ID = physportid2) THEN
+			RAISE DEBUG 'update port1 to first port';
+			updateitr := updateitr + 1;
+			col_nams[updateitr] := 'PHYSICAL_PORT1_ID';
+			col_vals[updateitr] := physportid1;
+		end if;
+	end if;
+
+	RAISE DEBUG 'circuit_id -- % v %', circuit_id, l1con.circuit_id;
+	if(circuit_id <> -99 and (l1con.circuit_id is NULL or l1con.circuit_id <> circuit_id)) THEN
+		RAISE DEBUG 'updating circuit_id';
+		updateitr := updateitr + 1;
+		col_nams[updateitr] := 'CIRCUIT_ID';
+		col_vals[updateitr] := circuit_id;
+	end if;
+
+	RAISE DEBUG  'baud: % v %', baud, l1con.baud;
+	if(baud <> -99 and (l1con.baud is NULL or l1con.baud <> baud)) THEN
+		RAISE DEBUG 'updating baud';
+		updateitr := updateitr + 1;
+		col_nams[updateitr] := 'BAUD';
+		col_vals[updateitr] := baud;
+	end if;
+
+	if(data_bits <> -99 and (l1con.data_bits is NULL or l1con.data_bits <> data_bits)) THEN
+		RAISE DEBUG 'updating data_bits';
+		updateitr := updateitr + 1;
+		col_nams[updateitr] := 'DATA_BITS';
+		col_vals[updateitr] := data_bits;
+	end if;
+
+	if(stop_bits <> -99 and (l1con.stop_bits is NULL or l1con.stop_bits <> stop_bits)) THEN
+		RAISE DEBUG 'updating stop bits';
+		updateitr := updateitr + 1;
+		col_nams[updateitr] := 'STOP_BITS';
+		col_vals[updateitr] := stop_bits;
+	end if;
+
+	if(parity <> '__unknown__' and (l1con.parity is NULL or l1con.parity <> parity)) THEN
+		RAISE DEBUG 'updating parity';
+		updateitr := updateitr + 1;
+		col_nams[updateitr] := 'PARITY';
+		col_vals[updateitr] := quote_literal(parity);
+	end if;
+
+	if(flw_cntrl <> '__unknown__' and (l1con.parity is NULL or l1con.parity <> flw_cntrl)) THEN
+		RAISE DEBUG 'updating flow control';
+		updateitr := updateitr + 1;
+		col_nams[updateitr] := 'FLOW_CONTROL';
+		col_vals[updateitr] := quote_literal(flw_cntrl);
+	end if;
+
+	if(updateitr > 0) then
+		RAISE DEBUG 'running do_l1_connection_update';
+		PERFORM port_support.do_l1_connection_update(col_nams, col_vals, l1_con_id);
+	end if;
+
+	RAISE DEBUG 'returning %', updateitr;
+	return updateitr;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+
+-- DONE WITH proc port_utils.configure_layer1_connect -> configure_layer1_connect 
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH proc create_component_slots_on_insert -> create_component_slots_on_insert 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'create_component_slots_on_insert', 'create_component_slots_on_insert');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+-- consider old oid 2589765
+DROP FUNCTION IF EXISTS create_component_slots_on_insert();
+
+-- DONE WITH proc create_component_slots_on_insert -> create_component_slots_on_insert 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc create_device_component_by_trigger -> create_device_component_by_trigger 
+
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 2570838
+CREATE OR REPLACE FUNCTION jazzhands.create_device_component_by_trigger()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	devtype		RECORD;
+	cid			integer;
+BEGIN
+
+	--
+	-- If component_id is already set, then assume that it's correct
+	--
+	IF NEW.component_id THEN
+		RETURN NEW;
+	END IF;
+
+	SELECT
+		dt.device_type_id,
+		dt.component_type_id,
+		dt.template_device_id,
+		d.component_id
+	INTO
+		devtype
+	FROM
+		device_type dt LEFT JOIN
+		device d ON (dt.template_device_id = d.device_id)
+	WHERE
+		dt.device_type_id = NEW.device_type_id;
+
+	--
+	-- If template_device_id doesn't exist, then create an instance of
+	-- the component_id if it exists 
+	--
+	IF devtype.component_id IS NULL THEN
+		--
+		-- If the component_id doesn't exist, then we're done
+		--
+		IF devtype.component_type_id IS NULL THEN
+			RETURN NEW;
+		END IF;
+		--
+		-- Insert a component of the given type and tie it to the device
+		--
+		INSERT INTO component (component_type_id)
+			VALUES (devtype.component_type_id)
+			RETURNING component_id INTO cid;
+
+		NEW.component_id := cid;
+		RETURN NEW;
+	ELSE
+		--
+		-- This is pretty nasty; welcome to SQL
+		--
+		-- Because we can't return any data from the subselect in the RETURNING
+		-- clause of the INSERT within the WITH, we insert a new component for
+		-- each member of the source device and return just the component_id.
+		--
+		-- This returns data into a temporary table (ugh) that's used as a
+		-- key/value store to map each template component to the 
+		-- newly-created one
+		--
+		CREATE TEMPORARY TABLE trig_comp_ins AS
+		WITH comp_ins AS (
+			INSERT INTO component (
+				component_type_id
+			) SELECT
+				c.component_type_id
+			FROM
+				device_type dt JOIN 
+				v_device_components dc ON
+					(dc.device_id = dt.template_device_id) JOIN
+				component c USING (component_id)
+			WHERE
+				device_type_id = NEW.device_type_id
+			ORDER BY
+				level, c.component_type_id
+			RETURNING component_id
+		)
+		SELECT 
+			src_comp.component_id as src_component_id,
+			dst_comp.component_id as dst_component_id,
+			src_comp.level as level
+		FROM
+			(SELECT
+				c.component_id,
+				level,
+				row_number() OVER (ORDER BY level, c.component_type_id) AS rownum
+			 FROM
+				device_type dt JOIN 
+				v_device_components dc ON
+					(dc.device_id = dt.template_device_id) JOIN
+				component c USING (component_id)
+			 WHERE
+				device_type_id = NEW.device_type_id
+			) src_comp,
+			(SELECT
+				component_id,
+				row_number() OVER () AS rownum
+			 FROM
+				comp_ins
+			) dst_comp
+		WHERE
+			src_comp.rownum = dst_comp.rownum;
+
+		/* 
+			 Now take the mapping of components that were inserted above, and
+			 tie the new components to the appropriate slot on the parent.
+			 The logic below is:
+				- Take the template component, and locate its parent slot
+				- Find the correct slot on the corresponding new parent 
+				  component by locating one with the same slot_name and
+				  slot_type_id on the mapped parent component_id
+				- Update the parent_slot_id of the component with the
+				  mapped component_id to this slot_id 
+			 
+			 This works even if the top-level component is attached to some
+			 other device, since there will not be a mapping for those in
+			 the table to locate.
+		*/
+				  
+		UPDATE
+			component dc
+		SET
+			parent_slot_id = ds.slot_id
+		FROM
+			trig_comp_ins tt,
+			trig_comp_ins ptt,
+			component sc,
+			slot ss,
+			slot ds
+		WHERE
+			tt.src_component_id = sc.component_id AND
+			tt.dst_component_id = dc.component_id AND
+			ss.slot_id = sc.parent_slot_id AND
+			ss.component_id = ptt.src_component_id AND
+			ds.component_id = ptt.dst_component_id AND
+			ss.slot_type_id = ds.slot_type_id AND
+			ss.slot_name = ds.slot_name;
+
+		SELECT dst_component_id INTO cid FROM trig_comp_ins WHERE level = 1;
+
+		NEW.component_id := cid;
+
+		DROP TABLE trig_comp_ins;
+
+		RETURN NEW;
+	END IF;
+	RETURN NEW;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+
+-- DONE WITH proc create_device_component_by_trigger -> create_device_component_by_trigger 
+--------------------------------------------------------------------
 --------------------------------------------------------------------
 -- DEALING WITH proc set_slot_names_by_trigger -> set_slot_names_by_trigger 
 
@@ -6191,11 +8144,334 @@ CREATE VIEW v_physical_connection AS
 delete from __recreate where type = 'view' and object = 'v_physical_connection';
 -- DONE DEALING WITH TABLE v_physical_connection [2507396]
 --------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- ADD dns_utils
+
+-- Copyright (c) 2013-2015, Todd M. Kover
+-- All rights reserved.
+--
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--       http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+
+\set ON_ERROR_STOP
+
+DO $$
+DECLARE
+        _tal INTEGER;
+BEGIN
+        select count(*)
+        from pg_catalog.pg_namespace
+        into _tal
+        where nspname = 'dns_utils';
+        IF _tal = 0 THEN
+                DROP SCHEMA IF EXISTS dns_utils;
+                CREATE SCHEMA dns_utils AUTHORIZATION jazzhands;
+		COMMENT ON SCHEMA dns_utils IS 'part of jazzhands';
+        END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION dns_utils.add_ns_records(
+	dns_domain_id	dns_domain.dns_domain_id%type
+) RETURNS void AS
+$$
+BEGIN
+	EXECUTE '
+		INSERT INTO dns_record (
+			dns_domain_id, dns_class, dns_type, dns_value
+		) select $1, $2, $3, property_value
+		FROM property
+		WHERE property_name = $4
+		AND property_type = $5
+	' USING dns_domain_id, 'IN', 'NS', '_authdns', 'Defaults';
+END;
+$$ 
+SET search_path=jazzhands
+LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION dns_utils.get_or_create_rvs_netblock_link(
+	soa_name		dns_domain.soa_name%type,
+	dns_domain_id	dns_domain.dns_domain_id%type
+) RETURNS netblock.netblock_id%type AS $$
+DECLARE
+	nblk_id	netblock.netblock_id%type;
+	blk text;
+	root	text;
+	brk	text[];
+	ipmember text[];
+	ip	inet;
+	j text;
+BEGIN
+	brk := regexp_matches(soa_name, '^(.+)\.(in-addr|ip6)\.arpa$');
+	IF brk[2] = 'in-addr' THEN
+		j := '.';
+	ELSE
+		j := ':';
+		-- The only thing missing is mapping the number of octets to bits
+		RAISE EXCEPTION 'Do not properly handle ipv6 addresses yet.';
+	END IF;
+
+	EXECUTE 'select array_agg(member order by rn desc), $2
+		from (
+        select
+			row_number() over () as rn, *
+			from
+			unnest(regexp_split_to_array($1, $3)) as member
+		) x
+	' INTO ipmember USING brk[1], j, '\.';
+
+	IF brk[2] = 'in-addr' THEN
+		IF array_length(ipmember, 1) > 4 THEN
+			RAISE EXCEPTION 'Unable to work with anything smaller than a /24';
+		END IF;
+		WHILE array_length(ipmember, 1) < 4
+		LOOP
+			ipmember := array_append(ipmember, '0');
+		END LOOP;
+		ip := concat(array_to_string(ipmember, j),'/24')::inet;
+	ELSE
+		ip := concat(array_to_string(ipmember, j),'::')::inet;
+	END IF;
+
+	SELECT netblock_id
+		INTO	nblk_id
+		FROM	netblock
+		WHERE	netblock_type = 'dns'
+		AND		is_single_address = 'N'
+		AND		can_subnet = 'N'
+		AND		netblock_status = 'Allocated'
+		AND		ip_universe_id = 0
+		AND		ip_address = ip;
+
+	IF NOT FOUND THEN
+		INSERT INTO netblock (
+			ip_address, netblock_type, is_single_address,
+			can_subnet, netblock_status, ip_universe_id
+		) VALUES (
+			ip, 'dns', 'N',
+			'N', 'Allocated', 0
+		) RETURNING netblock_id INTO nblk_id;
+	END IF;
+
+	EXECUTE '
+		INSERT INTO dns_record(
+			dns_domain_id, dns_class, dns_type, netblock_id
+		) values (
+			$1, $2, $3, $4
+		)
+	' USING dns_domain_id, 'IN', 'REVERSE_ZONE_BLOCK_PTR', nblk_id;
+
+	RETURN nblk_id;
+END;
+$$ 
+SET search_path=jazzhands
+LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION dns_utils.add_dns_domain(
+	soa_name		dns_domain.soa_name%type,
+	dns_domain_type	dns_domain.dns_domain_type%type DEFAULT NULL,
+	add_nameservers		boolean DEFAULT true
+) RETURNS dns_domain.dns_domain_id%type AS $$
+DECLARE
+	elements		text[];
+	parent_zone		text;
+	parent_id		dns_domain.dns_domain_id%type;
+	domain_id		dns_domain.dns_domain_id%type;
+	elem			text;
+	sofar			text;
+	rvs_nblk_id		netblock.netblock_id%type;
+BEGIN
+	elements := regexp_split_to_array(soa_name, '\.');
+	sofar := '';
+	FOREACH elem in ARRAY elements
+	LOOP
+		IF octet_length(sofar) > 0 THEN
+			sofar := sofar || '.';
+		END IF;
+		sofar := sofar || elem;
+		parent_zone := regexp_replace(soa_name, '^'||sofar||'.', '');
+		EXECUTE 'SELECT dns_domain_id FROM dns_domain 
+			WHERE soa_name = $1' INTO parent_id USING soa_name;
+		IF parent_id IS NOT NULL THEN
+			EXIT;
+		END IF;
+	END LOOP;
+
+	IF dns_domain_type IS NULL THEN
+		IF soa_name ~ '^.*(in-addr|ip6)\.arpa$' THEN
+			dns_domain_type := 'reverse';
+		END IF;
+	END IF;
+
+	IF dns_domain_type IS NULL THEN
+		RAISE EXCEPTION 'Unable to guess dns_domain_type for %',
+			soa_name USING ERRCODE = 'not_null_violation'; 
+	END IF;
+
+	EXECUTE '
+		INSERT INTO dns_domain (
+			soa_name,
+			soa_class,
+			soa_mname,
+			soa_rname,
+			parent_dns_domain_id,
+			should_generate,
+			dns_domain_type
+		) VALUES (
+			$1,
+			$2,
+			$3,
+			$4,
+			$5,
+			$6,
+			$7
+		) RETURNING dns_domain_id' INTO domain_id 
+		USING soa_name, 
+			'IN',
+			(select property_value from property where property_type = 'Defaults'
+				and property_name = '_dnsmname'),
+			(select property_value from property where property_type = 'Defaults'
+				and property_name = '_dnsrname'),
+			parent_id,
+			'Y',
+			dns_domain_type
+	;
+
+	IF dns_domain_type = 'reverse' THEN
+		rvs_nblk_id := dns_utils.get_or_create_rvs_netblock_link(
+			soa_name, domain_id);
+	END IF;
+
+	IF add_nameservers THEN
+		PERFORM dns_utils.add_ns_records(domain_id);
+	END IF;
+
+	RETURN domain_id;
+END;
+$$ 
+SET search_path=jazzhands
+LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION dns_utils.add_domain_from_cidr(
+	block		inet
+) returns dns_domain.dns_domain_id%TYPE
+AS
+$$
+DECLARE
+	ipaddr		text;
+	ipnodes		text[];
+	domain		text;
+	domain_id	dns_domain.dns_domain_id%TYPE;
+	j			text;
+BEGIN
+	-- silently fail for ipv6
+	IF family(block) != 4 THEN
+		RETURN NULL;
+	END IF;
+	IF family(block) != 4 THEN
+		j := '';
+		-- this needs to be tweaked to expand ::, which postgresql does
+		-- not easily do.  This requires more thinking than I was up for today.
+		ipaddr := regexp_replace(host(block)::text, ':', '', 'g');
+	ELSE
+		j := '\.';
+		ipaddr := host(block);
+	END IF;
+
+	EXECUTE 'select array_agg(member order by rn desc)
+		from (
+        select
+			row_number() over () as rn, *
+			from
+			unnest(regexp_split_to_array($1, $2)) as member
+		) x
+	' INTO ipnodes USING ipaddr, j;
+
+	IF family(block) = 4 THEN
+		domain := array_to_string(ARRAY[ipnodes[2],ipnodes[3],ipnodes[4]], '.')
+			|| '.in-addr.arpa';
+	ELSE
+		domain := array_to_string(ipnodes, '.') 
+			|| '.ip6.arpa';
+	END IF;
+
+	SELECT dns_domain_id INTO domain_id FROM dns_domain where soa_name = domain;
+	IF NOT FOUND THEN
+		domain_id := dns_utils.add_dns_domain(domain);
+	END IF;
+
+	RETURN domain_id;
+END;
+$$
+SET search_path=jazzhands
+LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION dns_utils.add_domains_from_netblock(
+	netblock_id		netblock.netblock_id%TYPE
+) returns void
+AS
+$$
+DECLARE
+	block		inet;
+	cur			inet;
+BEGIN
+	EXECUTE 'SELECT ip_address FROM netblock WHERE netblock_id = $1'
+		INTO block
+		USING netblock_id;
+
+	IF family(block) = 4 THEN
+		FOR cur IN SELECT set_masklen((block + o), 24) 
+					FROM generate_series(0, (256 * (2 ^ (24 - 
+						masklen(block))) - 1)::integer, 256) as x(o)
+		LOOP
+			PERFORM * FROM dns_utils.add_domain_from_cidr(cur);
+		END LOOP;
+	ELSIF family(block) = 6 THEN
+			cur := set_masklen(block, 64);
+			PERFORM * FROM dns_utils.add_domain_from_cidr(cur);
+	ELSE
+		RAISE EXCEPTION 'Not IPv% aware.', family(block);
+	END IF;
+END;
+$$
+SET search_path=jazzhands
+LANGUAGE plpgsql;
+
+
+-- END ADD dns_utils
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- DEALING WITH proc device_power_port_sanity -> device_power_port_sanity 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'device_power_port_sanity', 'device_power_port_sanity');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+-- consider old oid 2589702
+DROP FUNCTION IF EXISTS device_power_port_sanity();
+
+-- DONE WITH proc device_power_port_sanity -> device_power_port_sanity 
+--------------------------------------------------------------------
+
+
 -- Dropping obsoleted sequences....
 DROP SEQUENCE IF EXISTS physical_port_physical_port_id_seq;
 DROP SEQUENCE IF EXISTS device_power_connection_device_power_connection_id_seq;
 DROP SEQUENCE IF EXISTS layer1_connection_layer1_connection_id_seq;
-
 
 -- Dropping obsoleted audit sequences....
 DROP SEQUENCE IF EXISTS audit.device_type_power_port_templt_seq;
@@ -6221,10 +8497,48 @@ DROP SEQUENCE IF EXISTS audit.val_flow_control_seq;
 
 -- Processing tables with no structural changes
 -- Some of these may be redundant
+
+ALTER TABLE ONLY account_realm_company
+	DROP CONSTRAINT IF EXISTS ak_account_realm_company_compa;
+ALTER TABLE ONLY inter_component_connection
+	ADD CONSTRAINT ak_inter_component_con_sl1_id UNIQUE (slot1_id);
+ALTER TABLE ONLY inter_component_connection
+	ADD CONSTRAINT ak_inter_component_con_sl2_id UNIQUE (slot2_id);
+ALTER TABLE ONLY physicalish_volume
+	ADD CONSTRAINT fk_physvol_compid FOREIGN KEY (component_id)
+	REFERENCES component(component_id);
+
+DROP FUNCTION IF EXISTS perform_audit_device_power_connection();
+DROP FUNCTION IF EXISTS perform_audit_device_power_interface();
+DROP FUNCTION IF EXISTS perform_audit_device_type_phys_port_templt();
+DROP FUNCTION IF EXISTS perform_audit_device_type_power_port_templt();
+DROP FUNCTION IF EXISTS perform_audit_layer1_connection();
+DROP FUNCTION IF EXISTS perform_audit_physical_port();
+DROP FUNCTION IF EXISTS perform_audit_val_baud();
+DROP FUNCTION IF EXISTS perform_audit_val_data_bits();
+DROP FUNCTION IF EXISTS perform_audit_val_flow_control();
+DROP FUNCTION IF EXISTS perform_audit_val_parity();
+DROP FUNCTION IF EXISTS perform_audit_val_port_medium();
+DROP FUNCTION IF EXISTS perform_audit_val_port_plug_style();
+DROP FUNCTION IF EXISTS perform_audit_val_port_protocol();
+DROP FUNCTION IF EXISTS perform_audit_val_port_protocol_speed();
+DROP FUNCTION IF EXISTS perform_audit_val_port_purpose();
+DROP FUNCTION IF EXISTS perform_audit_val_port_speed();
+DROP FUNCTION IF EXISTS perform_audit_val_port_type();
+DROP FUNCTION IF EXISTS perform_audit_val_power_plug_style();
+DROP FUNCTION IF EXISTS perform_audit_val_stop_bits();
+
+
 -- fk constraints
 -- triggers
 CREATE TRIGGER trigger_create_component_template_slots AFTER INSERT OR UPDATE OF component_type_id ON component FOR EACH ROW EXECUTE PROCEDURE create_component_slots_by_trigger();
 CREATE TRIGGER trigger_zzz_generate_slot_names AFTER INSERT OR UPDATE OF parent_slot_id ON component FOR EACH ROW EXECUTE PROCEDURE set_slot_names_by_trigger();
+
+DROP INDEX IF EXISTS xif_intercomp_conn_slot1_id;
+DROP INDEX IF EXISTS xif_intercomp_conn_slot2_id;
+CREATE INDEX xif1account_realm_company 
+	ON account_realm_company USING btree (company_id);
+
 
 
 -- Clean Up

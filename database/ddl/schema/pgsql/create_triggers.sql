@@ -55,26 +55,6 @@ CREATE TRIGGER trigger_verify_direct_dept_member AFTER INSERT OR UPDATE
 
 */
 
-CREATE OR REPLACE FUNCTION verify_layer1_connection() RETURNS TRIGGER AS $$
-BEGIN
-	PERFORM 1 FROM 
-		layer1_connection l1 
-			JOIN layer1_connection l2 ON 
-				l1.physical_port1_id = l2.physical_port2_id AND
-				l1.physical_port2_id = l2.physical_port1_id;
-	IF FOUND THEN
-		RAISE EXCEPTION 'Connection already exists in opposite direction';
-	END IF;
-	RETURN NEW;
-END;
-$$ 
-SET search_path=jazzhands
-LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP TRIGGER IF EXISTS trigger_verify_layer1_connection ON layer1_connection;
-CREATE TRIGGER trigger_verify_layer1_connection AFTER INSERT OR UPDATE 
-	ON layer1_connection EXECUTE PROCEDURE verify_layer1_connection();
-
 CREATE OR REPLACE FUNCTION verify_physical_connection() RETURNS TRIGGER AS $$
 BEGIN
 	PERFORM 1 FROM 
