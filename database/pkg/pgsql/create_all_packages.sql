@@ -57,3 +57,4 @@
 -- \i appgroup_util.sql
 -- \i property_verify.sql
 \i physical_address_utils.sql
+\i component_utils.sql

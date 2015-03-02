@@ -61,6 +61,8 @@
 \i create_device_power_connection.sql
 \i create_device_power_interface.sql
 
+\i create_v_device_slots.sql
+
 -- XXX these need to be ported
 -- \i create_v_joined_acct_collection_user_detail.sql
 \i pgsql/create_v_device_coll_hier_detail.sql
