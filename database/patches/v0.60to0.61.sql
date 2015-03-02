@@ -6821,6 +6821,13 @@ FROM
 WHERE
 	ni.physical_port_id = port1.physical_port_id;
 
+UPDATE
+        network_interface ni
+SET
+        physical_port_id = NULL
+WHERE
+        ni.physical_port_id IS NOT NULL AND
+        ni.physical_port_id NOT IN (SELECT slot_id FROM slot);
 
 --END \r ../patches/migrate.v0.61.component.data.sql
 
