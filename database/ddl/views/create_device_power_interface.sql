@@ -17,7 +17,7 @@
 -- $Id$
 --
 
-create or replace view v_device_power_interface
+create or replace view device_power_interface
 AS
 WITH pdu AS (
 	SELECT	slot_type_id, property_value::integer AS property_value

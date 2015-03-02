@@ -83,6 +83,15 @@ Invoked:
 	v_l1_all_physical_ports
 	v_physical_connection
 	device_power_port_sanity
+	create_device_component_by_trigger
+	perform_audit_val_stop_bits
+	verify_layer1_connection
+	netblock_manip.allocate_netblock
+	port_utils.setup_device_physical_ports
+	validate_component_parent_slot_id
+	v_property
+	device_power_interface
+
 */
 
 \set ON_ERROR_STOP
@@ -8468,6 +8477,719 @@ DROP FUNCTION IF EXISTS device_power_port_sanity();
 --------------------------------------------------------------------
 
 
+--------------------------------------------------------------------
+-- DEALING WITH proc create_device_component_by_trigger -> create_device_component_by_trigger 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'create_device_component_by_trigger', 'create_device_component_by_trigger');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+DROP TRIGGER IF EXISTS trigger_create_device_component ON jazzhands.device;
+-- consider old oid 2650646
+DROP FUNCTION IF EXISTS create_device_component_by_trigger();
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 2638010
+CREATE OR REPLACE FUNCTION jazzhands.create_device_component_by_trigger()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	devtype		RECORD;
+	cid			integer;
+	scarr       integer[];
+	dcarr       integer[];
+	server_ver	integer;
+BEGIN
+
+	--
+	-- If component_id is already set, then assume that it's correct
+	--
+	IF NEW.component_id THEN
+		RETURN NEW;
+	END IF;
+
+	SELECT
+		dt.device_type_id,
+		dt.component_type_id,
+		dt.template_device_id,
+		d.component_id
+	INTO
+		devtype
+	FROM
+		device_type dt LEFT JOIN
+		device d ON (dt.template_device_id = d.device_id)
+	WHERE
+		dt.device_type_id = NEW.device_type_id;
+
+	--
+	-- If template_device_id doesn't exist, then create an instance of
+	-- the component_id if it exists 
+	--
+	IF devtype.component_id IS NULL THEN
+		--
+		-- If the component_id doesn't exist, then we're done
+		--
+		IF devtype.component_type_id IS NULL THEN
+			RETURN NEW;
+		END IF;
+		--
+		-- Insert a component of the given type and tie it to the device
+		--
+		INSERT INTO component (component_type_id)
+			VALUES (devtype.component_type_id)
+			RETURNING component_id INTO cid;
+
+		NEW.component_id := cid;
+		RETURN NEW;
+	ELSE
+		SELECT setting INTO server_ver FROM pg_catalog.pg_settings
+			WHERE name = 'server_version_num';
+
+		IF (server_ver < 90400) THEN
+			--
+			-- This is pretty nasty; welcome to SQL
+			--
+			--
+			-- This returns data into a temporary table (ugh) that's used as a
+			-- key/value store to map each template component to the 
+			-- newly-created one
+			--
+			CREATE TEMPORARY TABLE trig_comp_ins AS
+			WITH comp_ins AS (
+				INSERT INTO component (
+					component_type_id
+				) SELECT
+					c.component_type_id
+				FROM
+					device_type dt JOIN 
+					v_device_components dc ON
+						(dc.device_id = dt.template_device_id) JOIN
+					component c USING (component_id)
+				WHERE
+					device_type_id = NEW.device_type_id
+				ORDER BY
+					level, c.component_type_id
+				RETURNING component_id
+			)
+			SELECT 
+				src_comp.component_id as src_component_id,
+				dst_comp.component_id as dst_component_id,
+				src_comp.level as level
+			FROM
+				(SELECT
+					c.component_id,
+					level,
+					row_number() OVER (ORDER BY level, c.component_type_id)
+						AS rownum
+				 FROM
+					device_type dt JOIN 
+					v_device_components dc ON
+						(dc.device_id = dt.template_device_id) JOIN
+					component c USING (component_id)
+				 WHERE
+					device_type_id = NEW.device_type_id
+				) src_comp,
+				(SELECT
+					component_id,
+					row_number() OVER () AS rownum
+				 FROM
+					comp_ins
+				) dst_comp
+			WHERE
+				src_comp.rownum = dst_comp.rownum;
+
+			/* 
+				 Now take the mapping of components that were inserted above,
+				 and tie the new components to the appropriate slot on the
+				 parent.
+				 The logic below is:
+					- Take the template component, and locate its parent slot
+					- Find the correct slot on the corresponding new parent 
+					  component by locating one with the same slot_name and
+					  slot_type_id on the mapped parent component_id
+					- Update the parent_slot_id of the component with the
+					  mapped component_id to this slot_id 
+				 
+				 This works even if the top-level component is attached to some
+				 other device, since there will not be a mapping for those in
+				 the table to locate.
+			*/
+					  
+			UPDATE
+				component dc
+			SET
+				parent_slot_id = ds.slot_id
+			FROM
+				trig_comp_ins tt,
+				trig_comp_ins ptt,
+				component sc,
+				slot ss,
+				slot ds
+			WHERE
+				tt.src_component_id = sc.component_id AND
+				tt.dst_component_id = dc.component_id AND
+				ss.slot_id = sc.parent_slot_id AND
+				ss.component_id = ptt.src_component_id AND
+				ds.component_id = ptt.dst_component_id AND
+				ss.slot_type_id = ds.slot_type_id AND
+				ss.slot_name = ds.slot_name;
+
+			SELECT dst_component_id INTO cid FROM trig_comp_ins WHERE
+				level = 1;
+
+			NEW.component_id := cid;
+
+			DROP TABLE trig_comp_ins;
+
+			RETURN NEW;
+		ELSE
+			WITH dev_comps AS (
+				SELECT
+					c.component_id,
+					c.component_type_id,
+					level,
+					row_number() OVER (ORDER BY level, c.component_type_id) AS
+						rownum
+				FROM
+					device_type dt JOIN 
+					v_device_components dc ON
+						(dc.device_id = dt.template_device_id) JOIN
+					component c USING (component_id)
+				WHERE
+					device_type_id = NEW.device_type_id
+			),
+			comp_ins AS (
+				INSERT INTO component (
+					component_type_id
+				) SELECT
+					component_type_id
+				FROM
+					dev_comps
+				ORDER BY
+					rownum
+				RETURNING component_id, component_type_id
+			),
+			comp_ins_arr AS (
+				SELECT
+					array_agg(component_id) AS dst_arr
+				FROM
+					comp_ins
+			),
+			dev_comps_arr AS (
+				SELECT
+					array_agg(component_id) as src_arr
+				FROM
+					dev_comps
+			)
+			SELECT src_arr, dst_arr INTO scarr, dcarr FROM
+				dev_comps_arr, comp_ins_arr;
+
+			UPDATE
+				component dc
+			SET
+				parent_slot_id = ds.slot_id
+			FROM
+				unnest(scarr, dcarr) AS 
+					tt(src_component_id, dst_component_id),
+				unnest(scarr, dcarr) AS 
+					ptt(src_component_id, dst_component_id),
+				component sc,
+				slot ss,
+				slot ds
+			WHERE
+				tt.src_component_id = sc.component_id AND
+				tt.dst_component_id = dc.component_id AND
+				ss.slot_id = sc.parent_slot_id AND
+				ss.component_id = ptt.src_component_id AND
+				ds.component_id = ptt.dst_component_id AND
+				ss.slot_type_id = ds.slot_type_id AND
+				ss.slot_name = ds.slot_name;
+
+			SELECT 
+				component_id INTO NEW.component_id
+			FROM 
+				component c
+			WHERE
+				component_id = ANY(dcarr) AND
+				parent_slot_id IS NULL;
+
+			RETURN NEW;
+		END IF;
+	END IF;
+	RETURN NEW;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+CREATE TRIGGER trigger_create_device_component BEFORE INSERT ON device FOR EACH ROW EXECUTE PROCEDURE create_device_component_by_trigger();
+
+-- DONE WITH proc create_device_component_by_trigger -> create_device_component_by_trigger 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc perform_audit_val_stop_bits -> perform_audit_val_stop_bits 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'perform_audit_val_stop_bits', 'perform_audit_val_stop_bits');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+-- consider old oid 2649639
+DROP FUNCTION IF EXISTS perform_audit_val_stop_bits();
+
+-- DONE WITH proc perform_audit_val_stop_bits -> perform_audit_val_stop_bits 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc verify_layer1_connection -> verify_layer1_connection 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'verify_layer1_connection', 'verify_layer1_connection');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+-- consider old oid 2650399
+DROP FUNCTION IF EXISTS verify_layer1_connection();
+
+-- DONE WITH proc verify_layer1_connection -> verify_layer1_connection 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc netblock_manip.allocate_netblock -> allocate_netblock 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('netblock_manip', 'allocate_netblock', 'allocate_netblock');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+-- consider old oid 2650392
+DROP FUNCTION IF EXISTS netblock_manip.allocate_netblock(parent_netblock_id integer, netmask_bits integer, address_type text, can_subnet boolean, allocation_method text, rnd_masklen_threshold integer, rnd_max_count integer, ip_address inet, description character varying, netblock_status character varying);
+-- consider old oid 2650393
+DROP FUNCTION IF EXISTS netblock_manip.allocate_netblock(parent_netblock_list integer[], netmask_bits integer, address_type text, can_subnet boolean, allocation_method text, rnd_masklen_threshold integer, rnd_max_count integer, ip_address inet, description character varying, netblock_status character varying);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 2637838
+CREATE OR REPLACE FUNCTION netblock_manip.allocate_netblock(parent_netblock_id integer, netmask_bits integer DEFAULT NULL::integer, address_type text DEFAULT 'netblock'::text, can_subnet boolean DEFAULT true, allocation_method text DEFAULT NULL::text, rnd_masklen_threshold integer DEFAULT 110, rnd_max_count integer DEFAULT 1024, ip_address inet DEFAULT NULL::inet, description character varying DEFAULT NULL::character varying, netblock_status character varying DEFAULT 'Allocated'::character varying)
+ RETURNS netblock
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	netblock_rec	RECORD;
+BEGIN
+	SELECT * into netblock_rec FROM netblock_manip.allocate_netblock(
+		parent_netblock_list := ARRAY[parent_netblock_id],
+		netmask_bits := netmask_bits,
+		address_type := address_type,
+		can_subnet := can_subnet,
+		description := description,
+		allocation_method := allocation_method,
+		ip_address := ip_address,
+		rnd_masklen_threshold := rnd_masklen_threshold,
+		rnd_max_count := rnd_max_count,
+		netblock_status := netblock_status
+	);
+	RETURN netblock_rec;
+END;
+$function$
+;
+-- consider NEW oid 2637839
+CREATE OR REPLACE FUNCTION netblock_manip.allocate_netblock(parent_netblock_list integer[], netmask_bits integer DEFAULT NULL::integer, address_type text DEFAULT 'netblock'::text, can_subnet boolean DEFAULT true, allocation_method text DEFAULT NULL::text, rnd_masklen_threshold integer DEFAULT 110, rnd_max_count integer DEFAULT 1024, ip_address inet DEFAULT NULL::inet, description character varying DEFAULT NULL::character varying, netblock_status character varying DEFAULT 'Allocated'::character varying)
+ RETURNS netblock
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+	parent_rec		RECORD;
+	netblock_rec	RECORD;
+	inet_rec		RECORD;
+	loopback_bits	integer;
+	inet_family		integer;
+BEGIN
+	IF parent_netblock_list IS NULL THEN
+		RAISE 'parent_netblock_list must be specified'
+		USING ERRCODE = 'null_value_not_allowed';
+	END IF;
+
+	IF address_type NOT IN ('netblock', 'single', 'loopback') THEN
+		RAISE 'address_type must be one of netblock, single, or loopback'
+		USING ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	IF netmask_bits IS NULL AND address_type = 'netblock' THEN
+		RAISE EXCEPTION
+			'You must specify a netmask when address_type is netblock'
+			USING ERRCODE = 'invalid_parameter_value';
+	END IF;
+
+	-- Lock the parent row, which should keep parallel processes from
+	-- trying to obtain the same address
+
+	FOR parent_rec IN SELECT * FROM jazzhands.netblock WHERE netblock_id = 
+			ANY(allocate_netblock.parent_netblock_list) FOR UPDATE LOOP
+
+		IF parent_rec.is_single_address = 'Y' THEN
+			RAISE EXCEPTION 'parent_netblock_id refers to a single_address netblock'
+				USING ERRCODE = 'invalid_parameter_value';
+		END IF;
+
+		IF inet_family IS NULL THEN
+			inet_family := family(parent_rec.ip_address);
+		ELSIF inet_family != family(parent_rec.ip_address) 
+				AND ip_address IS NULL THEN
+			RAISE EXCEPTION 'Allocation may not mix IPv4 and IPv6 addresses'
+			USING ERRCODE = 'JH10F';
+		END IF;
+
+		IF address_type = 'loopback' THEN
+			loopback_bits := 
+				CASE WHEN 
+					family(parent_rec.ip_address) = 4 THEN 32 ELSE 128 END;
+
+			IF parent_rec.can_subnet = 'N' THEN
+				RAISE EXCEPTION 'parent subnet must have can_subnet set to Y'
+					USING ERRCODE = 'JH10B';
+			END IF;
+		ELSIF address_type = 'single' THEN
+			IF parent_rec.can_subnet = 'Y' THEN
+				RAISE EXCEPTION
+					'parent subnet for single address must have can_subnet set to N'
+					USING ERRCODE = 'JH10B';
+			END IF;
+		ELSIF address_type = 'netblock' THEN
+			IF parent_rec.can_subnet = 'N' THEN
+				RAISE EXCEPTION 'parent subnet must have can_subnet set to Y'
+					USING ERRCODE = 'JH10B';
+			END IF;
+		END IF;
+	END LOOP;
+
+ 	IF NOT FOUND THEN
+ 		RETURN NULL;
+ 	END IF;
+
+	IF address_type = 'loopback' THEN
+		-- If we're allocating a loopback address, then we need to create
+		-- a new parent to hold the single loopback address
+
+		SELECT * INTO inet_rec FROM netblock_utils.find_free_netblocks(
+			parent_netblock_list := parent_netblock_list,
+			netmask_bits := loopback_bits,
+			single_address := false,
+			allocation_method := allocation_method,
+			desired_ip_address := ip_address,
+			max_addresses := 1
+			);
+
+		IF NOT FOUND THEN
+			RETURN NULL;
+		END IF;
+
+		INSERT INTO jazzhands.netblock (
+			ip_address,
+			netblock_type,
+			is_single_address,
+			can_subnet,
+			ip_universe_id,
+			description,
+			netblock_status
+		) VALUES (
+			inet_rec.ip_address,
+			inet_rec.netblock_type,
+			'N',
+			'N',
+			inet_rec.ip_universe_id,
+			allocate_netblock.description,
+			allocate_netblock.netblock_status
+		) RETURNING * INTO parent_rec;
+
+		INSERT INTO jazzhands.netblock (
+			ip_address,
+			netblock_type,
+			is_single_address,
+			can_subnet,
+			ip_universe_id,
+			description,
+			netblock_status
+		) VALUES (
+			inet_rec.ip_address,
+			parent_rec.netblock_type,
+			'Y',
+			'N',
+			inet_rec.ip_universe_id,
+			allocate_netblock.description,
+			allocate_netblock.netblock_status
+		) RETURNING * INTO netblock_rec;
+
+		PERFORM dns_utils.add_domains_from_netblock(
+			netblock_id := netblock_rec.netblock_id);
+
+		RETURN netblock_rec;
+	END IF;
+
+	IF address_type = 'single' THEN
+		SELECT * INTO inet_rec FROM netblock_utils.find_free_netblocks(
+			parent_netblock_list := parent_netblock_list,
+			single_address := true,
+			allocation_method := allocation_method,
+			desired_ip_address := ip_address,
+			rnd_masklen_threshold := rnd_masklen_threshold,
+			rnd_max_count := rnd_max_count,
+			max_addresses := 1
+			);
+
+		IF NOT FOUND THEN
+			RETURN NULL;
+		END IF;
+
+		RAISE DEBUG 'ip_address is %', inet_rec.ip_address;
+
+		INSERT INTO jazzhands.netblock (
+			ip_address,
+			netblock_type,
+			is_single_address,
+			can_subnet,
+			ip_universe_id,
+			description,
+			netblock_status
+		) VALUES (
+			inet_rec.ip_address,
+			inet_rec.netblock_type,
+			'Y',
+			'N',
+			inet_rec.ip_universe_id,
+			allocate_netblock.description,
+			allocate_netblock.netblock_status
+		) RETURNING * INTO netblock_rec;
+
+		RETURN netblock_rec;
+	END IF;
+	IF address_type = 'netblock' THEN
+		SELECT * INTO inet_rec FROM netblock_utils.find_free_netblocks(
+			parent_netblock_list := parent_netblock_list,
+			netmask_bits := netmask_bits,
+			single_address := false,
+			allocation_method := allocation_method,
+			desired_ip_address := ip_address,
+			max_addresses := 1);
+
+		IF NOT FOUND THEN
+			RETURN NULL;
+		END IF;
+
+		INSERT INTO jazzhands.netblock (
+			ip_address,
+			netblock_type,
+			is_single_address,
+			can_subnet,
+			ip_universe_id,
+			description,
+			netblock_status
+		) VALUES (
+			inet_rec.ip_address,
+			inet_rec.netblock_type,
+			'N',
+			CASE WHEN can_subnet THEN 'Y' ELSE 'N' END,
+			inet_rec.ip_universe_id,
+			allocate_netblock.description,
+			allocate_netblock.netblock_status
+		) RETURNING * INTO netblock_rec;
+
+		PERFORM dns_utils.add_domains_from_netblock(
+			netblock_id := netblock_rec.netblock_id);
+
+		RETURN netblock_rec;
+	END IF;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+
+-- DONE WITH proc netblock_manip.allocate_netblock -> allocate_netblock 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc port_utils.setup_device_physical_ports -> setup_device_physical_ports 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('port_utils', 'setup_device_physical_ports', 'setup_device_physical_ports');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+-- consider old oid 2650359
+DROP FUNCTION IF EXISTS port_utils.setup_device_physical_ports(in_device_id integer, in_port_type character varying);
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 2637805
+CREATE OR REPLACE FUNCTION port_utils.setup_device_physical_ports(in_device_id integer, in_port_type character varying DEFAULT NULL::character varying)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+	-- this has been replaced by the slot/component stuff
+	RETURN;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+
+-- DONE WITH proc port_utils.setup_device_physical_ports -> setup_device_physical_ports 
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH proc validate_component_parent_slot_id -> validate_component_parent_slot_id 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'validate_component_parent_slot_id', 'validate_component_parent_slot_id');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+DROP TRIGGER IF EXISTS trigger_validate_component_parent_slot_id ON jazzhands.component;
+-- consider old oid 2671223
+DROP FUNCTION IF EXISTS validate_component_parent_slot_id();
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 2637993
+CREATE OR REPLACE FUNCTION jazzhands.validate_component_parent_slot_id()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	stid	integer;
+BEGIN
+	IF NEW.parent_slot_id IS NULL THEN
+		RETURN NEW;
+	END IF;
+
+	PERFORM
+		*
+	FROM
+		slot s JOIN
+		slot_type_prmt_comp_slot_type stpcst USING (slot_type_id) JOIN
+		component_type ct ON (stpcst.component_slot_type_id = ct.slot_type_id)
+	WHERE
+		ct.component_type_id = NEW.component_type_id AND
+		s.slot_id = NEW.parent_slot_id;
+	
+	IF NOT FOUND THEN
+		SELECT slot_type_id INTO stid FROM slot WHERE slot_id = NEW.parent_slot_id;
+		RAISE EXCEPTION 'Component type % is not permitted in slot % (slot type %)',
+			NEW.component_type_id, NEW.parent_slot_id, stid
+			USING ERRCODE = 'foreign_key_violation';
+	END IF;
+
+	RETURN NEW;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+CREATE CONSTRAINT TRIGGER trigger_validate_component_parent_slot_id AFTER INSERT OR UPDATE OF parent_slot_id, component_type_id ON component DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE PROCEDURE validate_component_parent_slot_id();
+
+-- DONE WITH proc validate_component_parent_slot_id -> validate_component_parent_slot_id 
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_property [2670833]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'v_property', 'v_property');
+CREATE VIEW v_property AS
+ SELECT property.property_id,
+    property.account_collection_id,
+    property.account_id,
+    property.account_realm_id,
+    property.company_id,
+    property.device_collection_id,
+    property.dns_domain_id,
+    property.netblock_collection_id,
+    property.layer2_network_id,
+    property.layer3_network_id,
+    property.operating_system_id,
+    property.operating_system_snapshot_id,
+    property.person_id,
+    property.property_collection_id,
+    property.service_env_collection_id,
+    property.site_code,
+    property.property_name,
+    property.property_type,
+    property.property_value,
+    property.property_value_timestamp,
+    property.property_value_company_id,
+    property.property_value_account_coll_id,
+    property.property_value_device_coll_id,
+    property.property_value_dns_domain_id,
+    property.property_value_nblk_coll_id,
+    property.property_value_password_type,
+    property.property_value_person_id,
+    property.property_value_sw_package_id,
+    property.property_value_token_col_id,
+    property.property_rank,
+    property.start_date,
+    property.finish_date,
+    property.is_enabled,
+    property.data_ins_user,
+    property.data_ins_date,
+    property.data_upd_user,
+    property.data_upd_date
+   FROM property
+  WHERE property.is_enabled = 'Y'::bpchar AND (property.start_date IS NULL AND property.finish_date IS NULL OR property.start_date IS NULL AND now() <= property.finish_date OR property.start_date <= now() AND property.finish_date IS NULL OR property.start_date <= now() AND now() <= property.finish_date);
+
+delete from __recreate where type = 'view' and object = 'v_property';
+-- DONE DEALING WITH TABLE v_property [2637576]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE device_power_interface
+CREATE VIEW device_power_interface AS
+ WITH pdu AS (
+         SELECT component_property.slot_type_id,
+            component_property.property_value::integer AS property_value
+           FROM component_property
+          WHERE component_property.component_property_type::text = 'PDU'::text
+        ), provides AS (
+         SELECT component_property.slot_type_id,
+            component_property.property_value
+           FROM component_property
+          WHERE component_property.component_property_type::text = 'power_supply'::text AND component_property.component_property_name::text = 'Provides'::text
+        )
+ SELECT d.device_id,
+    s.slot_name AS power_interface_port,
+    st.slot_physical_interface_type AS power_plug_style,
+    vlt.property_value AS voltage,
+    amp.property_value AS max_amperage,
+    p.property_value::text AS provides_power,
+    s.data_ins_user,
+    s.data_ins_date,
+    s.data_upd_user,
+    s.data_upd_date
+   FROM slot s
+     JOIN slot_type st USING (slot_type_id)
+     JOIN provides p USING (slot_type_id)
+     JOIN pdu vlt USING (slot_type_id)
+     JOIN pdu amp USING (slot_type_id)
+     JOIN device d USING (component_id)
+  WHERE st.slot_function::text = 'power'::text;
+
+delete from __recreate where type = 'view' and object = 'device_power_interface';
+-- DONE DEALING WITH TABLE device_power_interface [2691172]
+--------------------------------------------------------------------
+
+
+
 -- Dropping obsoleted sequences....
 DROP SEQUENCE IF EXISTS physical_port_physical_port_id_seq;
 DROP SEQUENCE IF EXISTS device_power_connection_device_power_connection_id_seq;
@@ -8526,7 +9248,7 @@ DROP FUNCTION IF EXISTS perform_audit_val_port_purpose();
 DROP FUNCTION IF EXISTS perform_audit_val_port_speed();
 DROP FUNCTION IF EXISTS perform_audit_val_port_type();
 DROP FUNCTION IF EXISTS perform_audit_val_power_plug_style();
-DROP FUNCTION IF EXISTS perform_audit_val_stop_bits();
+DROP FUNCTION IF EXISTS device_power_connection_sanity();
 
 
 -- fk constraints
