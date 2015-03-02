@@ -367,3 +367,47 @@ FROM
 		port2.device_id = slot2.device_id AND 
 		port2.port_name = slot2.slot_name
 	) order by slot1.slot_id;
+
+
+WITH x AS (
+	SELECT
+		device_id,
+		physical_port_id,
+		CASE WHEN port_name ~ '^(em|p\d+p)' THEN
+			'eth' || 
+			(regexp_replace(port_name, '^.*(\d+)$', '\1'))::integer - 1
+		ELSE 
+			port_name 
+		END AS port_name
+	FROM
+		device d JOIN
+		physical_port p USING (device_id)
+), y AS (
+	SELECT
+		device_id,
+		slot_id,
+		slot_name
+	FROM
+		v_device_slots ds JOIN
+		slot s USING (slot_id)
+)
+UPDATE
+	network_interface ni
+SET
+	physical_port_id = slot1.slot_id
+FROM
+	x port1 JOIN
+	y slot1 ON (
+		port1.device_id = slot1.device_id AND 
+		port1.port_name = slot1.slot_name
+	)
+WHERE
+	ni.physical_port_id = port1.physical_port_id;
+
+UPDATE
+	network_interface ni
+SET
+	physical_port_id = NULL
+WHERE
+	ni.physical_port_id IS NOT NULL AND
+	ni.physical_port_id NOT IN (SELECT slot_id FROM slot);
