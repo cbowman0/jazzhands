@@ -50,6 +50,7 @@ Invoked:
 	val_component_property
 	create_device_component_by_trigger
 	validate_component_parent_slot_id
+
 	physicalish_volume
 	logical_volume
 	volume_group
@@ -8004,10 +8005,6 @@ ALTER TABLE network_interface
 ALTER TABLE network_interface
 	ADD CONSTRAINT fk_netint_device_id
 	FOREIGN KEY (device_id) REFERENCES device(device_id);
--- consider FK network_interface and slot
-ALTER TABLE network_interface
-	ADD CONSTRAINT fk_netint_slot_id
-	FOREIGN KEY (slot_id) REFERENCES slot(slot_id);
 -- consider FK network_interface and val_network_interface_type
 ALTER TABLE network_interface
 	ADD CONSTRAINT fk_netint_netinttyp_id
@@ -8016,6 +8013,10 @@ ALTER TABLE network_interface
 ALTER TABLE network_interface
 	ADD CONSTRAINT fk_net_int_phys_port_id
 	FOREIGN KEY (physical_port_id) REFERENCES slot(slot_id);
+-- consider FK network_interface and slot
+ALTER TABLE network_interface
+	ADD CONSTRAINT fk_netint_slot_id
+	FOREIGN KEY (slot_id) REFERENCES slot(slot_id);
 -- consider FK network_interface and network_interface
 ALTER TABLE network_interface
 	ADD CONSTRAINT fk_netint_ref_parentnetint
@@ -8337,7 +8338,7 @@ ALTER TABLE device
 
 -- PRIMARY AND ALTERNATE KEYS
 ALTER TABLE device ADD CONSTRAINT pk_device PRIMARY KEY (device_id);
-ALTER TABLE device ADD CONSTRAINT ak_device_rack_location_id UNIQUE (rack_location_id);
+-- ALTER TABLE device ADD CONSTRAINT ak_device_rack_location_id UNIQUE (rack_location_id);
 ALTER TABLE device ADD CONSTRAINT ak_device_chassis_location_id UNIQUE (chassis_location_id);
 
 -- Table/Column Comments
@@ -10903,10 +10904,16 @@ CREATE INDEX xif1account_realm_company
 	ON account_realm_company USING btree (company_id);
 
 
+update __regrants set
+        regrant = regexp_replace(regrant, 'configure_layer1_connect\([^\)]+\)',
+'configure_layer1_connect(physportid1 integer, physportid2 integer, baud integer, data_bits integer, stop_bits integer, parity text, flw_cntrl text, circuit_id integer)')
+where object = 'configure_layer1_connect'
+and schema = 'port_utils';
+
 
 -- Clean Up
-SELECT schema_support.replay_saved_grants();
 SELECT schema_support.replay_object_recreates();
+SELECT schema_support.replay_saved_grants();
 GRANT select on all tables in schema jazzhands to ro_role;
 GRANT insert,update,delete on all tables in schema jazzhands to iud_role;
 GRANT select on all sequences in schema jazzhands to ro_role;
