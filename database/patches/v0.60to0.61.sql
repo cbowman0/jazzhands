@@ -92,6 +92,8 @@ Invoked:
 	port_utils.setup_device_physical_ports
 	v_property
 	device_power_interface
+	automated_ac_on_person_company
+	automated_ac_on_person
 
 */
 
@@ -5170,6 +5172,512 @@ CREATE CONSTRAINT TRIGGER trigger_validate_component_parent_slot_id AFTER INSERT
 -- DONE WITH proc validate_component_parent_slot_id -> validate_component_parent_slot_id 
 --------------------------------------------------------------------
 
+--------------------------------------------------------------------
+-- DEALING WITH TABLE device [2460414]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'device', 'device');
+
+-- FOREIGN KEYS FROM
+ALTER TABLE device_management_controller DROP CONSTRAINT IF EXISTS fk_dvc_mgmt_ctrl_mgr_dev_id;
+ALTER TABLE chassis_location DROP CONSTRAINT IF EXISTS fk_chass_loc_chass_devid;
+ALTER TABLE device_layer2_network DROP CONSTRAINT IF EXISTS fk_device_l2_net_devid;
+ALTER TABLE device_management_controller DROP CONSTRAINT IF EXISTS fk_dev_mgmt_ctlr_dev_id;
+ALTER TABLE snmp_commstr DROP CONSTRAINT IF EXISTS fk_snmpstr_device_id;
+ALTER TABLE mlag_peering DROP CONSTRAINT IF EXISTS fk_mlag_peering_devid1;
+ALTER TABLE layer1_connection DROP CONSTRAINT IF EXISTS fk_l1conn_ref_device;
+ALTER TABLE mlag_peering DROP CONSTRAINT IF EXISTS fk_mlag_peering_devid2;
+ALTER TABLE network_interface_purpose DROP CONSTRAINT IF EXISTS fk_netint_purpose_device_id;
+ALTER TABLE network_service DROP CONSTRAINT IF EXISTS fk_netsvc_device_id;
+ALTER TABLE device_ticket DROP CONSTRAINT IF EXISTS fk_dev_tkt_dev_id;
+ALTER TABLE static_route DROP CONSTRAINT IF EXISTS fk_statrt_devsrc_id;
+ALTER TABLE network_interface DROP CONSTRAINT IF EXISTS fk_netint_device_id;
+ALTER TABLE device_encapsulation_domain DROP CONSTRAINT IF EXISTS fk_dev_encap_domain_devid;
+ALTER TABLE device_ssh_key DROP CONSTRAINT IF EXISTS fk_dev_ssh_key_ssh_key_id;
+ALTER TABLE device_collection_device DROP CONSTRAINT IF EXISTS fk_devcolldev_dev_id;
+ALTER TABLE device_note DROP CONSTRAINT IF EXISTS fk_device_note_device;
+ALTER TABLE physical_port DROP CONSTRAINT IF EXISTS fk_phys_port_dev_id;
+ALTER TABLE device_power_interface DROP CONSTRAINT IF EXISTS fk_device_device_power_supp;
+ALTER TABLE jazzhands.physicalish_volume DROP CONSTRAINT IF EXISTS fk_physvol_device_id;
+ALTER TABLE jazzhands.device_type DROP CONSTRAINT IF EXISTS fk_dev_typ_tmplt_dev_typ_id;
+
+-- FOREIGN KEYS TO
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_comp_id;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_chasloc_chass_devid;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_dev_ref_mgmt_proto;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_site_code;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_ref_voesymbtrk;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_dev_val_status;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_dev_rack_location_id;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_dev_chass_loc_id_mod_enfc;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_fk_voe;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_id_dnsrecord;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_company__id;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_asset_id;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_dev_devtp_id;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_ref_parent_device;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_dev_v_svcenv;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_dev_os_id;
+
+-- EXTRA-SCHEMA constraints
+SELECT schema_support.save_constraint_for_replay('jazzhands', 'device');
+
+-- PRIMARY and ALTERNATE KEYS
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS pk_device;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ak_device_rack_location_id;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ak_device_chassis_location_id;
+-- INDEXES
+DROP INDEX IF EXISTS "jazzhands"."idx_dev_ismonitored";
+DROP INDEX IF EXISTS "jazzhands"."idx_device_type_location";
+DROP INDEX IF EXISTS "jazzhands"."xif_dev_chass_loc_id_mod_enfc";
+DROP INDEX IF EXISTS "jazzhands"."xif_device_comp_id";
+DROP INDEX IF EXISTS "jazzhands"."xif_device_fk_voe";
+DROP INDEX IF EXISTS "jazzhands"."xif_device_id_dnsrecord";
+DROP INDEX IF EXISTS "jazzhands"."xif_device_asset_id";
+DROP INDEX IF EXISTS "jazzhands"."xif_dev_os_id";
+DROP INDEX IF EXISTS "jazzhands"."xif_device_dev_v_svcenv";
+DROP INDEX IF EXISTS "jazzhands"."xif_device_dev_val_status";
+DROP INDEX IF EXISTS "jazzhands"."xif_device_company__id";
+DROP INDEX IF EXISTS "jazzhands"."xif_device_site_code";
+DROP INDEX IF EXISTS "jazzhands"."idx_dev_islclymgd";
+-- CHECK CONSTRAINTS, etc
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ckc_should_fetch_conf_device;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS sys_c0069059;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS sys_c0069052;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS sys_c0069060;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ckc_is_monitored_device;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ckc_is_locally_manage_device;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS sys_c0069057;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS sys_c0069051;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ckc_is_virtual_device_device;
+ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS dev_osid_notnull;
+-- TRIGGERS, etc
+DROP TRIGGER IF EXISTS trig_userlog_device ON jazzhands.device;
+DROP TRIGGER IF EXISTS trigger_audit_device ON jazzhands.device;
+DROP TRIGGER IF EXISTS trigger_delete_per_device_device_collection ON jazzhands.device;
+DROP TRIGGER IF EXISTS trigger_verify_device_voe ON jazzhands.device;
+DROP TRIGGER IF EXISTS trigger_device_one_location_validate ON jazzhands.device;
+DROP TRIGGER IF EXISTS trigger_update_per_device_device_collection ON jazzhands.device;
+DROP TRIGGER IF EXISTS trigger_validate_device_component_assignment ON jazzhands.device;
+SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'device');
+---- BEGIN audit.device TEARDOWN
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+
+-- EXTRA-SCHEMA constraints
+SELECT schema_support.save_constraint_for_replay('audit', 'device');
+
+-- PRIMARY and ALTERNATE KEYS
+-- INDEXES
+DROP INDEX IF EXISTS "audit"."device_aud#timestamp_idx";
+-- CHECK CONSTRAINTS, etc
+-- TRIGGERS, etc
+SELECT schema_support.save_dependant_objects_for_replay('audit', 'device');
+---- DONE audit.device TEARDOWN
+
+
+ALTER TABLE device RENAME TO device_v60;
+ALTER TABLE audit.device RENAME TO device_v60;
+
+CREATE TABLE device
+(
+	device_id	integer NOT NULL,
+	component_id	integer  NULL,
+	device_type_id	integer NOT NULL,
+	asset_id	integer  NULL,
+	device_name	varchar(255)  NULL,
+	site_code	varchar(50)  NULL,
+	identifying_dns_record_id	integer  NULL,
+	host_id	varchar(255)  NULL,
+	physical_label	varchar(255)  NULL,
+	rack_location_id	integer  NULL,
+	chassis_location_id	integer  NULL,
+	parent_device_id	integer  NULL,
+	description	varchar(255)  NULL,
+	device_status	varchar(50) NOT NULL,
+	operating_system_id	integer NOT NULL,
+	service_environment_id	integer NOT NULL,
+	voe_id	integer  NULL,
+	auto_mgmt_protocol	varchar(50)  NULL,
+	voe_symbolic_track_id	integer  NULL,
+	is_locally_managed	character(1) NOT NULL,
+	is_monitored	character(1) NOT NULL,
+	is_virtual_device	character(1) NOT NULL,
+	should_fetch_config	character(1) NOT NULL,
+	date_in_service	timestamp with time zone  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'device', false);
+ALTER TABLE device
+	ALTER device_id
+	SET DEFAULT nextval('device_device_id_seq'::regclass);
+ALTER TABLE device
+	ALTER operating_system_id
+	SET DEFAULT 0;
+ALTER TABLE device
+	ALTER is_locally_managed
+	SET DEFAULT 'Y'::bpchar;
+ALTER TABLE device
+	ALTER is_virtual_device
+	SET DEFAULT 'N'::bpchar;
+ALTER TABLE device
+	ALTER should_fetch_config
+	SET DEFAULT 'Y'::bpchar;
+INSERT INTO device (
+	device_id,
+	component_id,
+	device_type_id,
+	asset_id,
+	device_name,
+	site_code,
+	identifying_dns_record_id,
+	host_id,
+	physical_label,
+	rack_location_id,
+	chassis_location_id,
+	parent_device_id,
+	description,
+	device_status,
+	operating_system_id,
+	service_environment_id,
+	voe_id,
+	auto_mgmt_protocol,
+	voe_symbolic_track_id,
+	is_locally_managed,
+	is_monitored,
+	is_virtual_device,
+	should_fetch_config,
+	date_in_service,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+) SELECT
+	device_id,
+	component_id,
+	device_type_id,
+	asset_id,
+	device_name,
+	site_code,
+	identifying_dns_record_id,
+	host_id,
+	physical_label,
+	rack_location_id,
+	chassis_location_id,
+	parent_device_id,
+	description,
+	device_status,
+	operating_system_id,
+	service_environment_id,
+	voe_id,
+	auto_mgmt_protocol,
+	voe_symbolic_track_id,
+	is_locally_managed,
+	is_monitored,
+	is_virtual_device,
+	should_fetch_config,
+	date_in_service,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+FROM device_v60;
+
+INSERT INTO audit.device (
+	device_id,
+	component_id,
+	device_type_id,
+	asset_id,
+	device_name,
+	site_code,
+	identifying_dns_record_id,
+	host_id,
+	physical_label,
+	rack_location_id,
+	chassis_location_id,
+	parent_device_id,
+	description,
+	device_status,
+	operating_system_id,
+	service_environment_id,
+	voe_id,
+	auto_mgmt_protocol,
+	voe_symbolic_track_id,
+	is_locally_managed,
+	is_monitored,
+	is_virtual_device,
+	should_fetch_config,
+	date_in_service,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+) SELECT
+	device_id,
+	component_id,
+	device_type_id,
+	asset_id,
+	device_name,
+	site_code,
+	identifying_dns_record_id,
+	host_id,
+	physical_label,
+	rack_location_id,
+	chassis_location_id,
+	parent_device_id,
+	description,
+	device_status,
+	operating_system_id,
+	service_environment_id,
+	voe_id,
+	auto_mgmt_protocol,
+	voe_symbolic_track_id,
+	is_locally_managed,
+	is_monitored,
+	is_virtual_device,
+	should_fetch_config,
+	date_in_service,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+FROM audit.device_v60;
+
+ALTER TABLE device
+	ALTER device_id
+	SET DEFAULT nextval('device_device_id_seq'::regclass);
+ALTER TABLE device
+	ALTER operating_system_id
+	SET DEFAULT 0;
+ALTER TABLE device
+	ALTER is_locally_managed
+	SET DEFAULT 'Y'::bpchar;
+ALTER TABLE device
+	ALTER is_virtual_device
+	SET DEFAULT 'N'::bpchar;
+ALTER TABLE device
+	ALTER should_fetch_config
+	SET DEFAULT 'Y'::bpchar;
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE device ADD CONSTRAINT pk_device PRIMARY KEY (device_id);
+-- ALTER TABLE device ADD CONSTRAINT ak_device_rack_location_id UNIQUE (rack_location_id);
+ALTER TABLE device ADD CONSTRAINT ak_device_chassis_location_id UNIQUE (chassis_location_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX idx_dev_ismonitored ON device USING btree (is_monitored);
+CREATE INDEX idx_device_type_location ON device USING btree (device_type_id);
+CREATE INDEX xif_dev_chass_loc_id_mod_enfc ON device USING btree (chassis_location_id, parent_device_id, device_type_id);
+CREATE INDEX xif_device_comp_id ON device USING btree (component_id);
+CREATE INDEX xif_device_fk_voe ON device USING btree (voe_id);
+CREATE INDEX xif_device_id_dnsrecord ON device USING btree (identifying_dns_record_id);
+CREATE INDEX xif_device_asset_id ON device USING btree (asset_id);
+CREATE INDEX xif_device_dev_v_svcenv ON device USING btree (service_environment_id);
+CREATE INDEX xif_dev_os_id ON device USING btree (operating_system_id);
+CREATE INDEX xif_device_dev_val_status ON device USING btree (device_status);
+CREATE INDEX xif_device_site_code ON device USING btree (site_code);
+CREATE INDEX idx_dev_islclymgd ON device USING btree (is_locally_managed);
+
+-- CHECK CONSTRAINTS
+ALTER TABLE device ADD CONSTRAINT sys_c0069057
+	CHECK (is_monitored IS NOT NULL);
+ALTER TABLE device ADD CONSTRAINT sys_c0069051
+	CHECK (device_id IS NOT NULL);
+ALTER TABLE device ADD CONSTRAINT dev_osid_notnull
+	CHECK (operating_system_id IS NOT NULL);
+ALTER TABLE device ADD CONSTRAINT ckc_is_virtual_device_device
+	CHECK ((is_virtual_device = ANY (ARRAY['Y'::bpchar, 'N'::bpchar])) AND ((is_virtual_device)::text = upper((is_virtual_device)::text)));
+ALTER TABLE device ADD CONSTRAINT sys_c0069059
+	CHECK (is_virtual_device IS NOT NULL);
+ALTER TABLE device ADD CONSTRAINT ckc_should_fetch_conf_device
+	CHECK ((should_fetch_config = ANY (ARRAY['Y'::bpchar, 'N'::bpchar])) AND ((should_fetch_config)::text = upper((should_fetch_config)::text)));
+ALTER TABLE device ADD CONSTRAINT ckc_is_locally_manage_device
+	CHECK ((is_locally_managed = ANY (ARRAY['Y'::bpchar, 'N'::bpchar])) AND ((is_locally_managed)::text = upper((is_locally_managed)::text)));
+ALTER TABLE device ADD CONSTRAINT ckc_is_monitored_device
+	CHECK ((is_monitored = ANY (ARRAY['Y'::bpchar, 'N'::bpchar])) AND ((is_monitored)::text = upper((is_monitored)::text)));
+ALTER TABLE device ADD CONSTRAINT sys_c0069060
+	CHECK (should_fetch_config IS NOT NULL);
+ALTER TABLE device ADD CONSTRAINT sys_c0069052
+	CHECK (device_type_id IS NOT NULL);
+
+-- FOREIGN KEYS FROM
+-- consider FK device and device_type
+ALTER TABLE device_type
+	ADD CONSTRAINT fk_dev_typ_tmplt_dev_typ_id
+	FOREIGN KEY (template_device_id) REFERENCES device(device_id);
+-- consider FK device and device_collection_device
+ALTER TABLE device_collection_device
+	ADD CONSTRAINT fk_devcolldev_dev_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and device_note
+ALTER TABLE device_note
+	ADD CONSTRAINT fk_device_note_device
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and device_encapsulation_domain
+ALTER TABLE device_encapsulation_domain
+	ADD CONSTRAINT fk_dev_encap_domain_devid
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and device_ssh_key
+ALTER TABLE device_ssh_key
+	ADD CONSTRAINT fk_dev_ssh_key_ssh_key_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and network_interface
+ALTER TABLE network_interface
+	ADD CONSTRAINT fk_netint_device_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and mlag_peering
+ALTER TABLE mlag_peering
+	ADD CONSTRAINT fk_mlag_peering_devid2
+	FOREIGN KEY (device2_id) REFERENCES device(device_id);
+-- consider FK device and network_interface_purpose
+ALTER TABLE network_interface_purpose
+	ADD CONSTRAINT fk_netint_purpose_device_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and network_service
+ALTER TABLE network_service
+	ADD CONSTRAINT fk_netsvc_device_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and device_ticket
+ALTER TABLE device_ticket
+	ADD CONSTRAINT fk_dev_tkt_dev_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and static_route
+ALTER TABLE static_route
+	ADD CONSTRAINT fk_statrt_devsrc_id
+	FOREIGN KEY (device_src_id) REFERENCES device(device_id);
+-- consider FK device and physicalish_volume
+-- ALTER TABLE physicalish_volume
+-- 	ADD CONSTRAINT fk_physvol_device_id
+-- 	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and mlag_peering
+ALTER TABLE mlag_peering
+	ADD CONSTRAINT fk_mlag_peering_devid1
+	FOREIGN KEY (device1_id) REFERENCES device(device_id);
+-- consider FK device and snmp_commstr
+ALTER TABLE snmp_commstr
+	ADD CONSTRAINT fk_snmpstr_device_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and device_management_controller
+ALTER TABLE device_management_controller
+	ADD CONSTRAINT fk_dvc_mgmt_ctrl_mgr_dev_id
+	FOREIGN KEY (manager_device_id) REFERENCES device(device_id);
+-- consider FK device and chassis_location
+ALTER TABLE chassis_location
+	ADD CONSTRAINT fk_chass_loc_chass_devid
+	FOREIGN KEY (chassis_device_id) REFERENCES device(device_id) DEFERRABLE;
+-- consider FK device and device_management_controller
+ALTER TABLE device_management_controller
+	ADD CONSTRAINT fk_dev_mgmt_ctlr_dev_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+-- consider FK device and device_layer2_network
+ALTER TABLE device_layer2_network
+	ADD CONSTRAINT fk_device_l2_net_devid
+	FOREIGN KEY (device_id) REFERENCES device(device_id);
+
+-- FOREIGN KEYS TO
+-- consider FK device and dns_record
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_id_dnsrecord
+	FOREIGN KEY (identifying_dns_record_id) REFERENCES dns_record(dns_record_id);
+-- consider FK device and voe
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_fk_voe
+	FOREIGN KEY (voe_id) REFERENCES voe(voe_id);
+-- consider FK device and rack_location
+ALTER TABLE device
+	ADD CONSTRAINT fk_dev_rack_location_id
+	FOREIGN KEY (rack_location_id) REFERENCES rack_location(rack_location_id);
+-- consider FK device and operating_system
+ALTER TABLE device
+	ADD CONSTRAINT fk_dev_os_id
+	FOREIGN KEY (operating_system_id) REFERENCES operating_system(operating_system_id);
+-- consider FK device and chassis_location
+ALTER TABLE device
+	ADD CONSTRAINT fk_dev_chass_loc_id_mod_enfc
+	FOREIGN KEY (chassis_location_id, parent_device_id, device_type_id) REFERENCES chassis_location(chassis_location_id, chassis_device_id, module_device_type_id) DEFERRABLE;
+-- consider FK device and voe_symbolic_track
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_ref_voesymbtrk
+	FOREIGN KEY (voe_symbolic_track_id) REFERENCES voe_symbolic_track(voe_symbolic_track_id);
+-- consider FK device and val_device_status
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_dev_val_status
+	FOREIGN KEY (device_status) REFERENCES val_device_status(device_status);
+-- consider FK device and service_environment
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_dev_v_svcenv
+	FOREIGN KEY (service_environment_id) REFERENCES service_environment(service_environment_id);
+-- consider FK device and val_device_auto_mgmt_protocol
+ALTER TABLE device
+	ADD CONSTRAINT fk_dev_ref_mgmt_proto
+	FOREIGN KEY (auto_mgmt_protocol) REFERENCES val_device_auto_mgmt_protocol(auto_mgmt_protocol);
+-- consider FK device and site
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_site_code
+	FOREIGN KEY (site_code) REFERENCES site(site_code);
+-- consider FK device and asset
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_asset_id
+	FOREIGN KEY (asset_id) REFERENCES asset(asset_id);
+-- consider FK device and chassis_location
+ALTER TABLE device
+	ADD CONSTRAINT fk_chasloc_chass_devid
+	FOREIGN KEY (chassis_location_id) REFERENCES chassis_location(chassis_location_id) DEFERRABLE;
+-- consider FK device and device_type
+ALTER TABLE device
+	ADD CONSTRAINT fk_dev_devtp_id
+	FOREIGN KEY (device_type_id) REFERENCES device_type(device_type_id);
+-- consider FK device and device
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_ref_parent_device
+	FOREIGN KEY (parent_device_id) REFERENCES device(device_id);
+-- consider FK device and component
+ALTER TABLE device
+	ADD CONSTRAINT fk_device_comp_id
+	FOREIGN KEY (component_id) REFERENCES component(component_id);
+
+-- TRIGGERS
+CREATE TRIGGER trigger_device_one_location_validate BEFORE INSERT OR UPDATE ON device FOR EACH ROW EXECUTE PROCEDURE device_one_location_validate();
+
+-- XXX - may need to include trigger function
+CREATE TRIGGER trigger_verify_device_voe BEFORE INSERT OR UPDATE ON device FOR EACH ROW EXECUTE PROCEDURE verify_device_voe();
+
+-- XXX - may need to include trigger function
+CREATE CONSTRAINT TRIGGER trigger_validate_device_component_assignment AFTER INSERT OR UPDATE OF device_type_id, component_id ON device DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE PROCEDURE validate_device_component_assignment();
+
+-- XXX - may need to include trigger function
+CREATE TRIGGER trigger_delete_per_device_device_collection BEFORE DELETE ON device FOR EACH ROW EXECUTE PROCEDURE delete_per_device_device_collection();
+
+-- XXX - may need to include trigger function
+CREATE TRIGGER trigger_update_per_device_device_collection AFTER INSERT OR UPDATE ON device FOR EACH ROW EXECUTE PROCEDURE update_per_device_device_collection();
+
+-- XXX - may need to include trigger function
+CREATE TRIGGER trigger_create_device_component BEFORE INSERT ON device FOR EACH ROW EXECUTE PROCEDURE create_device_component_by_trigger();
+
+-- XXX - may need to include trigger function
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'device');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'device');
+ALTER SEQUENCE device_device_id_seq
+	 OWNED BY device.device_id;
+DROP TABLE IF EXISTS device_v60;
+DROP TABLE IF EXISTS audit.device_v60;
+-- DONE DEALING WITH TABLE device [2499895]
+--------------------------------------------------------------------
+
+
 --------------------------------------------------------------------------------
 -- COMPONENT MIGRATION
 
@@ -6409,6 +6917,43 @@ WITH RECURSIVE device_slots (device_id, device_component_id, component_id, slot_
 SELECT * FROM device_slots;
 
 -- END ../ddl/views/create_v_device_slots.sql
+
+-- BEGIN v_device_components
+--------------------------------------------------------------------
+-- DEALING WITH NEW TABLE v_device_components
+CREATE VIEW v_device_components AS
+ WITH RECURSIVE device_components(device_id, device_component_id, component_id, slot_id, component_path) AS (
+         SELECT d.device_id,
+            c.component_id,
+            c.component_id,
+            s.slot_id,
+            ARRAY[c.component_id] AS "array"
+           FROM device d
+             JOIN component c USING (component_id)
+             LEFT JOIN slot s USING (component_id)
+        UNION
+         SELECT p.device_id,
+            p.device_component_id,
+            c.component_id,
+            s.slot_id,
+            array_prepend(c.component_id, p.component_path) AS array_prepend
+           FROM device_components p
+             JOIN component c ON p.slot_id = c.parent_slot_id
+             LEFT JOIN slot s ON s.component_id = c.component_id
+          WHERE NOT (c.component_id IN ( SELECT device.component_id
+                   FROM device
+                  WHERE device.component_id IS NOT NULL))
+        )
+ SELECT DISTINCT device_components.device_id,
+    device_components.component_id,
+    device_components.component_path,
+    array_length(device_components.component_path, 1) AS level
+   FROM device_components;
+
+delete from __recreate where type = 'view' and object = 'v_device_components';
+-- DONE DEALING WITH TABLE v_device_components [3105477]
+--------------------------------------------------------------------
+-- END v_device_components
 
 \echo
 \echo Migrating device data to components
@@ -8089,510 +8634,6 @@ DROP TABLE IF EXISTS audit.network_interface_v60;
 -- DONE DEALING WITH TABLE network_interface [2500460]
 --------------------------------------------------------------------
 --------------------------------------------------------------------
--- DEALING WITH TABLE device [2460414]
--- Save grants for later reapplication
-SELECT schema_support.save_grants_for_replay('jazzhands', 'device', 'device');
-
--- FOREIGN KEYS FROM
-ALTER TABLE device_management_controller DROP CONSTRAINT IF EXISTS fk_dvc_mgmt_ctrl_mgr_dev_id;
-ALTER TABLE chassis_location DROP CONSTRAINT IF EXISTS fk_chass_loc_chass_devid;
-ALTER TABLE device_layer2_network DROP CONSTRAINT IF EXISTS fk_device_l2_net_devid;
-ALTER TABLE device_management_controller DROP CONSTRAINT IF EXISTS fk_dev_mgmt_ctlr_dev_id;
-ALTER TABLE snmp_commstr DROP CONSTRAINT IF EXISTS fk_snmpstr_device_id;
-ALTER TABLE mlag_peering DROP CONSTRAINT IF EXISTS fk_mlag_peering_devid1;
-ALTER TABLE layer1_connection DROP CONSTRAINT IF EXISTS fk_l1conn_ref_device;
-ALTER TABLE mlag_peering DROP CONSTRAINT IF EXISTS fk_mlag_peering_devid2;
-ALTER TABLE network_interface_purpose DROP CONSTRAINT IF EXISTS fk_netint_purpose_device_id;
-ALTER TABLE network_service DROP CONSTRAINT IF EXISTS fk_netsvc_device_id;
-ALTER TABLE device_ticket DROP CONSTRAINT IF EXISTS fk_dev_tkt_dev_id;
-ALTER TABLE static_route DROP CONSTRAINT IF EXISTS fk_statrt_devsrc_id;
-ALTER TABLE network_interface DROP CONSTRAINT IF EXISTS fk_netint_device_id;
-ALTER TABLE device_encapsulation_domain DROP CONSTRAINT IF EXISTS fk_dev_encap_domain_devid;
-ALTER TABLE device_ssh_key DROP CONSTRAINT IF EXISTS fk_dev_ssh_key_ssh_key_id;
-ALTER TABLE device_collection_device DROP CONSTRAINT IF EXISTS fk_devcolldev_dev_id;
-ALTER TABLE device_note DROP CONSTRAINT IF EXISTS fk_device_note_device;
-ALTER TABLE physical_port DROP CONSTRAINT IF EXISTS fk_phys_port_dev_id;
-ALTER TABLE device_power_interface DROP CONSTRAINT IF EXISTS fk_device_device_power_supp;
-ALTER TABLE jazzhands.physicalish_volume DROP CONSTRAINT IF EXISTS fk_physvol_device_id;
-ALTER TABLE jazzhands.device_type DROP CONSTRAINT IF EXISTS fk_dev_typ_tmplt_dev_typ_id;
-
--- FOREIGN KEYS TO
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_comp_id;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_chasloc_chass_devid;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_dev_ref_mgmt_proto;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_site_code;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_ref_voesymbtrk;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_dev_val_status;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_dev_rack_location_id;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_dev_chass_loc_id_mod_enfc;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_fk_voe;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_id_dnsrecord;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_company__id;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_asset_id;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_dev_devtp_id;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_ref_parent_device;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_device_dev_v_svcenv;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS fk_dev_os_id;
-
--- EXTRA-SCHEMA constraints
-SELECT schema_support.save_constraint_for_replay('jazzhands', 'device');
-
--- PRIMARY and ALTERNATE KEYS
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS pk_device;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ak_device_rack_location_id;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ak_device_chassis_location_id;
--- INDEXES
-DROP INDEX IF EXISTS "jazzhands"."idx_dev_ismonitored";
-DROP INDEX IF EXISTS "jazzhands"."idx_device_type_location";
-DROP INDEX IF EXISTS "jazzhands"."xif_dev_chass_loc_id_mod_enfc";
-DROP INDEX IF EXISTS "jazzhands"."xif_device_comp_id";
-DROP INDEX IF EXISTS "jazzhands"."xif_device_fk_voe";
-DROP INDEX IF EXISTS "jazzhands"."xif_device_id_dnsrecord";
-DROP INDEX IF EXISTS "jazzhands"."xif_device_asset_id";
-DROP INDEX IF EXISTS "jazzhands"."xif_dev_os_id";
-DROP INDEX IF EXISTS "jazzhands"."xif_device_dev_v_svcenv";
-DROP INDEX IF EXISTS "jazzhands"."xif_device_dev_val_status";
-DROP INDEX IF EXISTS "jazzhands"."xif_device_company__id";
-DROP INDEX IF EXISTS "jazzhands"."xif_device_site_code";
-DROP INDEX IF EXISTS "jazzhands"."idx_dev_islclymgd";
--- CHECK CONSTRAINTS, etc
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ckc_should_fetch_conf_device;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS sys_c0069059;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS sys_c0069052;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS sys_c0069060;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ckc_is_monitored_device;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ckc_is_locally_manage_device;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS sys_c0069057;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS sys_c0069051;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS ckc_is_virtual_device_device;
-ALTER TABLE jazzhands.device DROP CONSTRAINT IF EXISTS dev_osid_notnull;
--- TRIGGERS, etc
-DROP TRIGGER IF EXISTS trig_userlog_device ON jazzhands.device;
-DROP TRIGGER IF EXISTS trigger_audit_device ON jazzhands.device;
-DROP TRIGGER IF EXISTS trigger_delete_per_device_device_collection ON jazzhands.device;
-DROP TRIGGER IF EXISTS trigger_verify_device_voe ON jazzhands.device;
-DROP TRIGGER IF EXISTS trigger_device_one_location_validate ON jazzhands.device;
-DROP TRIGGER IF EXISTS trigger_update_per_device_device_collection ON jazzhands.device;
-DROP TRIGGER IF EXISTS trigger_validate_device_component_assignment ON jazzhands.device;
-SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'device');
----- BEGIN audit.device TEARDOWN
-
--- FOREIGN KEYS FROM
-
--- FOREIGN KEYS TO
-
--- EXTRA-SCHEMA constraints
-SELECT schema_support.save_constraint_for_replay('audit', 'device');
-
--- PRIMARY and ALTERNATE KEYS
--- INDEXES
-DROP INDEX IF EXISTS "audit"."device_aud#timestamp_idx";
--- CHECK CONSTRAINTS, etc
--- TRIGGERS, etc
-SELECT schema_support.save_dependant_objects_for_replay('audit', 'device');
----- DONE audit.device TEARDOWN
-
-
-ALTER TABLE device RENAME TO device_v60;
-ALTER TABLE audit.device RENAME TO device_v60;
-
-CREATE TABLE device
-(
-	device_id	integer NOT NULL,
-	component_id	integer  NULL,
-	device_type_id	integer NOT NULL,
-	asset_id	integer  NULL,
-	device_name	varchar(255)  NULL,
-	site_code	varchar(50)  NULL,
-	identifying_dns_record_id	integer  NULL,
-	host_id	varchar(255)  NULL,
-	physical_label	varchar(255)  NULL,
-	rack_location_id	integer  NULL,
-	chassis_location_id	integer  NULL,
-	parent_device_id	integer  NULL,
-	description	varchar(255)  NULL,
-	device_status	varchar(50) NOT NULL,
-	operating_system_id	integer NOT NULL,
-	service_environment_id	integer NOT NULL,
-	voe_id	integer  NULL,
-	auto_mgmt_protocol	varchar(50)  NULL,
-	voe_symbolic_track_id	integer  NULL,
-	is_locally_managed	character(1) NOT NULL,
-	is_monitored	character(1) NOT NULL,
-	is_virtual_device	character(1) NOT NULL,
-	should_fetch_config	character(1) NOT NULL,
-	date_in_service	timestamp with time zone  NULL,
-	data_ins_user	varchar(255)  NULL,
-	data_ins_date	timestamp with time zone  NULL,
-	data_upd_user	varchar(255)  NULL,
-	data_upd_date	timestamp with time zone  NULL
-);
-SELECT schema_support.build_audit_table('audit', 'jazzhands', 'device', false);
-ALTER TABLE device
-	ALTER device_id
-	SET DEFAULT nextval('device_device_id_seq'::regclass);
-ALTER TABLE device
-	ALTER operating_system_id
-	SET DEFAULT 0;
-ALTER TABLE device
-	ALTER is_locally_managed
-	SET DEFAULT 'Y'::bpchar;
-ALTER TABLE device
-	ALTER is_virtual_device
-	SET DEFAULT 'N'::bpchar;
-ALTER TABLE device
-	ALTER should_fetch_config
-	SET DEFAULT 'Y'::bpchar;
-INSERT INTO device (
-	device_id,
-	component_id,
-	device_type_id,
-	asset_id,
-	device_name,
-	site_code,
-	identifying_dns_record_id,
-	host_id,
-	physical_label,
-	rack_location_id,
-	chassis_location_id,
-	parent_device_id,
-	description,
-	device_status,
-	operating_system_id,
-	service_environment_id,
-	voe_id,
-	auto_mgmt_protocol,
-	voe_symbolic_track_id,
-	is_locally_managed,
-	is_monitored,
-	is_virtual_device,
-	should_fetch_config,
-	date_in_service,
-	data_ins_user,
-	data_ins_date,
-	data_upd_user,
-	data_upd_date
-) SELECT
-	device_id,
-	component_id,
-	device_type_id,
-	asset_id,
-	device_name,
-	site_code,
-	identifying_dns_record_id,
-	host_id,
-	physical_label,
-	rack_location_id,
-	chassis_location_id,
-	parent_device_id,
-	description,
-	device_status,
-	operating_system_id,
-	service_environment_id,
-	voe_id,
-	auto_mgmt_protocol,
-	voe_symbolic_track_id,
-	is_locally_managed,
-	is_monitored,
-	is_virtual_device,
-	should_fetch_config,
-	date_in_service,
-	data_ins_user,
-	data_ins_date,
-	data_upd_user,
-	data_upd_date
-FROM device_v60;
-
-INSERT INTO audit.device (
-	device_id,
-	component_id,
-	device_type_id,
-	asset_id,
-	device_name,
-	site_code,
-	identifying_dns_record_id,
-	host_id,
-	physical_label,
-	rack_location_id,
-	chassis_location_id,
-	parent_device_id,
-	description,
-	device_status,
-	operating_system_id,
-	service_environment_id,
-	voe_id,
-	auto_mgmt_protocol,
-	voe_symbolic_track_id,
-	is_locally_managed,
-	is_monitored,
-	is_virtual_device,
-	should_fetch_config,
-	date_in_service,
-	data_ins_user,
-	data_ins_date,
-	data_upd_user,
-	data_upd_date,
-	"aud#action",
-	"aud#timestamp",
-	"aud#user",
-	"aud#seq"
-) SELECT
-	device_id,
-	component_id,
-	device_type_id,
-	asset_id,
-	device_name,
-	site_code,
-	identifying_dns_record_id,
-	host_id,
-	physical_label,
-	rack_location_id,
-	chassis_location_id,
-	parent_device_id,
-	description,
-	device_status,
-	operating_system_id,
-	service_environment_id,
-	voe_id,
-	auto_mgmt_protocol,
-	voe_symbolic_track_id,
-	is_locally_managed,
-	is_monitored,
-	is_virtual_device,
-	should_fetch_config,
-	date_in_service,
-	data_ins_user,
-	data_ins_date,
-	data_upd_user,
-	data_upd_date,
-	"aud#action",
-	"aud#timestamp",
-	"aud#user",
-	"aud#seq"
-FROM audit.device_v60;
-
-ALTER TABLE device
-	ALTER device_id
-	SET DEFAULT nextval('device_device_id_seq'::regclass);
-ALTER TABLE device
-	ALTER operating_system_id
-	SET DEFAULT 0;
-ALTER TABLE device
-	ALTER is_locally_managed
-	SET DEFAULT 'Y'::bpchar;
-ALTER TABLE device
-	ALTER is_virtual_device
-	SET DEFAULT 'N'::bpchar;
-ALTER TABLE device
-	ALTER should_fetch_config
-	SET DEFAULT 'Y'::bpchar;
-
--- PRIMARY AND ALTERNATE KEYS
-ALTER TABLE device ADD CONSTRAINT pk_device PRIMARY KEY (device_id);
--- ALTER TABLE device ADD CONSTRAINT ak_device_rack_location_id UNIQUE (rack_location_id);
-ALTER TABLE device ADD CONSTRAINT ak_device_chassis_location_id UNIQUE (chassis_location_id);
-
--- Table/Column Comments
--- INDEXES
-CREATE INDEX idx_dev_ismonitored ON device USING btree (is_monitored);
-CREATE INDEX idx_device_type_location ON device USING btree (device_type_id);
-CREATE INDEX xif_dev_chass_loc_id_mod_enfc ON device USING btree (chassis_location_id, parent_device_id, device_type_id);
-CREATE INDEX xif_device_comp_id ON device USING btree (component_id);
-CREATE INDEX xif_device_fk_voe ON device USING btree (voe_id);
-CREATE INDEX xif_device_id_dnsrecord ON device USING btree (identifying_dns_record_id);
-CREATE INDEX xif_device_asset_id ON device USING btree (asset_id);
-CREATE INDEX xif_device_dev_v_svcenv ON device USING btree (service_environment_id);
-CREATE INDEX xif_dev_os_id ON device USING btree (operating_system_id);
-CREATE INDEX xif_device_dev_val_status ON device USING btree (device_status);
-CREATE INDEX xif_device_site_code ON device USING btree (site_code);
-CREATE INDEX idx_dev_islclymgd ON device USING btree (is_locally_managed);
-
--- CHECK CONSTRAINTS
-ALTER TABLE device ADD CONSTRAINT sys_c0069057
-	CHECK (is_monitored IS NOT NULL);
-ALTER TABLE device ADD CONSTRAINT sys_c0069051
-	CHECK (device_id IS NOT NULL);
-ALTER TABLE device ADD CONSTRAINT dev_osid_notnull
-	CHECK (operating_system_id IS NOT NULL);
-ALTER TABLE device ADD CONSTRAINT ckc_is_virtual_device_device
-	CHECK ((is_virtual_device = ANY (ARRAY['Y'::bpchar, 'N'::bpchar])) AND ((is_virtual_device)::text = upper((is_virtual_device)::text)));
-ALTER TABLE device ADD CONSTRAINT sys_c0069059
-	CHECK (is_virtual_device IS NOT NULL);
-ALTER TABLE device ADD CONSTRAINT ckc_should_fetch_conf_device
-	CHECK ((should_fetch_config = ANY (ARRAY['Y'::bpchar, 'N'::bpchar])) AND ((should_fetch_config)::text = upper((should_fetch_config)::text)));
-ALTER TABLE device ADD CONSTRAINT ckc_is_locally_manage_device
-	CHECK ((is_locally_managed = ANY (ARRAY['Y'::bpchar, 'N'::bpchar])) AND ((is_locally_managed)::text = upper((is_locally_managed)::text)));
-ALTER TABLE device ADD CONSTRAINT ckc_is_monitored_device
-	CHECK ((is_monitored = ANY (ARRAY['Y'::bpchar, 'N'::bpchar])) AND ((is_monitored)::text = upper((is_monitored)::text)));
-ALTER TABLE device ADD CONSTRAINT sys_c0069060
-	CHECK (should_fetch_config IS NOT NULL);
-ALTER TABLE device ADD CONSTRAINT sys_c0069052
-	CHECK (device_type_id IS NOT NULL);
-
--- FOREIGN KEYS FROM
--- consider FK device and device_type
-ALTER TABLE device_type
-	ADD CONSTRAINT fk_dev_typ_tmplt_dev_typ_id
-	FOREIGN KEY (template_device_id) REFERENCES device(device_id);
--- consider FK device and device_collection_device
-ALTER TABLE device_collection_device
-	ADD CONSTRAINT fk_devcolldev_dev_id
-	FOREIGN KEY (device_id) REFERENCES device(device_id);
--- consider FK device and device_note
-ALTER TABLE device_note
-	ADD CONSTRAINT fk_device_note_device
-	FOREIGN KEY (device_id) REFERENCES device(device_id);
--- consider FK device and device_encapsulation_domain
-ALTER TABLE device_encapsulation_domain
-	ADD CONSTRAINT fk_dev_encap_domain_devid
-	FOREIGN KEY (device_id) REFERENCES device(device_id);
--- consider FK device and device_ssh_key
-ALTER TABLE device_ssh_key
-	ADD CONSTRAINT fk_dev_ssh_key_ssh_key_id
-	FOREIGN KEY (device_id) REFERENCES device(device_id);
--- consider FK device and network_interface
-ALTER TABLE network_interface
-	ADD CONSTRAINT fk_netint_device_id
-	FOREIGN KEY (device_id) REFERENCES device(device_id);
--- consider FK device and mlag_peering
-ALTER TABLE mlag_peering
-	ADD CONSTRAINT fk_mlag_peering_devid2
-	FOREIGN KEY (device2_id) REFERENCES device(device_id);
--- consider FK device and network_interface_purpose
-ALTER TABLE network_interface_purpose
-	ADD CONSTRAINT fk_netint_purpose_device_id
-	FOREIGN KEY (device_id) REFERENCES device(device_id);
--- consider FK device and network_service
-ALTER TABLE network_service
-	ADD CONSTRAINT fk_netsvc_device_id
-	FOREIGN KEY (device_id) REFERENCES device(device_id);
--- consider FK device and device_ticket
-ALTER TABLE device_ticket
-	ADD CONSTRAINT fk_dev_tkt_dev_id
-	FOREIGN KEY (device_id) REFERENCES device(device_id);
--- consider FK device and static_route
-ALTER TABLE static_route
-	ADD CONSTRAINT fk_statrt_devsrc_id
-	FOREIGN KEY (device_src_id) REFERENCES device(device_id);
--- consider FK device and physicalish_volume
-ALTER TABLE physicalish_volume
-	ADD CONSTRAINT fk_physvol_device_id
-	FOREIGN KEY (device_id) REFERENCES device(device_id);
--- consider FK device and mlag_peering
-ALTER TABLE mlag_peering
-	ADD CONSTRAINT fk_mlag_peering_devid1
-	FOREIGN KEY (device1_id) REFERENCES device(device_id);
--- consider FK device and snmp_commstr
-ALTER TABLE snmp_commstr
-	ADD CONSTRAINT fk_snmpstr_device_id
-	FOREIGN KEY (device_id) REFERENCES device(device_id);
--- consider FK device and device_management_controller
-ALTER TABLE device_management_controller
-	ADD CONSTRAINT fk_dvc_mgmt_ctrl_mgr_dev_id
-	FOREIGN KEY (manager_device_id) REFERENCES device(device_id);
--- consider FK device and chassis_location
-ALTER TABLE chassis_location
-	ADD CONSTRAINT fk_chass_loc_chass_devid
-	FOREIGN KEY (chassis_device_id) REFERENCES device(device_id) DEFERRABLE;
--- consider FK device and device_management_controller
-ALTER TABLE device_management_controller
-	ADD CONSTRAINT fk_dev_mgmt_ctlr_dev_id
-	FOREIGN KEY (device_id) REFERENCES device(device_id);
--- consider FK device and device_layer2_network
-ALTER TABLE device_layer2_network
-	ADD CONSTRAINT fk_device_l2_net_devid
-	FOREIGN KEY (device_id) REFERENCES device(device_id);
-
--- FOREIGN KEYS TO
--- consider FK device and dns_record
-ALTER TABLE device
-	ADD CONSTRAINT fk_device_id_dnsrecord
-	FOREIGN KEY (identifying_dns_record_id) REFERENCES dns_record(dns_record_id);
--- consider FK device and voe
-ALTER TABLE device
-	ADD CONSTRAINT fk_device_fk_voe
-	FOREIGN KEY (voe_id) REFERENCES voe(voe_id);
--- consider FK device and rack_location
-ALTER TABLE device
-	ADD CONSTRAINT fk_dev_rack_location_id
-	FOREIGN KEY (rack_location_id) REFERENCES rack_location(rack_location_id);
--- consider FK device and operating_system
-ALTER TABLE device
-	ADD CONSTRAINT fk_dev_os_id
-	FOREIGN KEY (operating_system_id) REFERENCES operating_system(operating_system_id);
--- consider FK device and chassis_location
-ALTER TABLE device
-	ADD CONSTRAINT fk_dev_chass_loc_id_mod_enfc
-	FOREIGN KEY (chassis_location_id, parent_device_id, device_type_id) REFERENCES chassis_location(chassis_location_id, chassis_device_id, module_device_type_id) DEFERRABLE;
--- consider FK device and voe_symbolic_track
-ALTER TABLE device
-	ADD CONSTRAINT fk_device_ref_voesymbtrk
-	FOREIGN KEY (voe_symbolic_track_id) REFERENCES voe_symbolic_track(voe_symbolic_track_id);
--- consider FK device and val_device_status
-ALTER TABLE device
-	ADD CONSTRAINT fk_device_dev_val_status
-	FOREIGN KEY (device_status) REFERENCES val_device_status(device_status);
--- consider FK device and service_environment
-ALTER TABLE device
-	ADD CONSTRAINT fk_device_dev_v_svcenv
-	FOREIGN KEY (service_environment_id) REFERENCES service_environment(service_environment_id);
--- consider FK device and val_device_auto_mgmt_protocol
-ALTER TABLE device
-	ADD CONSTRAINT fk_dev_ref_mgmt_proto
-	FOREIGN KEY (auto_mgmt_protocol) REFERENCES val_device_auto_mgmt_protocol(auto_mgmt_protocol);
--- consider FK device and site
-ALTER TABLE device
-	ADD CONSTRAINT fk_device_site_code
-	FOREIGN KEY (site_code) REFERENCES site(site_code);
--- consider FK device and asset
-ALTER TABLE device
-	ADD CONSTRAINT fk_device_asset_id
-	FOREIGN KEY (asset_id) REFERENCES asset(asset_id);
--- consider FK device and chassis_location
-ALTER TABLE device
-	ADD CONSTRAINT fk_chasloc_chass_devid
-	FOREIGN KEY (chassis_location_id) REFERENCES chassis_location(chassis_location_id) DEFERRABLE;
--- consider FK device and device_type
-ALTER TABLE device
-	ADD CONSTRAINT fk_dev_devtp_id
-	FOREIGN KEY (device_type_id) REFERENCES device_type(device_type_id);
--- consider FK device and device
-ALTER TABLE device
-	ADD CONSTRAINT fk_device_ref_parent_device
-	FOREIGN KEY (parent_device_id) REFERENCES device(device_id);
--- consider FK device and component
-ALTER TABLE device
-	ADD CONSTRAINT fk_device_comp_id
-	FOREIGN KEY (component_id) REFERENCES component(component_id);
-
--- TRIGGERS
-CREATE TRIGGER trigger_device_one_location_validate BEFORE INSERT OR UPDATE ON device FOR EACH ROW EXECUTE PROCEDURE device_one_location_validate();
-
--- XXX - may need to include trigger function
-CREATE TRIGGER trigger_verify_device_voe BEFORE INSERT OR UPDATE ON device FOR EACH ROW EXECUTE PROCEDURE verify_device_voe();
-
--- XXX - may need to include trigger function
-CREATE CONSTRAINT TRIGGER trigger_validate_device_component_assignment AFTER INSERT OR UPDATE OF device_type_id, component_id ON device DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE PROCEDURE validate_device_component_assignment();
-
--- XXX - may need to include trigger function
-CREATE TRIGGER trigger_delete_per_device_device_collection BEFORE DELETE ON device FOR EACH ROW EXECUTE PROCEDURE delete_per_device_device_collection();
-
--- XXX - may need to include trigger function
-CREATE TRIGGER trigger_update_per_device_device_collection AFTER INSERT OR UPDATE ON device FOR EACH ROW EXECUTE PROCEDURE update_per_device_device_collection();
-
--- XXX - may need to include trigger function
-CREATE TRIGGER trigger_create_device_component BEFORE INSERT ON device FOR EACH ROW EXECUTE PROCEDURE create_device_component_by_trigger();
-
--- XXX - may need to include trigger function
-SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'device');
-SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'device');
-ALTER SEQUENCE device_device_id_seq
-	 OWNED BY device.device_id;
-DROP TABLE IF EXISTS device_v60;
-DROP TABLE IF EXISTS audit.device_v60;
--- DONE DEALING WITH TABLE device [2499895]
---------------------------------------------------------------------
---------------------------------------------------------------------
 -- DEALING WITH TABLE physical_connection [2461320]
 -- Save grants for later reapplication
 SELECT schema_support.save_grants_for_replay('jazzhands', 'physical_connection', 'physical_connection');
@@ -9467,56 +9508,6 @@ DROP TABLE IF EXISTS audit.val_port_type_v60;
 -- DONE DEALING WITH OLD TABLE val_port_type [2462375]
 --------------------------------------------------------------------
 --------------------------------------------------------------------
--- DEALING WITH TABLE device_power_interface [2460561]
-
--- FOREIGN KEYS FROM
-ALTER TABLE device_power_connection DROP CONSTRAINT IF EXISTS fk_dev_ps_dev_power_conn_srv;
-ALTER TABLE device_power_connection DROP CONSTRAINT IF EXISTS fk_dev_ps_dev_power_conn_rpc;
-
--- FOREIGN KEYS TO
-ALTER TABLE jazzhands.device_power_interface DROP CONSTRAINT IF EXISTS fk_dev_pwr_int_pwr_plug;
-ALTER TABLE jazzhands.device_power_interface DROP CONSTRAINT IF EXISTS fk_device_device_power_supp;
-
--- EXTRA-SCHEMA constraints
-SELECT schema_support.save_constraint_for_replay('jazzhands', 'device_power_interface');
-
--- PRIMARY and ALTERNATE KEYS
-ALTER TABLE jazzhands.device_power_interface DROP CONSTRAINT IF EXISTS pk_device_power_interface;
--- INDEXES
-DROP INDEX IF EXISTS "jazzhands"."xif2device_power_interface";
--- CHECK CONSTRAINTS, etc
-ALTER TABLE jazzhands.device_power_interface DROP CONSTRAINT IF EXISTS check_yes_no_2067088750;
--- TRIGGERS, etc
-DROP TRIGGER IF EXISTS trig_userlog_device_power_interface ON jazzhands.device_power_interface;
-DROP TRIGGER IF EXISTS trigger_audit_device_power_interface ON jazzhands.device_power_interface;
-DROP TRIGGER IF EXISTS trigger_device_power_port_sanity ON jazzhands.device_power_interface;
-SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'device_power_interface');
----- BEGIN audit.device_power_interface TEARDOWN
-
--- FOREIGN KEYS FROM
-
--- FOREIGN KEYS TO
-
--- EXTRA-SCHEMA constraints
-SELECT schema_support.save_constraint_for_replay('audit', 'device_power_interface');
-
--- PRIMARY and ALTERNATE KEYS
--- INDEXES
-DROP INDEX IF EXISTS "audit"."device_power_interface_aud#timestamp_idx";
--- CHECK CONSTRAINTS, etc
--- TRIGGERS, etc
-SELECT schema_support.save_dependant_objects_for_replay('audit', 'device_power_interface');
----- DONE audit.device_power_interface TEARDOWN
-
-
-ALTER TABLE device_power_interface RENAME TO device_power_interface_v60;
-ALTER TABLE audit.device_power_interface RENAME TO device_power_interface_v60;
-
-DROP TABLE IF EXISTS device_power_interface_v60;
-DROP TABLE IF EXISTS audit.device_power_interface_v60;
--- DONE DEALING WITH OLD TABLE device_power_interface [2460561]
---------------------------------------------------------------------
---------------------------------------------------------------------
 -- DEALING WITH TABLE val_flow_control [2462113]
 
 -- FOREIGN KEYS FROM
@@ -9566,7 +9557,7 @@ DROP TABLE IF EXISTS audit.val_flow_control_v60;
 -- FOREIGN KEYS FROM
 ALTER TABLE device_type_power_port_templt DROP CONSTRAINT IF EXISTS fk_dev_pport_v_pwr_plug_style;
 -- Skipping this FK since table been dropped
---ALTER TABLE device_power_interface DROP CONSTRAINT IF EXISTS fk_dev_pwr_int_pwr_plug;
+ALTER TABLE device_power_interface DROP CONSTRAINT IF EXISTS fk_dev_pwr_int_pwr_plug;
 
 
 -- FOREIGN KEYS TO
@@ -9699,7 +9690,7 @@ DROP TABLE IF EXISTS audit.val_parity_v60;
 -- DONE DEALING WITH OLD TABLE val_parity [2462246]
 --------------------------------------------------------------------
 --------------------------------------------------------------------
--- DEALING WITH TABLE device_power_connection [2460550]
+-- DEALING WITH TABLE device_power_connection [3143826]
 -- Save grants for later reapplication
 SELECT schema_support.save_grants_for_replay('jazzhands', 'device_power_connection', 'device_power_connection');
 
@@ -9715,8 +9706,8 @@ SELECT schema_support.save_constraint_for_replay('jazzhands', 'device_power_conn
 -- PRIMARY and ALTERNATE KEYS
 ALTER TABLE jazzhands.device_power_connection DROP CONSTRAINT IF EXISTS pk_device_power_connection;
 -- INDEXES
-DROP INDEX IF EXISTS "jazzhands"."idx_devpconn_svrdevpint";
 DROP INDEX IF EXISTS "jazzhands"."idx_devpconn_rpcdevpint";
+DROP INDEX IF EXISTS "jazzhands"."idx_devpconn_svrdevpint";
 -- CHECK CONSTRAINTS, etc
 -- TRIGGERS, etc
 DROP TRIGGER IF EXISTS trig_userlog_device_power_connection ON jazzhands.device_power_connection;
@@ -9748,9 +9739,9 @@ CREATE VIEW device_power_connection AS
  WITH slotdev AS (
          SELECT slot.slot_id,
             slot.slot_name,
-            device.device_id
+            v_device_slots.device_id
            FROM slot
-             JOIN device USING (component_id)
+             JOIN v_device_slots USING (slot_id)
              JOIN slot_type st USING (slot_type_id)
           WHERE st.slot_function::text = 'power'::text
         )
@@ -9771,10 +9762,8 @@ CREATE VIEW device_power_connection AS
 delete from __recreate where type = 'view' and object = 'device_power_connection';
 DROP TABLE IF EXISTS device_power_connection_v60;
 DROP TABLE IF EXISTS audit.device_power_connection_v60;
--- DONE DEALING WITH TABLE device_power_connection [2507323]
+-- DONE DEALING WITH TABLE device_power_connection [3105497]
 --------------------------------------------------------------------
-
-
 --------------------------------------------------------------------
 -- DEALING WITH TABLE v_l1_all_physical_ports [2468182]
 -- Save grants for later reapplication
@@ -10208,21 +10197,6 @@ LANGUAGE plpgsql;
 
 -- END ADD dns_utils
 --------------------------------------------------------------------
-
---------------------------------------------------------------------
--- DEALING WITH proc device_power_port_sanity -> device_power_port_sanity 
-
--- Save grants for later reapplication
-SELECT schema_support.save_grants_for_replay('jazzhands', 'device_power_port_sanity', 'device_power_port_sanity');
-
--- DROP OLD FUNCTION
--- triggers on this function (if applicable)
--- consider old oid 2589702
-DROP FUNCTION IF EXISTS device_power_port_sanity();
-
--- DONE WITH proc device_power_port_sanity -> device_power_port_sanity 
---------------------------------------------------------------------
-
 
 --------------------------------------------------------------------
 -- DEALING WITH proc create_device_component_by_trigger -> create_device_component_by_trigger 
@@ -10844,7 +10818,57 @@ delete from __recreate where type = 'view' and object = 'v_property';
 -- DONE DEALING WITH TABLE v_property [2637576]
 --------------------------------------------------------------------
 --------------------------------------------------------------------
--- DEALING WITH NEW TABLE device_power_interface
+-- DEALING WITH TABLE device_power_interface [3143837]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'device_power_interface', 'device_power_interface');
+
+-- FOREIGN KEYS FROM
+-- Skipping this FK since table been dropped
+--ALTER TABLE device_power_connection DROP CONSTRAINT IF EXISTS fk_dev_ps_dev_power_conn_srv;
+
+-- Skipping this FK since table been dropped
+--ALTER TABLE device_power_connection DROP CONSTRAINT IF EXISTS fk_dev_ps_dev_power_conn_rpc;
+
+
+-- FOREIGN KEYS TO
+ALTER TABLE jazzhands.device_power_interface DROP CONSTRAINT IF EXISTS fk_device_device_power_supp;
+ALTER TABLE jazzhands.device_power_interface DROP CONSTRAINT IF EXISTS fk_dev_pwr_int_pwr_plug;
+
+-- EXTRA-SCHEMA constraints
+SELECT schema_support.save_constraint_for_replay('jazzhands', 'device_power_interface');
+
+-- PRIMARY and ALTERNATE KEYS
+ALTER TABLE jazzhands.device_power_interface DROP CONSTRAINT IF EXISTS pk_device_power_interface;
+-- INDEXES
+DROP INDEX IF EXISTS "jazzhands"."xif2device_power_interface";
+-- CHECK CONSTRAINTS, etc
+ALTER TABLE jazzhands.device_power_interface DROP CONSTRAINT IF EXISTS check_yes_no_2067088750;
+-- TRIGGERS, etc
+DROP TRIGGER IF EXISTS trigger_device_power_port_sanity ON jazzhands.device_power_interface;
+DROP TRIGGER IF EXISTS trig_userlog_device_power_interface ON jazzhands.device_power_interface;
+DROP TRIGGER IF EXISTS trigger_audit_device_power_interface ON jazzhands.device_power_interface;
+SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'device_power_interface');
+---- BEGIN audit.device_power_interface TEARDOWN
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+
+-- EXTRA-SCHEMA constraints
+SELECT schema_support.save_constraint_for_replay('audit', 'device_power_interface');
+
+-- PRIMARY and ALTERNATE KEYS
+-- INDEXES
+DROP INDEX IF EXISTS "audit"."device_power_interface_aud#timestamp_idx";
+-- CHECK CONSTRAINTS, etc
+-- TRIGGERS, etc
+SELECT schema_support.save_dependant_objects_for_replay('audit', 'device_power_interface');
+---- DONE audit.device_power_interface TEARDOWN
+
+
+ALTER TABLE device_power_interface RENAME TO device_power_interface_v60;
+ALTER TABLE audit.device_power_interface RENAME TO device_power_interface_v60;
+
 CREATE VIEW device_power_interface AS
  WITH pdu AS (
          SELECT component_property.slot_type_id,
@@ -10872,12 +10896,312 @@ CREATE VIEW device_power_interface AS
      JOIN provides p USING (slot_type_id)
      JOIN pdu vlt USING (slot_type_id)
      JOIN pdu amp USING (slot_type_id)
-     JOIN device d USING (component_id)
+     JOIN v_device_slots d USING (slot_id)
   WHERE st.slot_function::text = 'power'::text;
 
 delete from __recreate where type = 'view' and object = 'device_power_interface';
--- DONE DEALING WITH TABLE device_power_interface [2691172]
+DROP TABLE IF EXISTS device_power_interface_v60;
+DROP TABLE IF EXISTS audit.device_power_interface_v60;
+-- DONE DEALING WITH TABLE device_power_interface [3105502]
 --------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- DEALING WITH proc automated_ac_on_person_company -> automated_ac_on_person_company 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'automated_ac_on_person_company', 'automated_ac_on_person_company');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+DROP TRIGGER IF EXISTS trigger_automated_ac_on_person_company ON jazzhands.person_company;
+-- consider old oid 3141391
+DROP FUNCTION IF EXISTS automated_ac_on_person_company();
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 3105833
+CREATE OR REPLACE FUNCTION jazzhands.automated_ac_on_person_company()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	_tally	INTEGER;
+	_r		RECORD;
+BEGIN
+	SELECT  count(*)
+	  INTO  _tally
+	  FROM  pg_catalog.pg_class
+	 WHERE  relname = '__automated_ac__'
+	   AND  relpersistence = 't';
+
+	IF _tally = 0 THEN
+		CREATE TEMPORARY TABLE IF NOT EXISTS __automated_ac__ (account_collection_id integer, account_id integer, direction text);
+	END IF;
+
+
+	--
+	-- based on the old and new values, check for account collections that
+	-- may need to be changed based on data.  Note that this may end up being
+	-- a no-op.
+	-- 
+	IF TG_OP = 'INSERT' or TG_OP = 'UPDATE' THEN
+		INSERT INTO __automated_ac__ (
+			account_collection_id, account_id, direction
+		)
+		SELECT	p.account_collection_id, a.account_id, 'add'
+		FROM    property p
+			INNER JOIN account_realm_company arc USING (account_realm_id)
+			INNER JOIN account a 
+				ON a.account_realm_id = arc.account_realm_id
+				AND a.company_id = arc.company_id
+		WHERE	arc.company_id = NEW.company_id
+		AND     (p.company_id is NULL or arc.company_id = p.company_id)
+			AND	a.person_id = NEW.person_id
+			AND     property_type = 'auto_acct_coll'
+			AND     (
+				    property_name =
+				    CASE WHEN NEW.is_exempt = 'N'
+					THEN 'non_exempt'
+					ELSE 'exempt' END
+				OR
+				    property_name =
+				    CASE WHEN NEW.is_management = 'N'
+					THEN 'non_management'
+					ELSE 'management' END
+				OR
+				    property_name =
+				    CASE WHEN NEW.is_full_time = 'N'
+					THEN 'non_full_time'
+					ELSE 'full_time' END
+				);
+	END IF;
+	IF TG_OP = 'UPDATE' or TG_OP = 'DELETE' THEN
+		INSERT INTO __automated_ac__ (
+			account_collection_id, account_id, direction
+		)
+		SELECT	p.account_collection_id, a.account_id, 'remove'
+		FROM    property p
+			INNER JOIN account_realm_company arc USING (account_realm_id)
+			INNER JOIN account a 
+				ON a.account_realm_id = arc.account_realm_id
+				AND a.company_id = arc.company_id
+		WHERE	arc.company_id = OLD.company_id
+		AND     (p.company_id is NULL or arc.company_id = p.company_id)
+			AND	a.person_id = OLD.person_id
+			AND     property_type = 'auto_acct_coll'
+			AND     (
+				    property_name =
+				    CASE WHEN OLD.is_exempt = 'N'
+					THEN 'non_exempt'
+					ELSE 'exempt' END
+				OR
+				    property_name =
+				    CASE WHEN OLD.is_management = 'N'
+					THEN 'non_management'
+					ELSE 'management' END
+				OR
+				    property_name =
+				    CASE WHEN OLD.is_full_time = 'N'
+					THEN 'non_full_time'
+					ELSE 'full_time' END
+				);
+	END IF;
+
+/*
+	FOR _r IN SELECT * from __automated_ac__
+	LOOP
+		RAISE NOTICE '%', _r;
+	END LOOP;
+ */
+
+	--
+	-- Remove rows from the temporary table that are in "remove" but not in
+	-- "add".
+	--
+	DELETE FROM account_collection_account
+	WHERE (account_collection_id, account_id) IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'remove'
+		)
+	AND (account_collection_id, account_id) NOT IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'add'
+	);
+
+	--
+	-- Add rows from the temporary table that are in 'add" but not "remove"
+	-- "add".
+	--
+	INSERT INTO account_collection_account (
+		account_collection_id, account_id)
+	SELECT account_collection_id, account_id 
+	FROM __automated_ac__
+	WHERE direction = 'add'
+	AND (account_collection_id, account_id) NOT IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'remove'
+	);
+
+	DROP TABLE IF EXISTS __automated_ac__;
+
+	IF TG_OP = 'DELETE' THEN
+		RETURN OLD;
+	ELSE
+		RETURN NEW;
+	END IF;
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+CREATE TRIGGER trigger_automated_ac_on_person_company AFTER UPDATE OF is_management, is_exempt, is_full_time, person_id, company_id ON person_company FOR EACH ROW EXECUTE PROCEDURE automated_ac_on_person_company();
+
+-- DONE WITH proc automated_ac_on_person_company -> automated_ac_on_person_company 
+--------------------------------------------------------------------
+
+
+--------------------------------------------------------------------
+-- DEALING WITH proc automated_ac_on_person -> automated_ac_on_person 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'automated_ac_on_person', 'automated_ac_on_person');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+DROP TRIGGER IF EXISTS trigger_automated_ac_on_person ON jazzhands.person;
+-- consider old oid 3141393
+DROP FUNCTION IF EXISTS automated_ac_on_person();
+
+-- RECREATE FUNCTION
+
+-- DROP OLD FUNCTION (in case type changed)
+-- consider NEW oid 3105835
+CREATE OR REPLACE FUNCTION jazzhands.automated_ac_on_person()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO jazzhands
+AS $function$
+DECLARE
+	_tally	INTEGER;
+BEGIN
+	SELECT  count(*)
+	  INTO  _tally
+	  FROM  pg_catalog.pg_class
+	 WHERE  relname = '__automated_ac__'
+	   AND  relpersistence = 't';
+
+	IF _tally = 0 THEN
+		CREATE TEMPORARY TABLE IF NOT EXISTS __automated_ac__ (account_collection_id integer, account_id integer, direction text);
+	END IF;
+
+
+	--
+	-- based on the old and new values, check for account collections that
+	-- may need to be changed based on data.  Note that this may end up being
+	-- a no-op.
+	-- 
+	IF TG_OP = 'UPDATE' THEN
+		INSERT INTO __automated_ac__ (
+			account_collection_id, account_id, direction
+		)
+		SELECT	p.account_collection_id, a.account_id, 'add'
+		FROM    property p
+			INNER JOIN account_realm_company arc USING (account_realm_id)
+			INNER JOIN account a 
+				ON a.account_realm_id = arc.account_realm_id
+				AND a.company_id = arc.company_id
+		WHERE     (p.company_id is NULL or arc.company_id = p.company_id)
+			AND	a.person_id = NEW.person_id
+			AND     property_type = 'auto_acct_coll'
+			AND     (
+				    property_name =
+				    	CASE WHEN NEW.gender = 'M' THEN 'male'
+				    		WHEN NEW.gender = 'F' THEN 'female'
+							ELSE 'unspecified_gender' END
+					);
+
+		INSERT INTO __automated_ac__ (
+			account_collection_id, account_id, direction
+		)
+		SELECT	p.account_collection_id, a.account_id, 'remove'
+		FROM    property p
+			INNER JOIN account_realm_company arc USING (account_realm_id)
+			INNER JOIN account a 
+				ON a.account_realm_id = arc.account_realm_id
+				AND a.company_id = arc.company_id
+		WHERE     (p.company_id is NULL or arc.company_id = p.company_id)
+			AND	a.person_id = OLD.person_id
+			AND     property_type = 'auto_acct_coll'
+			AND     (
+				    property_name =
+				    	CASE WHEN OLD.gender = 'M' THEN 'male'
+				    	WHEN OLD.gender = 'F' THEN 'female'
+						ELSE 'unspecified_gender' END
+				);
+	END IF;
+
+	--
+	-- Remove rows from the temporary table that are in "remove" but not in
+	-- "add".
+	--
+	DELETE FROM account_collection_account
+	WHERE (account_collection_id, account_id) IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'remove'
+		)
+	AND (account_collection_id, account_id) NOT IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'add'
+	);
+
+	--
+	-- Add rows from the temporary table that are in 'add" but not "remove"
+	-- "add".
+	--
+	INSERT INTO account_collection_account (
+		account_collection_id, account_id)
+	SELECT account_collection_id, account_id 
+	FROM __automated_ac__
+	WHERE direction = 'add'
+	AND (account_collection_id, account_id) NOT IN
+		(select account_collection_id, account_id FROM __automated_ac__
+			WHERE direction = 'remove'
+	);
+
+	DROP TABLE IF EXISTS __automated_ac__;
+
+	IF TG_OP = 'DELETE' THEN
+		RETURN OLD;
+	ELSE
+		RETURN NEW;
+	END IF;
+
+END;
+$function$
+;
+-- triggers on this function (if applicable)
+CREATE TRIGGER trigger_automated_ac_on_person AFTER UPDATE OF gender ON person FOR EACH ROW EXECUTE PROCEDURE automated_ac_on_person();
+
+-- DONE WITH proc automated_ac_on_person -> automated_ac_on_person 
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- DEALING WITH proc device_power_port_sanity -> device_power_port_sanity 
+
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'device_power_port_sanity', 'device_power_port_sanity');
+
+-- DROP OLD FUNCTION
+-- triggers on this function (if applicable)
+-- consider old oid 2589702
+DROP FUNCTION IF EXISTS device_power_port_sanity();
+
+-- DONE WITH proc device_power_port_sanity -> device_power_port_sanity 
+--------------------------------------------------------------------
+
 
 
 
