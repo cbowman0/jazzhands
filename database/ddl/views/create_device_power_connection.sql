@@ -22,7 +22,7 @@ AS
 WITH slotdev AS (
 	SELECT	slot_id, slot_name, device_id
 	FROM	slot
-		INNER JOIN device USING (component_id)
+		INNER JOIN v_device_slots USING (slot_id)
 		INNER JOIN slot_type st USING (slot_type_id)
 	WHERE	slot_function = 'power'
 ) SELECT	

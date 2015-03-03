@@ -44,6 +44,6 @@ FROM	slot s
 	INNER JOIN provides p USING (slot_type_id)
 	INNER JOIN pdu vlt USING (slot_type_id)
 	INNER JOIN pdu amp USING (slot_type_id)
-	INNER JOIN device d USING (component_id)
+	INNER JOIN v_device_slots d USING (slot_id)
 WHERE slot_function = 'power'
 ;
