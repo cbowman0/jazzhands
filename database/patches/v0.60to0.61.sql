@@ -8633,31 +8633,32 @@ DROP TABLE IF EXISTS network_interface_v60;
 DROP TABLE IF EXISTS audit.network_interface_v60;
 -- DONE DEALING WITH TABLE network_interface [2500460]
 --------------------------------------------------------------------
+
 --------------------------------------------------------------------
--- DEALING WITH TABLE physical_connection [2461320]
+-- DEALING WITH TABLE physical_connection [3193614]
 -- Save grants for later reapplication
 SELECT schema_support.save_grants_for_replay('jazzhands', 'physical_connection', 'physical_connection');
 
 -- FOREIGN KEYS FROM
 
 -- FOREIGN KEYS TO
-ALTER TABLE jazzhands.physical_connection DROP CONSTRAINT IF EXISTS fk_physical_conn_v_cable_type;
 ALTER TABLE jazzhands.physical_connection DROP CONSTRAINT IF EXISTS fk_patch_panel_port1;
 ALTER TABLE jazzhands.physical_connection DROP CONSTRAINT IF EXISTS fk_patch_panel_port2;
+ALTER TABLE jazzhands.physical_connection DROP CONSTRAINT IF EXISTS fk_physical_conn_v_cable_type;
 
 -- EXTRA-SCHEMA constraints
 SELECT schema_support.save_constraint_for_replay('jazzhands', 'physical_connection');
 
 -- PRIMARY and ALTERNATE KEYS
+ALTER TABLE jazzhands.physical_connection DROP CONSTRAINT IF EXISTS pk_physical_connection;
 ALTER TABLE jazzhands.physical_connection DROP CONSTRAINT IF EXISTS ak_uq_physical_port_id2;
 ALTER TABLE jazzhands.physical_connection DROP CONSTRAINT IF EXISTS ak_uq_physical_port_id1;
-ALTER TABLE jazzhands.physical_connection DROP CONSTRAINT IF EXISTS pk_physical_connection;
 -- INDEXES
 DROP INDEX IF EXISTS "jazzhands"."idx_physconn_cabletype";
 -- CHECK CONSTRAINTS, etc
 -- TRIGGERS, etc
-DROP TRIGGER IF EXISTS trigger_audit_physical_connection ON jazzhands.physical_connection;
 DROP TRIGGER IF EXISTS trigger_verify_physical_connection ON jazzhands.physical_connection;
+DROP TRIGGER IF EXISTS trigger_audit_physical_connection ON jazzhands.physical_connection;
 DROP TRIGGER IF EXISTS trig_userlog_physical_connection ON jazzhands.physical_connection;
 SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'physical_connection');
 ---- BEGIN audit.physical_connection TEARDOWN
@@ -8684,6 +8685,8 @@ ALTER TABLE audit.physical_connection RENAME TO physical_connection_v60;
 CREATE TABLE physical_connection
 (
 	physical_connection_id	integer NOT NULL,
+	physical_port1_id	integer  NULL,
+	physical_port2_id	integer  NULL,
 	slot1_id	integer  NULL,
 	slot2_id	integer  NULL,
 	cable_type	varchar(50) NOT NULL,
@@ -8698,6 +8701,8 @@ ALTER TABLE physical_connection
 	SET DEFAULT nextval('physical_connection_physical_connection_id_seq'::regclass);
 INSERT INTO physical_connection (
 	physical_connection_id,
+	physical_port1_id,
+	physical_port2_id,
 	slot1_id,		-- new column (slot1_id)
 	slot2_id,		-- new column (slot2_id)
 	cable_type,
@@ -8707,6 +8712,8 @@ INSERT INTO physical_connection (
 	data_upd_date
 ) SELECT
 	physical_connection_id,
+	physical_port1_id,
+	physical_port2_id,
 	NULL,		-- new column (slot1_id)
 	NULL,		-- new column (slot2_id)
 	cable_type,
@@ -8718,6 +8725,8 @@ FROM physical_connection_v60;
 
 INSERT INTO audit.physical_connection (
 	physical_connection_id,
+	physical_port1_id,
+	physical_port2_id,
 	slot1_id,		-- new column (slot1_id)
 	slot2_id,		-- new column (slot2_id)
 	cable_type,
@@ -8731,6 +8740,8 @@ INSERT INTO audit.physical_connection (
 	"aud#seq"
 ) SELECT
 	physical_connection_id,
+	physical_port1_id,
+	physical_port2_id,
 	NULL,		-- new column (slot1_id)
 	NULL,		-- new column (slot2_id)
 	cable_type,
@@ -8753,8 +8764,10 @@ ALTER TABLE physical_connection ADD CONSTRAINT pk_physical_connection PRIMARY KE
 
 -- Table/Column Comments
 -- INDEXES
+CREATE INDEX xif_physconn_physport1_id ON physical_connection USING btree (physical_port1_id);
 CREATE INDEX xif_physical_conn_v_cable_type ON physical_connection USING btree (cable_type);
 CREATE INDEX xif_physconn_slot1_id ON physical_connection USING btree (slot1_id);
+CREATE INDEX xif_physconn_physport2_id ON physical_connection USING btree (physical_port2_id);
 CREATE INDEX xif_physconn_slot2_id ON physical_connection USING btree (slot2_id);
 
 -- CHECK CONSTRAINTS
@@ -8762,18 +8775,36 @@ CREATE INDEX xif_physconn_slot2_id ON physical_connection USING btree (slot2_id)
 -- FOREIGN KEYS FROM
 
 -- FOREIGN KEYS TO
--- consider FK physical_connection and slot
-ALTER TABLE physical_connection
-	ADD CONSTRAINT fk_physconn_slot1_id
-	FOREIGN KEY (slot1_id) REFERENCES slot(slot_id);
--- consider FK physical_connection and slot
-ALTER TABLE physical_connection
-	ADD CONSTRAINT fk_physconn_slot2_id
-	FOREIGN KEY (slot2_id) REFERENCES slot(slot_id);
 -- consider FK physical_connection and val_cable_type
+-- Skipping this FK since table does not exist yet
 ALTER TABLE physical_connection
 	ADD CONSTRAINT fk_physical_conn_v_cable_type
 	FOREIGN KEY (cable_type) REFERENCES val_cable_type(cable_type);
+
+-- consider FK physical_connection and slot
+-- Skipping this FK since table does not exist yet
+ALTER TABLE physical_connection
+	ADD CONSTRAINT fk_physconn_physport1_id
+	FOREIGN KEY (physical_port1_id) REFERENCES slot(slot_id);
+
+-- consider FK physical_connection and slot
+-- Skipping this FK since table does not exist yet
+ALTER TABLE physical_connection
+	ADD CONSTRAINT fk_physconn_slot1_id
+	FOREIGN KEY (slot1_id) REFERENCES slot(slot_id);
+
+-- consider FK physical_connection and slot
+-- Skipping this FK since table does not exist yet
+ALTER TABLE physical_connection
+	ADD CONSTRAINT fk_physconn_physport2_id
+	FOREIGN KEY (physical_port2_id) REFERENCES slot(slot_id);
+
+-- consider FK physical_connection and slot
+-- Skipping this FK since table does not exist yet
+ALTER TABLE physical_connection
+	ADD CONSTRAINT fk_physconn_slot2_id
+	FOREIGN KEY (slot2_id) REFERENCES slot(slot_id);
+
 
 -- TRIGGERS
 CREATE TRIGGER trigger_verify_physical_connection AFTER INSERT OR UPDATE ON physical_connection FOR EACH STATEMENT EXECUTE PROCEDURE verify_physical_connection();
@@ -8785,43 +8816,53 @@ ALTER SEQUENCE physical_connection_physical_connection_id_seq
 	 OWNED BY physical_connection.physical_connection_id;
 DROP TABLE IF EXISTS physical_connection_v60;
 DROP TABLE IF EXISTS audit.physical_connection_v60;
--- DONE DEALING WITH TABLE physical_connection [2500759]
+-- DONE DEALING WITH TABLE physical_connection [3174858]
 --------------------------------------------------------------------
 --------------------------------------------------------------------
--- DEALING WITH TABLE physical_port [2461336]
+-- DEALING WITH TABLE physical_port [3224734]
 -- Save grants for later reapplication
 SELECT schema_support.save_grants_for_replay('jazzhands', 'physical_port', 'physical_port');
 
 -- FOREIGN KEYS FROM
-ALTER TABLE physical_connection DROP CONSTRAINT IF EXISTS fk_patch_panel_port2;
-ALTER TABLE network_interface DROP CONSTRAINT IF EXISTS fk_network_int_phys_port_devid;
-ALTER TABLE layer1_connection DROP CONSTRAINT IF EXISTS fk_layer1_cnct_phys_port2;
+-- Skipping this FK since table been dropped
 ALTER TABLE layer1_connection DROP CONSTRAINT IF EXISTS fk_layer1_cnct_phys_port1;
+
+-- Skipping this FK since table been dropped
+ALTER TABLE layer1_connection DROP CONSTRAINT IF EXISTS fk_layer1_cnct_phys_port2;
+
+-- Skipping this FK since table been dropped
+ALTER TABLE physical_connection DROP CONSTRAINT IF EXISTS fk_patch_panel_port2;
+
+-- Skipping this FK since table been dropped
+ALTER TABLE network_interface DROP CONSTRAINT IF EXISTS fk_network_int_phys_port_devid;
+
+-- Skipping this FK since table been dropped
 ALTER TABLE physical_connection DROP CONSTRAINT IF EXISTS fk_patch_panel_port1;
 
+
 -- FOREIGN KEYS TO
-ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS fk_phys_port_val_protocol;
-ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS fk_physical_fk_physic_val_port;
-ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS fk_phys_port_dev_id;
-ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS fk_phys_port_port_medium;
-ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS fk_physical_port_lgl_port_id;
-ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS fk_phys_port_ref_vportpurp;
 ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS fk_phys_port_val_port_speed;
+ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS fk_phys_port_dev_id;
+ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS fk_physical_port_lgl_port_id;
+ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS fk_phys_port_val_protocol;
+ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS fk_phys_port_port_medium;
+ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS fk_phys_port_ref_vportpurp;
+ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS fk_physical_fk_physic_val_port;
 
 -- EXTRA-SCHEMA constraints
 SELECT schema_support.save_constraint_for_replay('jazzhands', 'physical_port');
 
 -- PRIMARY and ALTERNATE KEYS
+ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS iak_pport_dvid_pportid;
 ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS pk_physical_port;
 ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS ak_physical_port_devnamtype;
-ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS iak_pport_dvid_pportid;
 -- INDEXES
 DROP INDEX IF EXISTS "jazzhands"."xif4physical_port";
-DROP INDEX IF EXISTS "jazzhands"."xif6physical_port";
-DROP INDEX IF EXISTS "jazzhands"."idx_physport_device_id";
-DROP INDEX IF EXISTS "jazzhands"."xif5physical_port";
 DROP INDEX IF EXISTS "jazzhands"."xif7physical_port";
 DROP INDEX IF EXISTS "jazzhands"."idx_physport_porttype";
+DROP INDEX IF EXISTS "jazzhands"."xif6physical_port";
+DROP INDEX IF EXISTS "jazzhands"."xif5physical_port";
+DROP INDEX IF EXISTS "jazzhands"."idx_physport_device_id";
 -- CHECK CONSTRAINTS, etc
 ALTER TABLE jazzhands.physical_port DROP CONSTRAINT IF EXISTS check_yes_no_1847015416;
 -- TRIGGERS, etc
@@ -8849,42 +8890,42 @@ SELECT schema_support.save_dependant_objects_for_replay('audit', 'physical_port'
 ALTER TABLE physical_port RENAME TO physical_port_v60;
 ALTER TABLE audit.physical_port RENAME TO physical_port_v60;
 
-
-
-create or replace view physical_port
-AS
-SELECT	
-	sl.slot_id			AS physical_port_id,
-	d.device_id,
-	sl.slot_name			AS port_name,
-	st.slot_function		AS port_type,
-	sl.description,
-	st.slot_physical_interface_type	AS port_plug_style,
-	NULL::text			AS port_medium,
-	NULL::text			AS port_protocol,
-	NULL::text			AS port_speed,
-	sl.physical_label,
-	NULL::text			AS port_purpose,
-	NULL::integer			AS logical_port_id,
-	NULL::integer			AS tcp_port,
-	CASE WHEN ct.is_removable = 'Y' THEN 'N' ELSE 'Y' END AS is_hardwired,
-	sl.data_ins_user,
-	sl.data_ins_date,
-	sl.data_upd_user,
-	sl.data_upd_date
-  FROM	slot sl 
-	INNER JOIN slot_type st USING (slot_type_id)
-	INNER JOIN device d USING (component_id)
-	INNER JOIN component c USING (component_id)
-	INNER JOIN component_type ct USING (component_type_id)
- WHERE	st.slot_function in ('network', 'serial', 'patchpanel')
-;
+CREATE VIEW physical_port AS
+ SELECT sl.slot_id AS physical_port_id,
+    d.device_id,
+    sl.slot_name AS port_name,
+    st.slot_function AS port_type,
+    sl.description,
+    st.slot_physical_interface_type AS port_plug_style,
+    NULL::text AS port_medium,
+    NULL::text AS port_protocol,
+    NULL::text AS port_speed,
+    sl.physical_label,
+    NULL::text AS port_purpose,
+    NULL::integer AS logical_port_id,
+    NULL::integer AS tcp_port,
+        CASE
+            WHEN ct.is_removable = 'Y'::bpchar THEN 'N'::text
+            ELSE 'Y'::text
+        END AS is_hardwired,
+    sl.data_ins_user,
+    sl.data_ins_date,
+    sl.data_upd_user,
+    sl.data_upd_date
+   FROM slot sl
+     JOIN slot_type st USING (slot_type_id)
+     JOIN v_device_slots d USING (slot_id)
+     JOIN component c ON sl.component_id = c.component_id
+     JOIN component_type ct USING (component_type_id)
+  WHERE st.slot_function::text = ANY (ARRAY['network'::character varying, 'serial'::character varying, 'patchpanel'::character varying]::text[]);
 
 delete from __recreate where type = 'view' and object = 'physical_port';
 DROP TABLE IF EXISTS physical_port_v60;
 DROP TABLE IF EXISTS audit.physical_port_v60;
--- DONE DEALING WITH TABLE physical_port [2507308]
+-- DONE DEALING WITH TABLE physical_port [3181429]
 --------------------------------------------------------------------
+
+
 --------------------------------------------------------------------
 -- DEALING WITH TABLE layer1_connection [2460833]
 -- Save grants for later reapplication
@@ -9764,89 +9805,82 @@ DROP TABLE IF EXISTS device_power_connection_v60;
 DROP TABLE IF EXISTS audit.device_power_connection_v60;
 -- DONE DEALING WITH TABLE device_power_connection [3105497]
 --------------------------------------------------------------------
+
 --------------------------------------------------------------------
--- DEALING WITH TABLE v_l1_all_physical_ports [2468182]
+-- DEALING WITH TABLE v_l1_all_physical_ports [3221203]
 -- Save grants for later reapplication
 SELECT schema_support.save_grants_for_replay('jazzhands', 'v_l1_all_physical_ports', 'v_l1_all_physical_ports');
 CREATE VIEW v_l1_all_physical_ports AS
- SELECT subquery.layer1_connection_id,
-    subquery.physical_port_id,
-    subquery.device_id,
-    subquery.port_name,
-    subquery.port_type,
-    subquery.port_purpose,
-    subquery.other_physical_port_id,
-    subquery.other_device_id,
-    subquery.other_port_name,
-    subquery.other_port_purpose,
-    subquery.baud,
-    subquery.data_bits,
-    subquery.stop_bits,
-    subquery.parity,
-    subquery.flow_control
-   FROM ( SELECT l1.layer1_connection_id,
-            p1.physical_port_id,
-            p1.device_id,
-            p1.port_name,
-            p1.port_type,
-            p1.port_purpose,
-            p2.physical_port_id AS other_physical_port_id,
-            p2.device_id AS other_device_id,
-            p2.port_name AS other_port_name,
-            p2.port_purpose AS other_port_purpose,
-            l1.baud,
-            l1.data_bits,
-            l1.stop_bits,
-            l1.parity,
-            l1.flow_control
-           FROM physical_port p1
-             JOIN layer1_connection l1 ON l1.physical_port1_id = p1.physical_port_id
-             JOIN physical_port p2 ON l1.physical_port2_id = p2.physical_port_id
-          WHERE p1.port_type::text = p2.port_type::text
-        UNION
-         SELECT l1.layer1_connection_id,
-            p1.physical_port_id,
-            p1.device_id,
-            p1.port_name,
-            p1.port_type,
-            p1.port_purpose,
-            p2.physical_port_id AS other_physical_port_id,
-            p2.device_id AS other_device_id,
-            p2.port_name AS other_port_name,
-            p2.port_purpose AS other_port_purpose,
-            l1.baud,
-            l1.data_bits,
-            l1.stop_bits,
-            l1.parity,
-            l1.flow_control
-           FROM physical_port p1
-             JOIN layer1_connection l1 ON l1.physical_port2_id = p1.physical_port_id
-             JOIN physical_port p2 ON l1.physical_port1_id = p2.physical_port_id
-          WHERE p1.port_type::text = p2.port_type::text
-        UNION
-         SELECT NULL::integer,
-            p1.physical_port_id,
-            p1.device_id,
-            p1.port_name,
-            p1.port_type,
-            p1.port_purpose,
-            NULL::integer,
-            NULL::integer,
-            NULL::character varying,
-            NULL::text,
-            NULL::integer,
-            NULL::character varying,
-            NULL::character varying,
-            NULL::character varying,
-            NULL::character varying
-           FROM physical_port p1
-             LEFT JOIN layer1_connection l1 ON l1.physical_port1_id = p1.physical_port_id OR l1.physical_port2_id = p1.physical_port_id
-          WHERE l1.layer1_connection_id IS NULL) subquery
-  ORDER BY network_strings.numeric_interface(subquery.port_name);
+ WITH pp AS (
+         SELECT sl.slot_id,
+            ds.device_id,
+            sl.slot_name,
+            st.slot_function
+           FROM slot sl
+             JOIN slot_type st USING (slot_type_id)
+             LEFT JOIN v_device_slots ds USING (slot_id)
+        )
+ SELECT icc.inter_component_connection_id AS layer1_connection_id,
+    s1.slot_id AS physical_port_id,
+    s1.device_id,
+    s1.slot_name AS port_name,
+    s1.slot_function AS port_type,
+    NULL::text AS port_purpose,
+    s2.slot_id AS other_physical_port_id,
+    s2.device_id AS other_device_id,
+    s2.slot_name AS other_port_name,
+    NULL::text AS other_port_purpose,
+    NULL::integer AS baud,
+    NULL::character varying AS data_bits,
+    NULL::character varying AS stop_bits,
+    NULL::character varying AS parity,
+    NULL::character varying AS flow_control
+   FROM pp s1
+     JOIN inter_component_connection icc ON s1.slot_id = icc.slot1_id
+     JOIN pp s2 ON s2.slot_id = icc.slot2_id
+UNION
+ SELECT icc.inter_component_connection_id AS layer1_connection_id,
+    s2.slot_id AS physical_port_id,
+    s2.device_id,
+    s2.slot_name AS port_name,
+    s2.slot_function AS port_type,
+    NULL::text AS port_purpose,
+    s1.slot_id AS other_physical_port_id,
+    s1.device_id AS other_device_id,
+    s1.slot_name AS other_port_name,
+    NULL::text AS other_port_purpose,
+    NULL::integer AS baud,
+    NULL::character varying AS data_bits,
+    NULL::character varying AS stop_bits,
+    NULL::character varying AS parity,
+    NULL::character varying AS flow_control
+   FROM pp s1
+     JOIN inter_component_connection icc ON s1.slot_id = icc.slot1_id
+     JOIN pp s2 ON s2.slot_id = icc.slot2_id
+UNION
+ SELECT NULL::integer AS layer1_connection_id,
+    s1.slot_id AS physical_port_id,
+    s1.device_id,
+    s1.slot_name AS port_name,
+    s1.slot_function AS port_type,
+    NULL::text AS port_purpose,
+    NULL::integer AS other_physical_port_id,
+    NULL::integer AS other_device_id,
+    NULL::character varying AS other_port_name,
+    NULL::text AS other_port_purpose,
+    NULL::integer AS baud,
+    NULL::character varying AS data_bits,
+    NULL::character varying AS stop_bits,
+    NULL::character varying AS parity,
+    NULL::character varying AS flow_control
+   FROM pp s1
+     LEFT JOIN inter_component_connection icc ON s1.slot_id = icc.slot1_id
+  WHERE icc.inter_component_connection_id IS NULL;
 
 delete from __recreate where type = 'view' and object = 'v_l1_all_physical_ports';
--- DONE DEALING WITH TABLE v_l1_all_physical_ports [2507318]
+-- DONE DEALING WITH TABLE v_l1_all_physical_ports [3181439]
 --------------------------------------------------------------------
+
 --------------------------------------------------------------------
 -- DEALING WITH TABLE v_physical_connection [2468250]
 -- Save grants for later reapplication
