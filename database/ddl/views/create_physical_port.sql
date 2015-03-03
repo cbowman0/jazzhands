@@ -43,8 +43,8 @@ SELECT
 	sl.data_upd_date
   FROM	slot sl 
 	INNER JOIN slot_type st USING (slot_type_id)
-	INNER JOIN device d USING (component_id)
-	INNER JOIN component c USING (component_id)
+	INNER JOIN v_device_slots d USING (slot_id)
+	INNER JOIN component c ON (sl.component_id = c.component_id)
 	INNER JOIN component_type ct USING (component_type_id)
  WHERE	st.slot_function in ('network', 'serial', 'patchpanel')
 ;
