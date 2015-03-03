@@ -58,6 +58,8 @@ SELECT schema_support.build_audit_tables('audit', 'jazzhands');
 \i ddl/schema/pgsql/create_svcenv_coll_hier_triggers.sql
 \i ddl/schema/pgsql/create_v_corp_family_account_triggers.sql
 \i ddl/schema/pgsql/create_component_triggers.sql
+\i ddl/schema/pgsql/create_physical_conection_triggers.sql
+\i ddl/schema/pgsql/create_physical_conection_triggers_RETIRE.sql
 
 -- This could be done for backwards compatibility but is not.
 -- \i compat/pgsql/create_location_compatibility_view.sql
