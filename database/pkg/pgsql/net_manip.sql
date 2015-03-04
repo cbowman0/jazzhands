@@ -16,9 +16,21 @@
  * $Id$
  */
 
-DROP SCHEMA IF EXISTS net_manip CASCADE;
-CREATE SCHEMA net_manip AUTHORIZATION jazzhands;
-COMMENT ON SCHEMA net_manip IS 'part of jazzhands';
+DO $$
+DECLARE
+        _tal INTEGER;
+BEGIN
+        select count(*)
+        from pg_catalog.pg_namespace
+        into _tal
+        where nspname = 'net_manip';
+        IF _tal = 0 THEN
+                DROP SCHEMA IF EXISTS net_manip;
+                CREATE SCHEMA net_manip AUTHORIZATION jazzhands;
+		COMMENT ON SCHEMA net_manip IS 'part of jazzhands';
+        END IF;
+END;
+$$;
 
 -------------------------------------------------------------------
 -- returns the Id tag for CM
