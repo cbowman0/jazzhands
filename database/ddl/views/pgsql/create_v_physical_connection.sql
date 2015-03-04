@@ -60,9 +60,14 @@ UNION ALL
 ) select
 	level,
 	inter_component_connection_id,
+	inter_component_connection_id as layer1_connection_id,
 	PHYSICAL_CONNECTION_ID,
 	inter_dev_conn_slot1_id,
 	inter_dev_conn_slot2_id,
+	inter_dev_conn_slot1_id as layer1_physical_port1_id,
+	inter_dev_conn_slot2_id as layer1_physical_port2_id,
 	slot1_id,
-	slot2_id
+	slot2_id,
+	slot1_id as physical_port1_id,
+	slot2_id as physical_port2_id
 from var_recurse;
