@@ -269,8 +269,6 @@ BEGIN
 	END LOOP;
 
 	-- figure out how big the zero expansion needs to be for later placement
-	RAISE NOTICE 'parts: % (%)', parts, tally;
-	RAISE NOTICE 'proc : %', proc;
 	zero := '';
 	tally := 8 - tally;
 	WHILE tally > 0
@@ -293,7 +291,6 @@ BEGIN
 		END IF;
 	END LOOP;
 	rv := array_to_string(parts, ':');
-	RAISE NOTICE '% (%)', rv, zero;
 	RETURN rv;
 END;
 $$
