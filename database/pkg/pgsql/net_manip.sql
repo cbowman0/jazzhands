@@ -220,5 +220,81 @@ RETURNS inet AS $$
 BEGIN
 	RETURN(set_masklen(net_manip.inet_ntodb(p_ipaddr), p_netmask_bits));
 END;
-
 $$ LANGUAGE plpgsql;
+
+------------------------------------------------------------------------------
+--
+-- Expand an IPv6 address completely (returns text) into eight segmenets,
+-- with for elements each, zero filled
+--
+------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION net_manip.expand_ipv6_address (
+	ip		inet
+) RETURNS text AS
+$$
+DECLARE
+	parts	text[];
+	proc	text[];
+	elem	text;
+	zero	text;
+	tally	integer;
+	rv		text;
+BEGIN
+	IF family(ip) != 6 THEN
+		RAISE EXCEPTION 'net_manip.expand_ipv6_address only works on IPv6 addresses'
+			USING ERRCODE = 'invalid_parameter_value';
+	END IF;
+	-- end up with an array for each element, with an empty block being a
+	-- spot that should be zero filled.  Due to regexp matching, a :: at the
+	-- end will leave extra empty blocks at the end.
+	-- This basically makes it so the empty array element needs to be zero
+	-- expanded.
+	parts := regexp_split_to_array(
+		regexp_replace(
+			regexp_replace(ip::text, '::/\d+$', ':'),
+				'^:?([a-f0-9:]*):?(/\d+)?$', E'\\1', 'i'), ':'
+		);
+
+	--
+	-- go through elements and zero fill them.
+	tally := 0;
+	FOREACH elem in ARRAY parts
+	LOOP
+		IF char_length(elem) > 0 THEN
+			proc = proc || lpad(elem, 4, '0');
+			tally := tally + 1;
+		ELSE
+			proc = proc || elem;
+		END IF;
+	END LOOP;
+
+	-- figure out how big the zero expansion needs to be for later placement
+	RAISE NOTICE 'parts: % (%)', parts, tally;
+	RAISE NOTICE 'proc : %', proc;
+	zero := '';
+	tally := 8 - tally;
+	WHILE tally > 0
+	LOOP
+		zero := zero || ':' || lpad('', 4, '0');
+		tally := tally - 1;
+	END LOOP;
+	zero := regexp_replace(zero, '^:', '');
+
+	--
+	-- to through all the elements and find the empty one that should be
+	-- zero filled
+	parts := ARRAY[]::text[];
+	FOREACH elem in ARRAY proc
+	LOOP
+		IF char_length(elem) > 0 THEN
+			parts := parts || elem;
+		ELSE
+			parts := parts || zero;
+		END IF;
+	END LOOP;
+	rv := array_to_string(parts, ':');
+	RAISE NOTICE '% (%)', rv, zero;
+	RETURN rv;
+END;
+$$
+LANGUAGE plpgsql;
