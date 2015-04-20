@@ -6661,6 +6661,28 @@ ALTER TABLE VAL_X509_KEY_USAGE_CATEGORY
 	ADD CONSTRAINT  PK_X509_KEY_USAGE_CATEGORY PRIMARY KEY (X509_KEY_USG_CAT)       ;
 
 /***********************************************
+ * Table: VAL_X509_REVOCATION_REASON
+ ***********************************************/
+
+CREATE TABLE VAL_X509_REVOCATION_REASON
+(
+	X509_REVOCATION_REASON VARCHAR(50) NOT NULL 
+,
+	DESCRIPTION          VARCHAR(255) NULL,
+	DATA_INS_USER        VARCHAR(255) NULL,
+	DATA_INS_DATE        TIMESTAMP WITH TIME ZONE NULL,
+	DATA_UPD_USER        VARCHAR(255) NULL,
+	DATA_UPD_DATE        TIMESTAMP WITH TIME ZONE NULL 
+);
+
+COMMENT ON TABLE VAL_X509_REVOCATION_REASON IS 'Reasons, based on RFC, that a certificate can be revoked.  These are typically encoded in revocation lists (CRLs, etc).';
+
+COMMENT ON COLUMN VAL_X509_REVOCATION_REASON.X509_REVOCATION_REASON IS 'valid reason for revoking certificates';
+
+ALTER TABLE VAL_X509_REVOCATION_REASON
+	ADD CONSTRAINT  PK_VAL_X509_REVOCATION_REASON PRIMARY KEY (X509_REVOCATION_REASON)       ;
+
+/***********************************************
  * Table: VOE
  ***********************************************/
 
@@ -6913,22 +6935,24 @@ CREATE TABLE X509_CERTIFICATE
 (
 	X509_CERT_ID SERIAL NOT NULL 
 ,
+	FRIENDLY_NAME        VARCHAR(50) NOT NULL,
+	IS_ACTIVE            CHAR(1) NOT NULL,
 	IS_CERTIFICATE_AUTHORITY CHAR(1) NOT NULL,
 	SIGNING_CERT_ID      INTEGER NULL,
 	X509_CA_CERT_SERIAL_NUMBER numeric NULL,
-	PUBLIC_KEY           VARCHAR(4000) NOT NULL 
+	PUBLIC_KEY text NOT NULL 
 ,
-	PRIVATE_KEY          VARCHAR(4000) NOT NULL 
-,
-	CERTIFICATE_SIGN_REQ VARCHAR(4000) NULL,
+	PRIVATE_KEY text NULL,
+	CERTIFICATE_SIGN_REQ text NULL,
 	SUBJECT              VARCHAR(255) NOT NULL 
 ,
+	SUBJECT_KEY_IDENTIFIER VARCHAR(50) NOT NULL,
 	VALID_FROM           TIMESTAMP(6) NOT NULL 
 ,
 	VALID_TO             TIMESTAMP(6) NOT NULL 
 ,
-	IS_CERT_REVOKED      CHAR(1) NOT NULL 
-,
+	X509_REVOCATION_DATE TIMESTAMP WITH TIME ZONE NULL,
+	X509_REVOCATION_REASON VARCHAR(50) NULL,
 	PASSPHRASE           VARCHAR(255) NULL,
 	ENCRYPTION_KEY_ID    INTEGER NULL,
 	DATA_INS_USER        VARCHAR(255) NULL,
@@ -6941,7 +6965,7 @@ COMMENT ON TABLE X509_CERTIFICATE IS 'X509 specification Certificate.';
 
 COMMENT ON COLUMN X509_CERTIFICATE.X509_CERT_ID IS 'Uniquely identifies Certificate';
 
-COMMENT ON COLUMN X509_CERTIFICATE.SIGNING_CERT_ID IS 'Identifier for the certificate that has signed this one.';
+COMMENT ON COLUMN X509_CERTIFICATE.SIGNING_CERT_ID IS 'x509_cert_id for the certificate that has signed this one.';
 
 COMMENT ON COLUMN X509_CERTIFICATE.X509_CA_CERT_SERIAL_NUMBER IS 'Serial INTEGER assigned to the certificate within Certificate Authority. It uniquely identifies certificate within the realm of the CA.';
 
@@ -6949,13 +6973,25 @@ COMMENT ON COLUMN X509_CERTIFICATE.PUBLIC_KEY IS 'Textual representation of Cert
 
 COMMENT ON COLUMN X509_CERTIFICATE.PRIVATE_KEY IS 'Textual representation of Certificate Private Key. Private Key is a component of X509 standard and is used for encryption.';
 
-COMMENT ON COLUMN X509_CERTIFICATE.SUBJECT IS 'Textual representation of a certificate subject. Certificate subject is a part of X509 certificate specifications.';
+COMMENT ON COLUMN X509_CERTIFICATE.SUBJECT IS 'Textual representation of a certificate subject. Certificate subject is a part of X509 certificate specifications.  This is the full subject from the certificate.  Friendly Name provides a human readable one.';
 
 COMMENT ON COLUMN X509_CERTIFICATE.VALID_FROM IS 'Timestamp indicating when the certificate becomes valid and can be used.';
 
 COMMENT ON COLUMN X509_CERTIFICATE.VALID_TO IS 'Timestamp indicating when the certificate becomes invalid and can''t be used.';
 
-COMMENT ON COLUMN X509_CERTIFICATE.IS_CERT_REVOKED IS 'Indicates if certificate has been revoked. ''Y'' indicates that Certificate has been revoked.';
+COMMENT ON COLUMN X509_CERTIFICATE.PASSPHRASE IS 'passphrase to decrypt key.  If encrypted, encryption_key_id indicates how to decrypt.';
+
+COMMENT ON COLUMN X509_CERTIFICATE.ENCRYPTION_KEY_ID IS 'if set, encryption key information for decrypting passphrase.';
+
+COMMENT ON COLUMN X509_CERTIFICATE.X509_REVOCATION_REASON IS 'if certificate was revoked, why iit was revokeed.  date must also be set.   NULL means not revoked';
+
+COMMENT ON COLUMN X509_CERTIFICATE.IS_ACTIVE IS 'indicates certificate is in active use.  This is used by tools to decide how to show it; does not indicate revocation';
+
+COMMENT ON COLUMN X509_CERTIFICATE.FRIENDLY_NAME IS 'human readable name for certificate.  often just the CN.';
+
+COMMENT ON COLUMN X509_CERTIFICATE.SUBJECT_KEY_IDENTIFIER IS 'colon seperate byte hex string with X509v3 SKIextension of this certificate';
+
+COMMENT ON COLUMN X509_CERTIFICATE.X509_REVOCATION_DATE IS 'if certificate was revoked, when it was revokeed.  reason must also be set.   NULL means not revoked';
 
 ALTER TABLE X509_CERTIFICATE
 	ADD CONSTRAINT  PK_X509_CERTIFICATE PRIMARY KEY (X509_CERT_ID)       ;
@@ -6964,16 +7000,19 @@ ALTER TABLE X509_CERTIFICATE
 ADD CONSTRAINT  AK_X509_CERT_CERT_CA_SER UNIQUE (SIGNING_CERT_ID,X509_CA_CERT_SERIAL_NUMBER)       ;
 
 ALTER TABLE X509_CERTIFICATE
-	ADD CONSTRAINT  CHECK_YES_NO_293461963 CHECK (IS_CERT_REVOKED IN ('Y', 'N'));
-
-ALTER TABLE X509_CERTIFICATE
 	ADD CONSTRAINT  CHECK_YES_NO_31190954 CHECK (IS_CERTIFICATE_AUTHORITY IN ('Y', 'N'));
 
 ALTER TABLE X509_CERTIFICATE
-	ALTER IS_CERT_REVOKED SET DEFAULT 'N';
+	ADD CONSTRAINT  CHECK_YES_NO_1933598984 CHECK (IS_ACTIVE IN ('Y', 'N'));
 
 ALTER TABLE X509_CERTIFICATE
 	ALTER IS_CERTIFICATE_AUTHORITY SET DEFAULT 'N';
+
+ALTER TABLE X509_CERTIFICATE
+	ALTER IS_ACTIVE SET DEFAULT 'Y';
+
+CREATE  INDEX XIF3X509_CERTIFICATE ON X509_CERTIFICATE
+(X509_REVOCATION_REASON   ASC);
 
 /***********************************************
  * Table: X509_KEY_USAGE_ATTRIBUTE
@@ -8208,6 +8247,9 @@ ALTER TABLE X509_CERTIFICATE
 
 ALTER TABLE X509_CERTIFICATE
 	ADD CONSTRAINT FK_X509CERT_ENC_ID_ID FOREIGN KEY (ENCRYPTION_KEY_ID) REFERENCES ENCRYPTION_KEY (ENCRYPTION_KEY_ID)  ;
+
+ALTER TABLE X509_CERTIFICATE
+	ADD CONSTRAINT R_691 FOREIGN KEY (X509_REVOCATION_REASON) REFERENCES VAL_X509_REVOCATION_REASON (X509_REVOCATION_REASON);
 
 ALTER TABLE X509_KEY_USAGE_ATTRIBUTE
 	ADD CONSTRAINT FK_X509_KEY_USG_CATEGORIZATION FOREIGN KEY (X509_KEY_USG_CAT, X509_KEY_USG) REFERENCES X509_KEY_USAGE_CATEGORIZATION (X509_KEY_USG_CAT, X509_KEY_USG)  ;
