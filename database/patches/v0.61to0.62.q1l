@@ -1459,7 +1459,7 @@ DROP TRIGGER IF EXISTS trig_userlog_val_property ON jazzhands.val_property;
 SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'val_property');
 ---- BEGIN audit.val_property TEARDOWN
 -- Save grants for later reapplication
-SELECT schema_support.save_grants_for_replay('audit', 'val_property', udit.val_property');
+SELECT schema_support.save_grants_for_replay('audit', 'val_property', 'val_property');
 
 -- FOREIGN KEYS FROM
 
@@ -3238,4 +3238,4 @@ GRANT select on all sequences in schema jazzhands to ro_role;
 GRANT usage on all sequences in schema jazzhands to iud_role;
 GRANT select on all tables in schema audit to ro_role;
 GRANT select on all sequences in schema audit to ro_role;
--- SELECT schema_support.end_maintenance();
+SELECT schema_support.end_maintenance();
