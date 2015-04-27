@@ -1038,7 +1038,7 @@ INSERT INTO x509_certificate (
 	data_upd_date
 ) SELECT
 	x509_cert_id,
-	NULL,		-- new column (friendly_name)
+	subject,		-- new column (friendly_name)
 	'Y'::bpchar,		-- new column (is_active)
 	is_certificate_authority,
 	signing_cert_id,
@@ -1047,10 +1047,10 @@ INSERT INTO x509_certificate (
 	private_key,
 	certificate_sign_req,
 	subject,
-	NULL,		-- new column (subject_key_identifier)
+	subject,		-- new column (subject_key_identifier)
 	valid_from,
 	valid_to,
-	NULL,		-- new column (x509_revocation_date)
+	CASE WHEN is_cert_revoked = 'Y' THEN now() ELSE NULL END, -- x509_revocation_date
 	NULL,		-- new column (x509_revocation_reason)
 	passphrase,
 	encryption_key_id,
@@ -1088,8 +1088,8 @@ INSERT INTO audit.x509_certificate (
 	"aud#seq"
 ) SELECT
 	x509_cert_id,
-	NULL,		-- new column (friendly_name)
-	NULL,		-- new column (is_active)
+	subject,		-- new column (friendly_name)
+	'Y',		-- new column (is_active)
 	is_certificate_authority,
 	signing_cert_id,
 	x509_ca_cert_serial_number,
@@ -1097,10 +1097,10 @@ INSERT INTO audit.x509_certificate (
 	private_key,
 	certificate_sign_req,
 	subject,
-	NULL,		-- new column (subject_key_identifier)
+	subject,		-- new column (subject_key_identifier)
 	valid_from,
 	valid_to,
-	NULL,		-- new column (x509_revocation_date)
+	CASE WHEN is_cert_revoked = 'Y' THEN now() ELSE NULL END, -- x509_revocation_date
 	NULL,		-- new column (x509_revocation_reason)
 	passphrase,
 	encryption_key_id,
