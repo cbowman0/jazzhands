@@ -1862,6 +1862,8 @@ DROP TABLE IF EXISTS audit.val_property_v62;
 --------------------------------------------------------------------
 --------------------------------------------------------------------
 -- DEALING WITH NEW TABLE v_dns_changes_pending
+SELECT schema_support.save_grants_for_replay('jazzhands', 'v_dns_changes_pending', 'v_dns_changes_pending');
+SELECT schema_support.save_grants_for_replay('jazzhands', 'v_dns_changes_pending', 'v_dns_changes_pending');
 CREATE VIEW v_dns_changes_pending AS
  WITH chg AS (
          SELECT dns_change_record.dns_change_record_id,
