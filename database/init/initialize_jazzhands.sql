@@ -1369,5 +1369,20 @@ values
 	('application',  'serverAuth')
 ;
 
+INSERT INTO val_x509_revocation_reason
+	(x509_revocation_reason)
+values 
+	('unspecified'),
+	('keyCompromise'),
+	('CACompromise'),
+	('affiliationChanged'),
+	('superseded'),
+	('cessationOfOperation'),
+	('certificateHold'),
+	('removeFromCRL'),
+	('privilegeWithdrawn'),
+	('AACompromise')
+;
+	
 -- END certificate
 -------------------------------------------------------------------------

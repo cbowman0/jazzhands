@@ -3318,6 +3318,22 @@ values
 	('application',  'serverAuth')
 ;
 
+INSERT INTO val_x509_revocation_reason
+	(x509_revocation_reason)
+values
+	('unspecified'),
+	('keyCompromise'),
+	('CACompromise'),
+	('affiliationChanged'),
+	('superseded'),
+	('cessationOfOperation'),
+	('certificateHold'),
+	('removeFromCRL'),
+	('privilegeWithdrawn'),
+	('AACompromise')
+;
+
+
 -- triggers
 
 delete  from __recreate where object = 'layer1_connection' and type = 'trigger' and ddl like '%trigger_layer1_connection_insteadof%';
