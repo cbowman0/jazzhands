@@ -20,6 +20,7 @@ Invoked:
 	v_dev_col_user_prop_expanded
 	v_unix_passwd_mappings
 	v_l1_all_physical_ports
+	v_corp_family_account
 */
 
 COMMENT ON SCHEMA netblock_manip IS 'part of jazzhands';
@@ -3052,7 +3053,7 @@ delete from __recreate where type = 'view' and object = 'v_dev_col_user_prop_exp
 -- DEALING WITH TABLE v_l1_all_physical_ports [3854317]
 -- Save grants for later reapplication
 SELECT schema_support.save_grants_for_replay('jazzhands', 'v_l1_all_physical_ports', 'v_l1_all_physical_ports');
-SELECT schema_support.save_grants_for_replay('jazzhands', 'v_l1_all_physical_ports', 'v_l1_all_physical_ports');
+SELECT schema_support.save_dependant_objects_for_replay('audit', 'v_l1_all_physical_ports');
 DROP VIEW v_l1_all_physical_ports ;
 CREATE VIEW v_l1_all_physical_ports AS
  WITH pp AS (
@@ -3126,6 +3127,40 @@ GRANT INSERT,UPDATE,DELETE ON v_l1_all_physical_ports TO iud_role;
 GRANT SELECT ON v_l1_all_physical_ports TO ro_role;
 GRANT ALL ON v_l1_all_physical_ports TO jazzhands;
 -- DONE DEALING WITH TABLE v_l1_all_physical_ports [3845147]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_corp_family_account [4134661]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'v_corp_family_account', 'v_corp_family_account');
+SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'v_corp_family_account');
+SELECT schema_support.save_trigger_for_replay('jazzhands', 'v_corp_family_account');
+DROP VIEW v_corp_family_account;
+CREATE VIEW v_corp_family_account AS
+ SELECT a.account_id,
+    a.login,
+    a.person_id,
+    a.company_id,
+    a.account_realm_id,
+    a.account_status,
+    a.account_role,
+    a.account_type,
+    a.description,
+        CASE
+            WHEN vps.is_disabled = 'N'::bpchar THEN 'Y'::text
+            ELSE 'N'::text
+        END AS is_enabled,
+    a.data_ins_user,
+    a.data_ins_date,
+    a.data_upd_user,
+    a.data_upd_date
+   FROM account a
+     JOIN val_person_status vps ON a.account_status::text = vps.person_status::text
+  WHERE (a.account_realm_id IN ( SELECT property.account_realm_id
+           FROM property
+          WHERE property.property_name::text = '_root_account_realm_id'::text AND property.property_type::text = 'Defaults'::text));
+
+delete from __recreate where type = 'view' and object = 'v_corp_family_account';
+-- DONE DEALING WITH TABLE v_corp_family_account [4143053]
 --------------------------------------------------------------------
 
 
