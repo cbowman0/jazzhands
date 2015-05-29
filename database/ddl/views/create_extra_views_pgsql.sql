@@ -114,3 +114,6 @@
 
 -- dns
 \i create_v_dns_changes_pending.sql
+
+-- logical volumes
+\i pgsql/create_v_lv_hier.sql
