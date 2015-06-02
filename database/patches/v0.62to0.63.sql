@@ -95,7 +95,7 @@ CREATE TABLE x509_certificate
 	is_certificate_authority	character(1) NOT NULL,
 	signing_cert_id	integer  NULL,
 	x509_ca_cert_serial_number	numeric  NULL,
-	public_key	text NOT NULL,
+	public_key	text NULL,
 	private_key	text  NULL,
 	certificate_sign_req	text  NULL,
 	subject	varchar(255) NOT NULL,
