@@ -688,130 +688,6 @@ DROP TABLE IF EXISTS network_range_v62;
 DROP TABLE IF EXISTS audit.network_range_v62;
 -- DONE DEALING WITH TABLE network_range [4624951]
 --------------------------------------------------------------------
--- Dropping obsoleted sequences....
-
-
--- Dropping obsoleted audit sequences....
-
-
--- Processing tables with no structural changes
--- Some of these may be redundant
--- fk constraints
-ALTER TABLE logical_volume DROP CONSTRAINT IF EXISTS fk_logvol_device_id;
-ALTER TABLE logical_volume
-	ADD CONSTRAINT fk_logvol_device_id
-	FOREIGN KEY (device_id) REFERENCES device(device_id) DEFERRABLE;
-
-ALTER TABLE logical_volume DROP CONSTRAINT IF EXISTS fk_logvol_fstype;
-ALTER TABLE logical_volume
-	ADD CONSTRAINT fk_logvol_fstype
-	FOREIGN KEY (filesystem_type) REFERENCES val_filesystem_type(filesystem_type) DEFERRABLE;
-
-ALTER TABLE logical_volume DROP CONSTRAINT IF EXISTS fk_logvol_vgid;
-ALTER TABLE logical_volume
-	ADD CONSTRAINT fk_logvol_vgid
-	FOREIGN KEY (volume_group_id, device_id) REFERENCES volume_group(volume_group_id, device_id) DEFERRABLE;
-
-ALTER TABLE logical_volume_property DROP CONSTRAINT IF EXISTS fk_lvol_prop_lvid_fstyp;
-ALTER TABLE logical_volume_property
-	ADD CONSTRAINT fk_lvol_prop_lvid_fstyp
-	FOREIGN KEY (logical_volume_id, filesystem_type) REFERENCES logical_volume(logical_volume_id, filesystem_type) DEFERRABLE;
-
-ALTER TABLE logical_volume_property DROP CONSTRAINT IF EXISTS fk_lvol_prop_lvpn_fsty;
-ALTER TABLE logical_volume_property
-	ADD CONSTRAINT fk_lvol_prop_lvpn_fsty
-	FOREIGN KEY (logical_volume_property_name, filesystem_type) REFERENCES val_logical_volume_property(logical_volume_property_name, filesystem_type) DEFERRABLE;
-
-ALTER TABLE logical_volume_purpose DROP CONSTRAINT IF EXISTS fk_lvpurp_lvid;
-ALTER TABLE logical_volume_purpose
-	ADD CONSTRAINT fk_lvpurp_lvid
-	FOREIGN KEY (logical_volume_id) REFERENCES logical_volume(logical_volume_id) DEFERRABLE;
-
-ALTER TABLE logical_volume_purpose DROP CONSTRAINT IF EXISTS fk_lvpurp_val_lgpuprp;
-ALTER TABLE logical_volume_purpose
-	ADD CONSTRAINT fk_lvpurp_val_lgpuprp
-	FOREIGN KEY (logical_volume_purpose) REFERENCES val_logical_volume_purpose(logical_volume_purpose) DEFERRABLE;
-
-ALTER TABLE physicalish_volume DROP CONSTRAINT IF EXISTS fk_physicalish_vol_pvtype;
-ALTER TABLE physicalish_volume
-	ADD CONSTRAINT fk_physicalish_vol_pvtype
-	FOREIGN KEY (physicalish_volume_type) REFERENCES val_physicalish_volume_type(physicalish_volume_type);
-
-ALTER TABLE physicalish_volume DROP CONSTRAINT IF EXISTS fk_physvol_compid;
-ALTER TABLE physicalish_volume
-	ADD CONSTRAINT fk_physvol_compid
-	FOREIGN KEY (component_id) REFERENCES component(component_id) DEFERRABLE;
-
-ALTER TABLE physicalish_volume DROP CONSTRAINT IF EXISTS fk_physvol_device_id;
-ALTER TABLE physicalish_volume
-	ADD CONSTRAINT fk_physvol_device_id
-	FOREIGN KEY (device_id) REFERENCES device(device_id) DEFERRABLE;
-
-ALTER TABLE physicalish_volume DROP CONSTRAINT IF EXISTS fk_physvol_lvid;
-ALTER TABLE physicalish_volume
-	ADD CONSTRAINT fk_physvol_lvid
-	FOREIGN KEY (logical_volume_id) REFERENCES logical_volume(logical_volume_id) DEFERRABLE;
-
-ALTER TABLE volume_group DROP CONSTRAINT IF EXISTS fk_volgrp_devid;
-ALTER TABLE volume_group
-	ADD CONSTRAINT fk_volgrp_devid
-	FOREIGN KEY (device_id) REFERENCES device(device_id) DEFERRABLE;
-
-ALTER TABLE volume_group DROP CONSTRAINT IF EXISTS fk_volgrp_rd_type;
-ALTER TABLE volume_group
-	ADD CONSTRAINT fk_volgrp_rd_type
-	FOREIGN KEY (raid_type) REFERENCES val_raid_type(raid_type) DEFERRABLE;
-
-ALTER TABLE volume_group DROP CONSTRAINT IF EXISTS fk_volgrp_volgrp_type;
-ALTER TABLE volume_group
-	ADD CONSTRAINT fk_volgrp_volgrp_type
-	FOREIGN KEY (volume_group_type) REFERENCES val_volume_group_type(volume_group_type) DEFERRABLE;
-
-ALTER TABLE volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_physvol_vg_phsvol_dvid;
-ALTER TABLE volume_group_physicalish_vol
-	ADD CONSTRAINT fk_physvol_vg_phsvol_dvid
-	FOREIGN KEY (physicalish_volume_id, device_id) REFERENCES physicalish_volume(physicalish_volume_id, device_id) DEFERRABLE;
-
-ALTER TABLE volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_vg_physvol_vgrel;
-ALTER TABLE volume_group_physicalish_vol
-	ADD CONSTRAINT fk_vg_physvol_vgrel
-	FOREIGN KEY (volume_group_relation) REFERENCES val_volume_group_relation(volume_group_relation) DEFERRABLE;
-
-ALTER TABLE volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_vgp_phy_phyid;
-ALTER TABLE volume_group_physicalish_vol
-	ADD CONSTRAINT fk_vgp_phy_phyid
-	FOREIGN KEY (physicalish_volume_id) REFERENCES physicalish_volume(physicalish_volume_id) DEFERRABLE;
-
-ALTER TABLE volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_vgp_phy_vgrpid;
-ALTER TABLE volume_group_physicalish_vol
-	ADD CONSTRAINT fk_vgp_phy_vgrpid
-	FOREIGN KEY (volume_group_id) REFERENCES volume_group(volume_group_id) DEFERRABLE;
-
-ALTER TABLE volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_vgp_phy_vgrpid_devid;
-ALTER TABLE volume_group_physicalish_vol
-	ADD CONSTRAINT fk_vgp_phy_vgrpid_devid
-	FOREIGN KEY (volume_group_id, device_id) REFERENCES volume_group(volume_group_id, device_id) DEFERRABLE;
-
-ALTER TABLE volume_group_purpose DROP CONSTRAINT IF EXISTS fk_val_volgrp_purp_vgid;
-ALTER TABLE volume_group_purpose
-	ADD CONSTRAINT fk_val_volgrp_purp_vgid
-	FOREIGN KEY (volume_group_id) REFERENCES volume_group(volume_group_id) DEFERRABLE;
-
-ALTER TABLE volume_group_purpose DROP CONSTRAINT IF EXISTS fk_val_volgrp_purp_vgpurp;
-ALTER TABLE volume_group_purpose
-	ADD CONSTRAINT fk_val_volgrp_purp_vgpurp
-	FOREIGN KEY (volume_group_purpose) REFERENCES val_volume_group_purpose(volume_group_purpose) DEFERRABLE;
-
-ALTER TABLE PHYSICALISH_VOLUME DROP CONSTRAINT IF EXISTS FK_PHYSICALISH_VOL_PVTYPE;
-ALTER TABLE PHYSICALISH_VOLUME 
-	ADD CONSTRAINT FK_PHYSICALISH_VOL_PVTYPE 
-	FOREIGN KEY (PHYSICALISH_VOLUME_TYPE) REFERENCES VAL_PHYSICALISH_VOLUME_TYPE (PHYSICALISH_VOLUME_TYPE) DEFERRABLE INITIALLY IMMEDIATE;
-
-ALTER TABLE physicalish_volume DROP CONSTRAINT IF EXISTS ak_physvolname_type_devid;
-ALTER TABLE ONLY physicalish_volume
-	ADD CONSTRAINT ak_physvolname_type_devid 
-	UNIQUE (device_id, physicalish_volume_name, physicalish_volume_type);
-
 
 -- triggers
 
@@ -1167,9 +1043,6 @@ $$
 SET search_path=jazzhands
 LANGUAGE plpgsql SECURITY DEFINER;
 
-GRANT USAGE ON SCHEMA snapshot_manip TO iud_role;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA snapshot_manip TO iud_role;
-
 --------------------------------------------------------------------
 -- DEALING WITH proc device_utils.purge_physical_path -> purge_physical_path 
 
@@ -1487,7 +1360,6 @@ BEGIN
 			inet_rec.netblock_type,
 			'N',
 			CASE WHEN can_subnet THEN 'Y' ELSE 'N' END,
-			inet_rec.ip_universe_id,
 			allocate_netblock.description,
 			allocate_netblock.netblock_status
 		) RETURNING * INTO netblock_rec;
@@ -1552,6 +1424,134 @@ CREATE OR REPLACE VIEW v_lv_hier AS
 delete from __recreate where type = 'view' and object = 'v_lv_hier';
 -- DONE DEALING WITH TABLE v_lv_hier [4763835]
 --------------------------------------------------------------------
+
+-- Dropping obsoleted sequences....
+
+
+-- Dropping obsoleted audit sequences....
+
+
+-- Processing tables with no structural changes
+-- Some of these may be redundant
+-- fk constraints
+ALTER TABLE logical_volume DROP CONSTRAINT IF EXISTS fk_logvol_device_id;
+ALTER TABLE logical_volume
+	ADD CONSTRAINT fk_logvol_device_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id) DEFERRABLE;
+
+ALTER TABLE logical_volume DROP CONSTRAINT IF EXISTS fk_logvol_fstype;
+ALTER TABLE logical_volume
+	ADD CONSTRAINT fk_logvol_fstype
+	FOREIGN KEY (filesystem_type) REFERENCES val_filesystem_type(filesystem_type) DEFERRABLE;
+
+ALTER TABLE logical_volume DROP CONSTRAINT IF EXISTS fk_logvol_vgid;
+ALTER TABLE logical_volume
+	ADD CONSTRAINT fk_logvol_vgid
+	FOREIGN KEY (volume_group_id, device_id) REFERENCES volume_group(volume_group_id, device_id) DEFERRABLE;
+
+ALTER TABLE logical_volume_property DROP CONSTRAINT IF EXISTS fk_lvol_prop_lvid_fstyp;
+ALTER TABLE logical_volume_property
+	ADD CONSTRAINT fk_lvol_prop_lvid_fstyp
+	FOREIGN KEY (logical_volume_id, filesystem_type) REFERENCES logical_volume(logical_volume_id, filesystem_type) DEFERRABLE;
+
+ALTER TABLE logical_volume_property DROP CONSTRAINT IF EXISTS fk_lvol_prop_lvpn_fsty;
+ALTER TABLE logical_volume_property
+	ADD CONSTRAINT fk_lvol_prop_lvpn_fsty
+	FOREIGN KEY (logical_volume_property_name, filesystem_type) REFERENCES val_logical_volume_property(logical_volume_property_name, filesystem_type) DEFERRABLE;
+
+ALTER TABLE logical_volume_purpose DROP CONSTRAINT IF EXISTS fk_lvpurp_lvid;
+ALTER TABLE logical_volume_purpose
+	ADD CONSTRAINT fk_lvpurp_lvid
+	FOREIGN KEY (logical_volume_id) REFERENCES logical_volume(logical_volume_id) DEFERRABLE;
+
+ALTER TABLE logical_volume_purpose DROP CONSTRAINT IF EXISTS fk_lvpurp_val_lgpuprp;
+ALTER TABLE logical_volume_purpose
+	ADD CONSTRAINT fk_lvpurp_val_lgpuprp
+	FOREIGN KEY (logical_volume_purpose) REFERENCES val_logical_volume_purpose(logical_volume_purpose) DEFERRABLE;
+
+ALTER TABLE physicalish_volume DROP CONSTRAINT IF EXISTS fk_physicalish_vol_pvtype;
+ALTER TABLE physicalish_volume
+	ADD CONSTRAINT fk_physicalish_vol_pvtype
+	FOREIGN KEY (physicalish_volume_type) REFERENCES val_physicalish_volume_type(physicalish_volume_type);
+
+ALTER TABLE physicalish_volume DROP CONSTRAINT IF EXISTS fk_physvol_compid;
+ALTER TABLE physicalish_volume
+	ADD CONSTRAINT fk_physvol_compid
+	FOREIGN KEY (component_id) REFERENCES component(component_id) DEFERRABLE;
+
+ALTER TABLE physicalish_volume DROP CONSTRAINT IF EXISTS fk_physvol_device_id;
+ALTER TABLE physicalish_volume
+	ADD CONSTRAINT fk_physvol_device_id
+	FOREIGN KEY (device_id) REFERENCES device(device_id) DEFERRABLE;
+
+ALTER TABLE physicalish_volume DROP CONSTRAINT IF EXISTS fk_physvol_lvid;
+ALTER TABLE physicalish_volume
+	ADD CONSTRAINT fk_physvol_lvid
+	FOREIGN KEY (logical_volume_id) REFERENCES logical_volume(logical_volume_id) DEFERRABLE;
+
+ALTER TABLE volume_group DROP CONSTRAINT IF EXISTS fk_volgrp_devid;
+ALTER TABLE volume_group
+	ADD CONSTRAINT fk_volgrp_devid
+	FOREIGN KEY (device_id) REFERENCES device(device_id) DEFERRABLE;
+
+ALTER TABLE volume_group DROP CONSTRAINT IF EXISTS fk_volgrp_rd_type;
+ALTER TABLE volume_group
+	ADD CONSTRAINT fk_volgrp_rd_type
+	FOREIGN KEY (raid_type) REFERENCES val_raid_type(raid_type) DEFERRABLE;
+
+ALTER TABLE volume_group DROP CONSTRAINT IF EXISTS fk_volgrp_volgrp_type;
+ALTER TABLE volume_group
+	ADD CONSTRAINT fk_volgrp_volgrp_type
+	FOREIGN KEY (volume_group_type) REFERENCES val_volume_group_type(volume_group_type) DEFERRABLE;
+
+ALTER TABLE volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_physvol_vg_phsvol_dvid;
+ALTER TABLE volume_group_physicalish_vol
+	ADD CONSTRAINT fk_physvol_vg_phsvol_dvid
+	FOREIGN KEY (physicalish_volume_id, device_id) REFERENCES physicalish_volume(physicalish_volume_id, device_id) DEFERRABLE;
+
+ALTER TABLE volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_vg_physvol_vgrel;
+ALTER TABLE volume_group_physicalish_vol
+	ADD CONSTRAINT fk_vg_physvol_vgrel
+	FOREIGN KEY (volume_group_relation) REFERENCES val_volume_group_relation(volume_group_relation) DEFERRABLE;
+
+ALTER TABLE volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_vgp_phy_phyid;
+ALTER TABLE volume_group_physicalish_vol
+	ADD CONSTRAINT fk_vgp_phy_phyid
+	FOREIGN KEY (physicalish_volume_id) REFERENCES physicalish_volume(physicalish_volume_id) DEFERRABLE;
+
+ALTER TABLE volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_vgp_phy_vgrpid;
+ALTER TABLE volume_group_physicalish_vol
+	ADD CONSTRAINT fk_vgp_phy_vgrpid
+	FOREIGN KEY (volume_group_id) REFERENCES volume_group(volume_group_id) DEFERRABLE;
+
+ALTER TABLE volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_vgp_phy_vgrpid_devid;
+ALTER TABLE volume_group_physicalish_vol
+	ADD CONSTRAINT fk_vgp_phy_vgrpid_devid
+	FOREIGN KEY (volume_group_id, device_id) REFERENCES volume_group(volume_group_id, device_id) DEFERRABLE;
+
+ALTER TABLE volume_group_purpose DROP CONSTRAINT IF EXISTS fk_val_volgrp_purp_vgid;
+ALTER TABLE volume_group_purpose
+	ADD CONSTRAINT fk_val_volgrp_purp_vgid
+	FOREIGN KEY (volume_group_id) REFERENCES volume_group(volume_group_id) DEFERRABLE;
+
+ALTER TABLE volume_group_purpose DROP CONSTRAINT IF EXISTS fk_val_volgrp_purp_vgpurp;
+ALTER TABLE volume_group_purpose
+	ADD CONSTRAINT fk_val_volgrp_purp_vgpurp
+	FOREIGN KEY (volume_group_purpose) REFERENCES val_volume_group_purpose(volume_group_purpose) DEFERRABLE;
+
+ALTER TABLE PHYSICALISH_VOLUME DROP CONSTRAINT IF EXISTS FK_PHYSICALISH_VOL_PVTYPE;
+ALTER TABLE PHYSICALISH_VOLUME 
+	ADD CONSTRAINT FK_PHYSICALISH_VOL_PVTYPE 
+	FOREIGN KEY (PHYSICALISH_VOLUME_TYPE) REFERENCES VAL_PHYSICALISH_VOLUME_TYPE (PHYSICALISH_VOLUME_TYPE) DEFERRABLE INITIALLY IMMEDIATE;
+
+ALTER TABLE physicalish_volume DROP CONSTRAINT IF EXISTS ak_physvolname_type_devid;
+ALTER TABLE ONLY physicalish_volume
+	ADD CONSTRAINT ak_physvolname_type_devid 
+	UNIQUE (device_id, physicalish_volume_name, physicalish_volume_type);
+
+GRANT USAGE ON SCHEMA snapshot_manip TO iud_role;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA snapshot_manip TO iud_role;
+
 
 -- Clean Up
 SELECT schema_support.replay_object_recreates();
