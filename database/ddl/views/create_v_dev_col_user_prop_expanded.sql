@@ -42,9 +42,6 @@
 -- This view maps users to device collections and lists properties
 -- assigned to the users in order of their priorities.
 
-SELECT schema_support.save_grants_for_replay('jazzhands', 'v_dev_col_user_prop_expanded');
-
-DROP VIEW v_dev_col_user_prop_expanded;
 CREATE OR REPLACE VIEW v_dev_col_user_prop_expanded AS
 SELECT	dchd.device_collection_id,
 	a.account_id, a.login, a.account_status,
@@ -95,6 +92,4 @@ ORDER BY device_collection_level,
         ELSE 6 END,
   uued.dept_level, uued.acct_coll_level, dchd.device_collection_id, 
   u.Account_Collection_id;
-
-SELECT schema_support.replay_saved_grants();
 
