@@ -1450,7 +1450,7 @@ DROP TRIGGER IF EXISTS trigger_audit_val_token_type ON jazzhands.val_token_type;
 SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'val_token_type');
 ---- BEGIN audit.val_token_type TEARDOWN
 -- Save grants for later reapplication
-SELECT schema_support.save_grants_for_replay('audit', 'val_token_type', 'audit.val_token_type');
+SELECT schema_support.save_grants_for_replay('audit', 'val_token_type', 'val_token_type');
 
 -- FOREIGN KEYS FROM
 
