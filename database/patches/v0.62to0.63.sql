@@ -28,6 +28,9 @@ Invoked:
 	device_utils.purge_physical_path
 	netblock_manip.allocate_netblock
 	v_lv_hier
+	val_token_type
+	v_dev_col_user_prop_expanded
+
 */
 
 \set ON_ERROR_STOP
@@ -1360,6 +1363,7 @@ BEGIN
 			inet_rec.netblock_type,
 			'N',
 			CASE WHEN can_subnet THEN 'Y' ELSE 'N' END,
+			inet_rec.ip_universe_id,
 			allocate_netblock.description,
 			allocate_netblock.netblock_status
 		) RETURNING * INTO netblock_rec;
@@ -1423,6 +1427,192 @@ CREATE OR REPLACE VIEW v_lv_hier AS
 
 delete from __recreate where type = 'view' and object = 'v_lv_hier';
 -- DONE DEALING WITH TABLE v_lv_hier [4763835]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE val_token_type [5075193]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'val_token_type', 'val_token_type');
+
+-- FOREIGN KEYS FROM
+ALTER TABLE token DROP CONSTRAINT IF EXISTS fk_token_ref_v_token_type;
+
+-- FOREIGN KEYS TO
+
+-- EXTRA-SCHEMA constraints
+SELECT schema_support.save_constraint_for_replay('jazzhands', 'val_token_type');
+
+-- PRIMARY and ALTERNATE KEYS
+ALTER TABLE jazzhands.val_token_type DROP CONSTRAINT IF EXISTS pk_val_token_type;
+-- INDEXES
+-- CHECK CONSTRAINTS, etc
+-- TRIGGERS, etc
+DROP TRIGGER IF EXISTS trig_userlog_val_token_type ON jazzhands.val_token_type;
+DROP TRIGGER IF EXISTS trigger_audit_val_token_type ON jazzhands.val_token_type;
+SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'val_token_type');
+---- BEGIN audit.val_token_type TEARDOWN
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('audit', 'val_token_type', 'audit.val_token_type');
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+
+-- EXTRA-SCHEMA constraints
+SELECT schema_support.save_constraint_for_replay('audit', 'val_token_type');
+
+-- PRIMARY and ALTERNATE KEYS
+-- INDEXES
+DROP INDEX IF EXISTS "audit"."val_token_type_aud#timestamp_idx";
+-- CHECK CONSTRAINTS, etc
+-- TRIGGERS, etc
+SELECT schema_support.save_dependant_objects_for_replay('audit', 'val_token_type');
+---- DONE audit.val_token_type TEARDOWN
+
+
+ALTER TABLE val_token_type RENAME TO val_token_type_v63;
+ALTER TABLE audit.val_token_type RENAME TO val_token_type_v63;
+
+CREATE TABLE val_token_type
+(
+	token_type	varchar(50) NOT NULL,
+	description	varchar(4000)  NULL,
+	token_digit_count	integer NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'val_token_type', false);
+INSERT INTO val_token_type (
+	token_type,
+	description,
+	token_digit_count,		-- new column (token_digit_count)
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+) SELECT
+	token_type,
+	description,
+	NULL,		-- new column (token_digit_count)
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+FROM val_token_type_v63;
+
+INSERT INTO audit.val_token_type (
+	token_type,
+	description,
+	token_digit_count,		-- new column (token_digit_count)
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+) SELECT
+	token_type,
+	description,
+	NULL,		-- new column (token_digit_count)
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+FROM audit.val_token_type_v63;
+
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE val_token_type ADD CONSTRAINT pk_val_token_type PRIMARY KEY (token_type);
+
+-- Table/Column Comments
+COMMENT ON COLUMN val_token_type.token_digit_count IS 'number of digits that the token displays';
+-- INDEXES
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+-- consider FK val_token_type and token
+ALTER TABLE token
+	ADD CONSTRAINT fk_token_ref_v_token_type
+	FOREIGN KEY (token_type) REFERENCES val_token_type(token_type);
+
+-- FOREIGN KEYS TO
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'val_token_type');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'val_token_type');
+GRANT SELECT ON val_token_type TO ro_role;
+GRANT ALL ON val_token_type TO jazzhands;
+GRANT INSERT,UPDATE,DELETE ON val_token_type TO iud_role;
+DROP TABLE IF EXISTS val_token_type_v63;
+DROP TABLE IF EXISTS audit.val_token_type_v63;
+-- DONE DEALING WITH TABLE val_token_type [5035411]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_dev_col_user_prop_expanded [5080698]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'v_dev_col_user_prop_expanded', 'v_dev_col_user_prop_expanded');
+DROP VIEW IF EXISTS v_dev_col_user_prop_expanded;
+CREATE VIEW v_dev_col_user_prop_expanded AS
+ SELECT dchd.device_collection_id,
+    a.account_id,
+    a.login,
+    a.account_status,
+    ar.account_realm_id,
+    ar.account_realm_name,
+        CASE
+            WHEN vps.is_disabled = 'N'::bpchar THEN 'Y'::text
+            ELSE 'N'::text
+        END AS is_enabled,
+    upo.property_type,
+    upo.property_name,
+    COALESCE(upo.property_value_password_type, upo.property_value) AS property_value,
+        CASE
+            WHEN upn.is_multivalue = 'N'::bpchar THEN 0
+            ELSE 1
+        END AS is_multivalue,
+        CASE
+            WHEN pdt.property_data_type::text = 'boolean'::text THEN 1
+            ELSE 0
+        END AS is_boolean
+   FROM v_acct_coll_acct_expanded_detail uued
+     JOIN account_collection u USING (account_collection_id)
+     JOIN v_property upo ON upo.account_collection_id = u.account_collection_id AND (upo.property_type::text = ANY (ARRAY['CCAForceCreation'::character varying, 'CCARight'::character varying, 'ConsoleACL'::character varying, 'RADIUS'::character varying, 'TokenMgmt'::character varying, 'UnixPasswdFileValue'::character varying, 'UserMgmt'::character varying, 'cca'::character varying, 'feed-attributes'::character varying, 'wwwgroup'::character varying]::text[]))
+     JOIN val_property upn ON upo.property_name::text = upn.property_name::text AND upo.property_type::text = upn.property_type::text
+     JOIN val_property_data_type pdt ON upn.property_data_type::text = pdt.property_data_type::text
+     JOIN account a ON uued.account_id = a.account_id
+     JOIN account_realm ar ON a.account_realm_id = ar.account_realm_id
+     JOIN val_person_status vps ON vps.person_status::text = a.account_status::text
+     LEFT JOIN v_device_coll_hier_detail dchd ON dchd.parent_device_collection_id = upo.device_collection_id
+  ORDER BY dchd.device_collection_level,
+        CASE
+            WHEN u.account_collection_type::text = 'per-account'::text THEN 0
+            WHEN u.account_collection_type::text = 'property'::text THEN 1
+            WHEN u.account_collection_type::text = 'systems'::text THEN 2
+            ELSE 3
+        END,
+        CASE
+            WHEN uued.assign_method = 'Account_CollectionAssignedToPerson'::text THEN 0
+            WHEN uued.assign_method = 'Account_CollectionAssignedToDept'::text THEN 1
+            WHEN uued.assign_method = 'ParentAccount_CollectionOfAccount_CollectionAssignedToPerson'::text THEN 2
+            WHEN uued.assign_method = 'ParentAccount_CollectionOfAccount_CollectionAssignedToDept'::text THEN 2
+            WHEN uued.assign_method = 'Account_CollectionAssignedToParentDept'::text THEN 3
+            WHEN uued.assign_method = 'ParentAccount_CollectionOfAccount_CollectionAssignedToParentDep'::text THEN 3
+            ELSE 6
+        END, uued.dept_level, uued.acct_coll_level, dchd.device_collection_id, u.account_collection_id;
+
+delete from __recreate where type = 'view' and object = 'v_dev_col_user_prop_expanded';
+GRANT INSERT,UPDATE,DELETE ON v_dev_col_user_prop_expanded TO iud_role;
+GRANT ALL ON v_dev_col_user_prop_expanded TO jazzhands;
+GRANT SELECT ON v_dev_col_user_prop_expanded TO ro_role;
+-- DONE DEALING WITH TABLE v_dev_col_user_prop_expanded [5040944]
 --------------------------------------------------------------------
 
 -- Dropping obsoleted sequences....
@@ -1551,6 +1741,11 @@ ALTER TABLE ONLY physicalish_volume
 
 GRANT USAGE ON SCHEMA snapshot_manip TO iud_role;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA snapshot_manip TO iud_role;
+
+
+-- slot changes
+ALTER TABLE slot ALTER slot_side drop default;
+ALTER TABLE slot ALTER slot_side drop not null;
 
 
 -- Clean Up
