@@ -2470,6 +2470,8 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA snapshot_manip TO iud_role;
 ALTER TABLE slot ALTER slot_side drop default;
 ALTER TABLE slot ALTER slot_side drop not null;
 
+drop trigger IF EXISTS trig_userlog_token_sequence on token_sequence;
+drop trigger IF EXISTS trigger_audit_token_sequence on token_sequence;
 
 -- Clean Up
 SELECT schema_support.replay_object_recreates();
