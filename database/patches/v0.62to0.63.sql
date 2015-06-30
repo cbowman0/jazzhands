@@ -2338,6 +2338,38 @@ CREATE TRIGGER trigger_create_component_template_slots AFTER INSERT OR UPDATE OF
 -- DONE WITH proc create_component_slots_by_trigger -> create_component_slots_by_trigger 
 --------------------------------------------------------------------
 
+--------------------------------------------------------------------
+-- BEGIN auto_ac_manip
+
+insert into val_property (
+        property_name, property_type,
+        permit_account_id,
+        permit_account_realm_id,
+        property_data_type,
+        is_multivalue
+) values (
+        'AutomatedDirectsAC', 'auto_acct_coll',
+        'REQUIRED',
+        'REQUIRED',
+        'account_collection_id',
+        'N'
+);
+
+insert into val_property (
+        property_name, property_type,
+        permit_account_id,
+        permit_account_realm_id,
+        property_data_type,
+        is_multivalue
+) values (
+        'AutomatedRollupsAC', 'auto_acct_coll',
+        'REQUIRED',
+        'REQUIRED',
+        'account_collection_id',
+        'N'
+);
+
+
 /*
  * Copyright (c) 2015 Todd Kover
  * All rights reserved.
@@ -2875,6 +2907,161 @@ revoke all on schema auto_ac_manip from public;
 revoke all on  all functions in schema auto_ac_manip from public;
 grant execute on all functions in schema auto_ac_manip to iud_role;
 
+-- DONE auto_ac_manip
+--------------------------------------------------------------------
+
+--------------------------------------------------------------------
+-- BEGIN auto account collection triggers
+
+/*
+ * Copyright (c) 2015 Todd Kover
+ * All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+--
+-- Changes to account trigger addition/removal from various things.  This is
+-- actually redundant with the second two triggers on person_company and
+-- person, which deal with updates.  This covers the case of accounts coming
+-- into existance after the rows in person/person_company
+--
+-- This currently does not move an account out of a "site" class when someone 
+-- moves around, which should probably be revisited.
+--
+CREATE OR REPLACE FUNCTION account_automated_reporting_ac() 
+RETURNS TRIGGER AS $_$
+DECLARE
+	_tally	INTEGER;
+	_numrpt	INTEGER;
+	_r		RECORD;
+BEGIN
+	IF TG_OP = 'DELETE' THEN
+		IF OLD.account_role != 'primary' THEN
+			RETURN OLD;
+		END IF;
+	ELSIF TG_OP = 'INSERT' THEN
+		IF NEW.account_role != 'primary' THEN
+			RETURN NEW;
+		END IF;
+	ELSIF TG_OP = 'UPDATE' THEN
+		IF NEW.account_role != 'primary' AND OLD.account_role != 'primary' THEN
+			RETURN NEW;
+		END IF;
+	END IF;
+
+	-- XXX check account realm to see if we should be inserting for this
+	-- XXX account realm
+
+	IF TG_OP = 'INSERT' THEN
+		PERFORM auto_ac_manip.create_report_account_collections(NEW.account_id);
+	ELSIF TG_OP = 'UPDATE' THEN
+		PERFORM auto_ac_manip.rename_automated_report_acs(
+			NEW.account_id, OLD.login, NEW.login, NEW.account_realm_id);
+	ELSIF TG_OP = 'DELETE' THEN
+		PERFORM person_manip.destroy_report_account_collections(NEW.account_id);
+	END IF;
+
+	IF TG_OP = 'DELETE' THEN
+		RETURN OLD;
+	ELSE
+		RETURN NEW;
+	END IF;
+END;
+$_$
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trig_add_account_automated_reporting_ac ON account;
+CREATE TRIGGER trig_add_account_automated_reporting_ac 
+	AFTER INSERT OR UPDATE OF login
+	ON account 
+	FOR EACH ROW 
+	EXECUTE PROCEDURE account_automated_reporting_ac();
+
+DROP TRIGGER IF EXISTS trig_rm_account_automated_reporting_ac ON account;
+CREATE TRIGGER trig_rm_account_automated_reporting_ac 
+	BEFORE DELETE 
+	ON account 
+	FOR EACH ROW 
+	EXECUTE PROCEDURE account_automated_reporting_ac();
+
+--------------------------------------------------------------------------
+
+--
+-- If a person changes managers, and they are in the default account realm
+-- rearrange all the automated tiered account collections
+--
+CREATE OR REPLACE FUNCTION automated_ac_on_person_company() 
+RETURNS TRIGGER AS $_$
+DECLARE
+	_acc	account%ROWTYPE;
+BEGIN
+	SELECT * INTO _acc 
+	WHERE person_id = NEW.person_id
+	AND account_role = 'primary'
+	AND account_realm_id IN (
+		SELECT account_realm_id FROM property 
+		WHERE property_name = '_root_account_realm_id'
+		AND property_type = 'Defaults'
+	);
+
+	IF NOT FOUND THEN
+		RETURN NEW;
+	END IF;
+
+	SELECT * INTO _acc 
+	WHERE person_id = OLD.manager_person_id
+	AND account_role = 'primary'
+	AND account_realm_id IN (
+		SELECT account_realm_id FROM property 
+		WHERE property_name = '_root_account_realm_id'
+		AND property_type = 'Defaults'
+	);
+	IF FOUND THEN
+		PERFORM auto_ac_manip.make_auto_report_acs_right(_acc.account_id);
+	END IF;
+
+	SELECT * INTO _acc 
+	WHERE person_id = NEW.manager_person_id
+	AND account_role = 'primary'
+	AND account_realm_id IN (
+		SELECT account_realm_id FROM property 
+		WHERE property_name = '_root_account_realm_id'
+		AND property_type = 'Defaults'
+	);
+	IF FOUND THEN
+		PERFORM auto_ac_manip.make_auto_report_acs_right(_acc.account_id);
+	END IF;
+
+
+	RETURN NEW;
+END;
+$_$
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trigger_automated_ac_on_person_company ON person_company;
+CREATE TRIGGER trigger_automated_ac_on_person_company 
+	AFTER UPDATE OF manager_person_id
+	ON person_company 
+	FOR EACH ROW EXECUTE PROCEDURE 
+	automated_ac_on_person_company();
+
+--------------------------------------------------------------------------
+
+-- DONE auto account collection triggers
+--------------------------------------------------------------------
 
 -- Dropping obsoleted sequences....
 
