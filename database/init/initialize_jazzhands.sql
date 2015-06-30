@@ -1309,6 +1309,30 @@ insert into val_property (
 	'N'
 );
 
+insert into val_property (
+	property_name, property_type,
+	permit_account_id,
+	property_data_type,
+	is_multivalue
+) values (
+	'AutomatedDirectsAC', 'auto_acct_coll',
+	'REQUIRED',
+	'account_collection_id',
+	'N'
+);
+
+insert into val_property (
+	property_name, property_type,
+	permit_account_id,
+	property_data_type,
+	is_multivalue
+) values (
+	'AutomatedRollupsAC', 'auto_acct_coll',
+	'REQUIRED',
+	'account_collection_id',
+	'N'
+);
+
 -- END automated account collection infrastructure (tied to properties)
 -------------------------------------------------------------------------
 
