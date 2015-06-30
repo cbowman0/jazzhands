@@ -286,6 +286,7 @@ BEGIN
 					managers.person_id = reports.manager_person_id
 				AND	managers.account_realm_id = reports.account_realm_id
 			WHERE	managers.account_id =  $1
+			UNION SELECT $3, $1
 		), ins AS (
 			INSERT INTO account_collection_account 
 				(account_collection_id, account_id)
@@ -415,7 +416,6 @@ BEGIN
 	_directac := auto_ac_manip.populate_direct_report_ac(account_id);
 
 	_numrlup := auto_ac_manip.get_num_reports_with_reports(account_id);
-	RAISE NOTICE 'nothing! %', _numrlup;
 	IF _numrlup = 0 THEN
 		RETURN;
 	END IF;
@@ -510,6 +510,22 @@ BEGIN
 		' USING account_id, 'AutomatedRollupsAC', 'AutomatedDirectsAC',
 			'auto_acct_coll';
 
+END;
+$_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands;
+
+--------------------------------------------------------------------------------
+--
+-- one routine that just goes and fixes all the -direct and -reports auto
+-- account collections to be right.  Note that this just calls other routines
+-- and relies on them to decide if things should be purged or not.
+--
+--------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION auto_ac_manip.make_auto_report_acs_right(
+	account_id 	account.account_id%TYPE
+)  RETURNS VOID AS $_$
+BEGIN
+	PERFORM auto_ac_manip.destroy_report_account_collections(account_id);
+	PERFORM auto_ac_manip.create_report_account_collections(account_id);
 END;
 $_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands;
 
