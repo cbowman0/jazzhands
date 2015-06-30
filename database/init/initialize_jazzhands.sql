@@ -1312,10 +1312,12 @@ insert into val_property (
 insert into val_property (
 	property_name, property_type,
 	permit_account_id,
+	permit_account_realm_id,
 	property_data_type,
 	is_multivalue
 ) values (
 	'AutomatedDirectsAC', 'auto_acct_coll',
+	'REQUIRED',
 	'REQUIRED',
 	'account_collection_id',
 	'N'
@@ -1324,10 +1326,12 @@ insert into val_property (
 insert into val_property (
 	property_name, property_type,
 	permit_account_id,
+	permit_account_realm_id,
 	property_data_type,
 	is_multivalue
 ) values (
 	'AutomatedRollupsAC', 'auto_acct_coll',
+	'REQUIRED',
 	'REQUIRED',
 	'account_collection_id',
 	'N'
