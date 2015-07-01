@@ -99,9 +99,12 @@ BEGIN
 		WITH peeps AS (
 			SELECT	account_realm_id, account_id, login, person_id, 
 					manager_person_id
-			FROM	account
+			FROM	account a
 				INNER JOIN person_company USING (person_id, company_id)
+				INNER JOIN val_person_status vps ON
+					vps.person_status = a.account_status
 			WHERE	account_role = $3
+			AND		vps.is_disabled = ''N''
 		) SELECT count(*)
 		FROM peeps reports
 			INNER JOIN peeps managers on  
@@ -136,10 +139,13 @@ BEGIN
 		WITH peeps AS (
 			SELECT	account_realm_id, account_id, login, person_id, 
 					manager_person_id
-			FROM	account
+			FROM	account a
 				INNER JOIN person_company USING (person_id, company_id)
+				INNER JOIN val_person_status vps ON
+					vps.person_status = a.account_status
 			WHERE	account_role = $3
 			AND		account_realm_id = $2
+			AND		vps.is_disabled = ''N''
 		), agg AS ( SELECT reports.*, managers.account_id as manager_account_id,
 				managers.login as manager_login, p.property_name,
 				p.property_value_account_coll_id as account_collection_id
@@ -272,9 +278,12 @@ BEGIN
 		WITH peeps AS (
 			SELECT	account_realm_id, account_id, login, person_id, 
 					manager_person_id
-			FROM	account
+			FROM	account a
 				INNER JOIN person_company USING (person_id, company_id)
+				INNER JOIN val_person_status vps ON
+					vps.person_status = a.account_status
 			WHERE	account_role = $2
+			AND		vps.is_disabled = ''N''
 		), arethere AS (
 			SELECT account_collection_id, account_id FROM
 				account_collection_account
@@ -334,9 +343,12 @@ BEGIN
 		WITH peeps AS (
 			SELECT	account_realm_id, account_id, login, person_id, 
 					manager_person_id
-			FROM	account
+			FROM	account a
 				INNER JOIN person_company USING (person_id, company_id)
+				INNER JOIN val_person_status vps
+					ON vps.person_status=a.account_status
 			WHERE	account_role = $2
+			AND		vps.is_disabled = ''N''
 		), agg AS ( SELECT reports.*, managers.account_id as manager_account_id,
 				managers.login as manager_login, p.property_name,
 				p.property_value_account_coll_id as account_collection_id
@@ -455,9 +467,12 @@ BEGIN
 		WITH peeps AS (
 			SELECT	account_realm_id, account_id, login, person_id, 
 					manager_person_id
-			FROM	account
+			FROM	account a
 				INNER JOIN person_company USING (person_id, company_id)
+				INNER JOIN val_person_status vps ON
+					vps.person_status = a.account_status
 			WHERE	account_role = $2
+			AND	is_disabled = ''N''
 		) SELECT count(*)
 		FROM peeps reports
 			INNER JOIN peeps managers on  
