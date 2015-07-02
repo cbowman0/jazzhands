@@ -118,6 +118,8 @@ BEGIN
 				INNER JOIN val_person_status vps ON
 					vps.person_status = a.account_status
 			WHERE	account_role = $3
+			AND		account_type = ''person''
+			AND		person_company_relation = ''employee''
 			AND		vps.is_disabled = ''N''
 		) SELECT count(*)
 		FROM peeps reports
@@ -153,6 +155,8 @@ BEGIN
 				INNER JOIN val_person_status vps ON
 					vps.person_status = a.account_status
 			WHERE	account_role = $3
+			AND		account_type = ''person''
+			AND		person_company_relation = ''employee''
 			AND		account_realm_id = $2
 			AND		vps.is_disabled = ''N''
 		), agg AS ( SELECT reports.*, managers.account_id as manager_account_id,
@@ -207,9 +211,9 @@ BEGIN
 	END IF;
 
 	IF ac_type = 'AutomatedDirectsAC' THEN
-		_acname := concat(login, '-directs');
+		_acname := concat(login, '-employee-directs');
 	ELSIF ac_type = 'AutomatedRollupsAC' THEN
-		_acname := concat(login, '-reports');
+		_acname := concat(login, '-employee-rollup');
 	ELSE
 		RAISE EXCEPTION 'Do not know how to name Automated AC type %', ac_type;
 	END IF;
@@ -301,6 +305,8 @@ BEGIN
 				INNER JOIN val_person_status vps ON
 					vps.person_status = a.account_status
 			WHERE	account_role = $2
+			AND		account_type = ''person''
+			AND		person_company_relation = ''employee''
 			AND		vps.is_disabled = ''N''
 		), arethere AS (
 			SELECT account_collection_id, account_id FROM
@@ -371,6 +377,8 @@ BEGIN
 				INNER JOIN val_person_status vps
 					ON vps.person_status=a.account_status
 			WHERE	account_role = $2
+			AND		account_type = ''person''
+			AND		person_company_relation = ''employee''
 			AND		vps.is_disabled = ''N''
 		), agg AS ( SELECT reports.*, managers.account_id as manager_account_id,
 				managers.login as manager_login, p.property_name,
@@ -427,7 +435,7 @@ $_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands;
 
 --------------------------------------------------------------------------------
 --
--- makes sure that the -direct and -reports account collections exist for
+-- makes sure that the -direct and -rollup account collections exist for
 -- someone that should.  Does not destroy
 --
 --------------------------------------------------------------------------------
@@ -525,7 +533,7 @@ $_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands;
 
 --------------------------------------------------------------------------------
 --
--- makes sure that the -direct and -reports account collections do exist for
+-- makes sure that the -direct and -rollup account collections do exist for
 -- someone if they should not.  Removes if necessary, and also removes them
 -- from other account collections.  Arguably should also remove other
 -- properties associated but I opted out of that for now. 
@@ -577,7 +585,7 @@ $_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands;
 
 --------------------------------------------------------------------------------
 --
--- one routine that just goes and fixes all the -direct and -reports auto
+-- one routine that just goes and fixes all the -direct and -rollup auto
 -- account collections to be right.  Note that this just calls other routines
 -- and relies on them to decide if things should be purged or not.
 --

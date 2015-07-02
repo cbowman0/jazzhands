@@ -2388,6 +2388,23 @@ insert into val_property (
  */
 
 /*
+ * These routines support the management of account collections for people that
+ * report to and rollup to a given person.
+ *
+ * They were written with multiple account_realms in mind, although the triggers
+ * only support all this for the default realm as defined by properties, so
+ * a multiple realm context is untested.
+ *
+ * Many of the routines accept optional arguments for various fields.  This is
+ * to speed up calling functions so the same queries do not need to be run
+ * multiple times.  There is probably room for additional cleverness around
+ * all this.  If those values are not specified, then they get looked up.
+ *
+ * This handles both contractors and employees.  It should probably be
+ * tweaked to just handle employees.
+ */
+
+/*
  * $Id$
  */
 
@@ -2457,23 +2474,25 @@ $_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands;
 --
 --------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION auto_ac_manip.get_num_direct_reports(
-	account_id 	account.account_id%TYPE
+	account_id 	account.account_id%TYPE,
+	account_realm_id	account_realm.account_realm_id%TYPE
 ) RETURNS INTEGER AS $_$
 DECLARE
 	_numrpt	INTEGER;
-	_account	account%ROWTYPE;
 BEGIN
-	EXECUTE 'SELECT * from account where account_id = $1' 
-		INTO _account USING account_id;
-
 	-- get number of direct reports
 	EXECUTE '
 		WITH peeps AS (
 			SELECT	account_realm_id, account_id, login, person_id, 
 					manager_person_id
-			FROM	account
+			FROM	account a
 				INNER JOIN person_company USING (person_id, company_id)
+				INNER JOIN val_person_status vps ON
+					vps.person_status = a.account_status
 			WHERE	account_role = $3
+			AND		account_type = ''person''
+			AND		person_company_relation = ''employee''
+			AND		vps.is_disabled = ''N''
 		) SELECT count(*)
 		FROM peeps reports
 			INNER JOIN peeps managers on  
@@ -2481,7 +2500,7 @@ BEGIN
 			AND	managers.account_realm_id = reports.account_realm_id
 		WHERE	managers.account_id = $1
 		AND		managers.account_realm_id = $2
-	' INTO _numrpt USING account_id, _account.account_realm_id, 'primary';
+	' INTO _numrpt USING account_id, account_realm_id, 'primary';
 
 	RETURN _numrpt;
 END;
@@ -2493,25 +2512,25 @@ $_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands;
 --
 --------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION auto_ac_manip.get_num_reports_with_reports(
-	account_id 	account.account_id%TYPE
+	account_id 	account.account_id%TYPE,
+	account_realm_id	account_realm.account_realm_id%TYPE
 ) RETURNS INTEGER AS $_$
 DECLARE
 	_numrlup	INTEGER;
-	_account	account%ROWTYPE;
 BEGIN
-	EXECUTE 'SELECT * from account where account_id = $1' 
-		INTO _account USING account_id;
-
-	-- now check to see if the roll up should be created and add appropriate
-	-- teams
 	EXECUTE '
 		WITH peeps AS (
 			SELECT	account_realm_id, account_id, login, person_id, 
 					manager_person_id
-			FROM	account
+			FROM	account a
 				INNER JOIN person_company USING (person_id, company_id)
+				INNER JOIN val_person_status vps ON
+					vps.person_status = a.account_status
 			WHERE	account_role = $3
+			AND		account_type = ''person''
+			AND		person_company_relation = ''employee''
 			AND		account_realm_id = $2
+			AND		vps.is_disabled = ''N''
 		), agg AS ( SELECT reports.*, managers.account_id as manager_account_id,
 				managers.login as manager_login, p.property_name,
 				p.property_value_account_coll_id as account_collection_id
@@ -2533,7 +2552,7 @@ BEGIN
 		WHERE	manager_account_id =  $1
 		AND 	account_realm_id = $2
 		AND	rank = 1;
-	' INTO _numrlup USING account_id, _account.account_realm_id, 'primary',
+	' INTO _numrlup USING account_id, account_realm_id, 'primary',
 				'AutomatedDirectsAC','AutomatedRollupsAC','auto_acct_coll';
 
 	RETURN _numrlup;
@@ -2549,20 +2568,24 @@ $_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands;
 --------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION auto_ac_manip.find_or_create_automated_ac(
 	account_id 	account.account_id%TYPE,
-	ac_type		property.property_name%TYPE
+	ac_type		property.property_name%TYPE,
+	account_realm_id	account_realm.account_realm_id%TYPE DEFAULT NULL,
+	login				account.login%TYPE DEFAULT NULL
 )  RETURNS account_collection.account_collection_id%TYPE AS $_$
 DECLARE
 	_acname		text;
-	_account	account%ROWTYPE;
 	_acid		account_collection.account_collection_id%TYPE;
 BEGIN
-	EXECUTE 'SELECT * from account where account_id = $1' 
-		INTO _account USING account_id;
+	IF login is NULL THEN
+		EXECUTE 'SELECT account_realm_id,login 
+			FROM account where account_id = $1' 
+			INTO account_realm_id,login USING account_id;
+	END IF;
 
 	IF ac_type = 'AutomatedDirectsAC' THEN
-		_acname := concat(_account.login, '-directs');
+		_acname := concat(login, '-employee-directs');
 	ELSIF ac_type = 'AutomatedRollupsAC' THEN
-		_acname := concat(_account.login, '-reports');
+		_acname := concat(login, '-employee-rollup');
 	ELSE
 		RAISE EXCEPTION 'Do not know how to name Automated AC type %', ac_type;
 	END IF;
@@ -2584,7 +2607,7 @@ BEGIN
 			AND p.account_realm_id = $6
 		' INTO _acid USING _acname, 'automated',
 				ac_type, 'auto_acct_coll', account_id,
-				_account.account_realm_id;
+				account_realm_id;
 
 	-- Assume the person is always in their own account collection, or if tehy
 	-- are not someone took them out for a good reason.  (Thus, they are only
@@ -2610,7 +2633,7 @@ BEGIN
 				property_type,
 				property_value_account_coll_id
 			)  VALUES ( $1, $2, $3, $4, $5)'
-			USING account_id, _account.account_realm_id,
+			USING account_id, account_realm_id,
 				ac_type, 'auto_acct_coll', _acid;
 	END IF;
 
@@ -2629,13 +2652,18 @@ $_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands;
 --
 --------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION auto_ac_manip.populate_direct_report_ac(
-	account_id 	account.account_id%TYPE
+	account_id 	account.account_id%TYPE,
+	account_realm_id	account_realm.account_realm_id%TYPE DEFAULT NULL,
+	login				account.login%TYPE DEFAULT NULL
 )  RETURNS account_collection.account_collection_id%TYPE AS $_$
 DECLARE
 	_directac	account_collection.account_collection_id%TYPE;
 BEGIN
-	_directac := auto_ac_manip.find_or_create_automated_ac(account_id,
-		'AutomatedDirectsAC');
+	_directac := auto_ac_manip.find_or_create_automated_ac(
+		account_id := account_id,
+		account_realm_id := account_realm_id,
+		ac_type := 'AutomatedDirectsAC'
+	);
 
 	--
 	-- Make membership right
@@ -2644,9 +2672,14 @@ BEGIN
 		WITH peeps AS (
 			SELECT	account_realm_id, account_id, login, person_id, 
 					manager_person_id
-			FROM	account
+			FROM	account a
 				INNER JOIN person_company USING (person_id, company_id)
+				INNER JOIN val_person_status vps ON
+					vps.person_status = a.account_status
 			WHERE	account_role = $2
+			AND		account_type = ''person''
+			AND		person_company_relation = ''employee''
+			AND		vps.is_disabled = ''N''
 		), arethere AS (
 			SELECT account_collection_id, account_id FROM
 				account_collection_account
@@ -2694,21 +2727,31 @@ $_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands;
 --
 --------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION auto_ac_manip.populate_rollup_report_ac(
-	account_id 	account.account_id%TYPE
+	account_id 	account.account_id%TYPE,
+	account_realm_id	account_realm.account_realm_id%TYPE DEFAULT NULL,
+	login				account.login%TYPE DEFAULT NULL
 )  RETURNS account_collection.account_collection_id%TYPE AS $_$
 DECLARE
 	_rollupac	account_collection.account_collection_id%TYPE;
 BEGIN
-	_rollupac := auto_ac_manip.find_or_create_automated_ac(account_id,
-		'AutomatedRollupsAC');
+	_rollupac := auto_ac_manip.find_or_create_automated_ac(
+		account_id := account_id,
+		account_realm_id := account_realm_id,
+		ac_type := 'AutomatedRollupsAC'
+	);
 
 	EXECUTE '
 		WITH peeps AS (
 			SELECT	account_realm_id, account_id, login, person_id, 
 					manager_person_id
-			FROM	account
+			FROM	account a
 				INNER JOIN person_company USING (person_id, company_id)
+				INNER JOIN val_person_status vps
+					ON vps.person_status=a.account_status
 			WHERE	account_role = $2
+			AND		account_type = ''person''
+			AND		person_company_relation = ''employee''
+			AND		vps.is_disabled = ''N''
 		), agg AS ( SELECT reports.*, managers.account_id as manager_account_id,
 				managers.login as manager_login, p.property_name,
 				p.property_value_account_coll_id as account_collection_id
@@ -2764,39 +2807,44 @@ $_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands;
 
 --------------------------------------------------------------------------------
 --
--- makes sure that the -direct and -reports account collections exist for
+-- makes sure that the -direct and -rollup account collections exist for
 -- someone that should.  Does not destroy
 --
 --------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION auto_ac_manip.create_report_account_collections(
 	account_id 	account.account_id%TYPE,
-	force		boolean DEFAULT false
+	account_realm_id	account.account_realm_id%TYPE,
+	login				account.login%TYPE,
+	numrpt				integer DEFAULT NULL,
+	numrlup				integer DEFAULT NULL
 )  RETURNS VOID AS $_$
 DECLARE
 	_account	account%ROWTYPE;
 	_directac	account_collection.account_collection_id%TYPE;
 	_rollupac	account_collection.account_collection_id%TYPE;
-	_numrpt		integer;
-	_numrlup	integer;
 BEGIN
-	_numrpt := auto_ac_manip.get_num_direct_reports(account_id);
+	IF numrpt IS NULL THEN
+		numrpt := auto_ac_manip.get_num_direct_reports(account_id, account_realm_id);
+	END IF;
 
-	IF force = false AND _numrpt = 0 THEN
+	IF numrpt = 0 THEN
 		RETURN;
 	END IF;
 
-	_directac := auto_ac_manip.populate_direct_report_ac(account_id);
+	_directac := auto_ac_manip.populate_direct_report_ac(account_id, account_realm_id, login);
 
-	_numrlup := auto_ac_manip.get_num_reports_with_reports(account_id);
-	IF _numrlup = 0 THEN
+	IF numrlup IS NULL THEN
+		numrlup := auto_ac_manip.get_num_reports_with_reports(account_id, account_realm_id);
+	END IF;
+
+	IF numrlup = 0 THEN
 		RETURN;
 	END IF;
 
-	_rollupac := auto_ac_manip.populate_rollup_report_ac(account_id);
+	_rollupac := auto_ac_manip.populate_rollup_report_ac(account_id, account_realm_id, login);
 
 	-- add directs to rollup
-	EXECUTE '
-		INSERT INTO account_collection_hier (
+	EXECUTE 'INSERT INTO account_collection_hier (
 			account_collection_id, child_account_collection_id
 		) VALUES (
 			$1, $2
@@ -2804,100 +2852,129 @@ BEGIN
 END;
 $_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands;
 
-
---------------------------------------------------------------------------------
---
--- makes sure that the -direct and -reports account collections do exist for
--- someone if they should not.  Does not destroy anything.
---
---------------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION auto_ac_manip.destroy_report_account_collections(
+CREATE OR REPLACE FUNCTION auto_ac_manip.purge_report_account_collection(
 	account_id 	account.account_id%TYPE,
-	force		boolean DEFAULT false
-)  RETURNS VOID AS $_$
-DECLARE
-	_account	account%ROWTYPE;
-	_directac	account_collection.account_collection_id%TYPE;
-	_rollupac	account_collection.account_collection_id%TYPE;
-	_numrpt		integer;
-	_numrlup	integer;
+	account_realm_id	account_realm.account_realm_id%TYPE,
+	ac_type		property.property_name%TYPE
+) RETURNS VOID AS $_$
 BEGIN
-	-- get number of direct reports
-	EXECUTE '
-		WITH peeps AS (
-			SELECT	account_realm_id, account_id, login, person_id, 
-					manager_person_id
-			FROM	account
-				INNER JOIN person_company USING (person_id, company_id)
-			WHERE	account_role = $2
-		) SELECT count(*)
-		FROM peeps reports
-			INNER JOIN peeps managers on  
-				managers.person_id = reports.manager_person_id
-			AND	managers.account_realm_id = reports.account_realm_id
-		WHERE	managers.account_id = $1
-	' INTO _numrpt USING account_id, 'primary';
-
-	IF force = false AND _numrpt > 0 THEN
-		RETURN;
-	END IF;
-
 	EXECUTE '
 		DELETE FROM account_collection_account
 		WHERE account_collection_ID IN (
 			SELECT	property_value_account_coll_id
 			FROM	property
-			WHERE	property_name = $2
-			AND		property_type = $3
+			WHERE	property_name = $3
+			AND		property_type = $4
 			AND		account_id = $1
-		)' USING account_id, 'AutomatedDirectsAC', 'auto_acct_coll';
+			AND		account_realm_id = $2
+		)' USING account_id, account_realm_id, ac_type, 'auto_acct_coll';
 
 	EXECUTE '
 		WITH p AS (
 			SELECT	property_value_account_coll_id AS account_collection_id
 			FROM	property
-			WHERE	property_name IN ($2,$3)
+			WHERE	property_name = $3
 			AND		property_type = $4
 			AND		account_id = $1
+			AND		account_realm_id = $2
 		)
 		DELETE FROM account_collection_hier
 		WHERE account_collection_id IN ( select account_collection_id from p)
-		OR child_account_collection_id IN ( select account_collection_id from p)
-		' USING account_id, 'AutomatedRollupsAC', 'AutomatedDirectsAC',
-			'auto_acct_coll';
+		OR child_account_collection_id IN 
+			( select account_collection_id from p)
+		' USING account_id, account_realm_id, ac_type, 'auto_acct_coll';
 
 	EXECUTE '
 		WITH list AS (
 			SELECT	property_value_account_coll_id as account_collection_id,
 					property_id
 			FROM	property
-			WHERE	property_name IN ($2,$3)
+			WHERE	property_name = $3
 			AND		property_type = $4
 			AND		account_id = $1
+			AND		account_realm_id = $2
 		), props AS (
 			DELETE FROM property WHERE property_id IN
 				(select property_id FROM list ) RETURNING *
 		) DELETE FROM account_collection WHERE account_collection_id IN
 				(select property_value_account_coll_id FROM props )
-		' USING account_id, 'AutomatedRollupsAC', 'AutomatedDirectsAC',
-			'auto_acct_coll';
+		' USING account_id, account_realm_id, ac_type, 'auto_acct_coll';
 
 END;
 $_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands;
 
 --------------------------------------------------------------------------------
 --
--- one routine that just goes and fixes all the -direct and -reports auto
+-- makes sure that the -direct and -rollup account collections do exist for
+-- someone if they should not.  Removes if necessary, and also removes them
+-- from other account collections.  Arguably should also remove other
+-- properties associated but I opted out of that for now. 
+--
+--------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION auto_ac_manip.destroy_report_account_collections(
+	account_id 	account.account_id%TYPE,
+	account_realm_id	account_realm.account_realm_id%TYPE DEFAULT NULL,
+	numrpt				integer DEFAULT NULL,
+	numrlup				integer DEFAULT NULL
+)  RETURNS VOID AS $_$
+DECLARE
+	_account	account%ROWTYPE;
+	_directac	account_collection.account_collection_id%TYPE;
+	_rollupac	account_collection.account_collection_id%TYPE;
+BEGIN
+	IF account_realm_id IS NULL THEN
+		EXECUTE '
+			SELECT account_realm_id
+			FROM	account
+			WHERE	account_id = $1
+		' INTO account_realm_id USING account_id;
+	END IF;
+
+	IF numrpt IS NULL THEN
+		numrpt := auto_ac_manip.get_num_direct_reports(account_id, account_realm_id);
+	END IF;
+	IF numrpt = 0 THEN
+		PERFORM auto_ac_manip.purge_report_account_collection(
+			account_id := account_id, 
+			account_realm_id := account_realm_id,
+			ac_type := 'AutomatedDirectsAC');
+		RETURN;
+	END IF;
+
+	IF numrlup IS NULL THEN
+		numrlup := auto_ac_manip.get_num_reports_with_reports(account_id, account_realm_id);
+	END IF;
+	IF numrlup = 0 THEN 
+		PERFORM auto_ac_manip.purge_report_account_collection(
+			account_id := account_id, 
+			account_realm_id := account_realm_id,
+			ac_type := 'AutomatedDirectsAC');
+		RETURN;
+	END IF;
+
+END;
+$_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands;
+
+--------------------------------------------------------------------------------
+--
+-- one routine that just goes and fixes all the -direct and -rollup auto
 -- account collections to be right.  Note that this just calls other routines
 -- and relies on them to decide if things should be purged or not.
 --
 --------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION auto_ac_manip.make_auto_report_acs_right(
-	account_id 	account.account_id%TYPE
+	account_id 			account.account_id%TYPE,
+	account_realm_id	account_realm.account_realm_id%TYPE DEFAULT NULL,
+	login				account.login%TYPE DEFAULT NULL
 )  RETURNS VOID AS $_$
+DECLARE
+	_numrpt	INTEGER;
+	_numrlup INTEGER;
 BEGIN
-	PERFORM auto_ac_manip.destroy_report_account_collections(account_id);
-	PERFORM auto_ac_manip.create_report_account_collections(account_id);
+	_numrpt := auto_ac_manip.get_num_direct_reports(account_id, account_realm_id);
+	_numrlup := auto_ac_manip.get_num_reports_with_reports(account_id, account_realm_id);
+	PERFORM auto_ac_manip.destroy_report_account_collections(account_id, account_realm_id, _numrpt, _numrlup);
+	PERFORM auto_ac_manip.create_report_account_collections(account_id, account_realm_id, login, _numrpt, _numrlup);
 END;
 $_$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = jazzhands;
 
@@ -2907,12 +2984,12 @@ revoke all on schema auto_ac_manip from public;
 revoke all on  all functions in schema auto_ac_manip from public;
 grant execute on all functions in schema auto_ac_manip to iud_role;
 
+
 -- DONE auto_ac_manip
 --------------------------------------------------------------------
 
 --------------------------------------------------------------------
 -- BEGIN auto account collection triggers
-
 /*
  * Copyright (c) 2015 Todd Kover
  * All rights reserved.
@@ -2964,12 +3041,19 @@ BEGIN
 	-- XXX account realm
 
 	IF TG_OP = 'INSERT' THEN
-		PERFORM auto_ac_manip.create_report_account_collections(NEW.account_id);
+		PERFORM auto_ac_manip.create_report_account_collections(
+			account_id := NEW.account_id, 
+			account_realm_id := NEW.account_realm_id,
+			login := NEW.login
+		);
 	ELSIF TG_OP = 'UPDATE' THEN
 		PERFORM auto_ac_manip.rename_automated_report_acs(
 			NEW.account_id, OLD.login, NEW.login, NEW.account_realm_id);
 	ELSIF TG_OP = 'DELETE' THEN
-		PERFORM person_manip.destroy_report_account_collections(NEW.account_id);
+		PERFORM person_manip.destroy_report_account_collections(
+			account_id := NEW.account_id,
+			account_realm_id := NEW.account_realm_id
+		);
 	END IF;
 
 	IF TG_OP = 'DELETE' THEN
@@ -3008,6 +3092,7 @@ DECLARE
 	_acc	account%ROWTYPE;
 BEGIN
 	SELECT * INTO _acc 
+	FROM account
 	WHERE person_id = NEW.person_id
 	AND account_role = 'primary'
 	AND account_realm_id IN (
@@ -3021,6 +3106,7 @@ BEGIN
 	END IF;
 
 	SELECT * INTO _acc 
+	FROM account
 	WHERE person_id = OLD.manager_person_id
 	AND account_role = 'primary'
 	AND account_realm_id IN (
@@ -3029,10 +3115,11 @@ BEGIN
 		AND property_type = 'Defaults'
 	);
 	IF FOUND THEN
-		PERFORM auto_ac_manip.make_auto_report_acs_right(_acc.account_id);
+		PERFORM auto_ac_manip.make_auto_report_acs_right(_acc.account_id, _acc.account_realm_id, _acc.login);
 	END IF;
 
 	SELECT * INTO _acc 
+	FROM account
 	WHERE person_id = NEW.manager_person_id
 	AND account_role = 'primary'
 	AND account_realm_id IN (
@@ -3041,7 +3128,7 @@ BEGIN
 		AND property_type = 'Defaults'
 	);
 	IF FOUND THEN
-		PERFORM auto_ac_manip.make_auto_report_acs_right(_acc.account_id);
+		PERFORM auto_ac_manip.make_auto_report_acs_right(_acc.account_id, _acc.account_realm_id, _acc.login);
 	END IF;
 
 
@@ -3197,6 +3284,7 @@ ALTER TABLE slot ALTER slot_side drop not null;
 
 drop trigger IF EXISTS trig_userlog_token_sequence on token_sequence;
 drop trigger IF EXISTS trigger_audit_token_sequence on token_sequence;
+
 
 -- Clean Up
 SELECT schema_support.replay_object_recreates();
