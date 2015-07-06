@@ -1848,7 +1848,7 @@ DECLARE
 	tally				INTEGER;
 	v_comp_prop			RECORD;
 	v_comp_prop_type	RECORD;
-	v_num				INTEGER;
+	v_num				bigint;
 	v_listvalue			TEXT;
 	component_attrs		RECORD;
 BEGIN
@@ -2245,13 +2245,13 @@ SELECT schema_support.save_grants_for_replay('jazzhands', 'create_component_slot
 -- DROP OLD FUNCTION
 -- triggers on this function (if applicable)
 DROP TRIGGER IF EXISTS trigger_create_component_template_slots ON jazzhands.component;
--- consider old oid 5177412
+-- consider old oid 6168604
 DROP FUNCTION IF EXISTS create_component_slots_by_trigger();
 
 -- RECREATE FUNCTION
 
 -- DROP OLD FUNCTION (in case type changed)
--- consider NEW oid 5159529
+-- consider NEW oid 6168128
 CREATE OR REPLACE FUNCTION jazzhands.create_component_slots_by_trigger()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -2262,20 +2262,20 @@ BEGIN
 	-- For inserts, just do a simple slot creation, for updates, things
 	-- get more complicated, so try to migrate slots
 
-	IF (TG_OP == 'INSERT' OR OLD.component_type_id != NEW.component_type_id)
+	IF (TG_OP = 'INSERT' OR OLD.component_type_id != NEW.component_type_id)
 	THEN
 		PERFORM component_utils.create_component_template_slots(
 			component_id := NEW.component_id);
 	END IF;
-	IF (TG_OP == 'UPDATE' AND OLD.component_type_id != NEW.component_type_id)
+	IF (TG_OP = 'UPDATE' AND OLD.component_type_id != NEW.component_type_id)
 	THEN
 		PERFORM component_utils.migrate_component_template_slots(
 			component_id := NEW.component_id,
 			old_component_type_id := OLD.component_type_id,
 			new_component_type_id := NEW.component_type_id
 			);
-		RETURN NEW;
 	END IF;
+	RETURN NEW;
 END;
 $function$
 ;
@@ -4225,6 +4225,34 @@ ALTER TABLE ONLY physicalish_volume
 GRANT USAGE ON SCHEMA snapshot_manip TO iud_role;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA snapshot_manip TO iud_role;
 
+-- make logical_volume_property.logical_volume_property_id a serial if it is not
+-- already.
+DO $$
+DECLARE
+	_tally	integer;
+BEGIN
+	SELECT count(*) 
+	INTO _tally
+	FROM pg_class c
+		INNER JOIN pg_namespace n ON n.oid = c.relnamespace
+	WHERE c.relname = 'logical_volume_property_logical_volume_property_id_seq'
+	AND  c.relkind = 'S'
+	AND n.nspname = 'jazzhands';
+
+	IF _tally = 0 THEN
+		CREATE SEQUENCE 
+			logical_volume_property_logical_volume_property_id_seq;
+		ALTER TABLE logical_volume_property
+			ALTER logical_volume_property_id
+			SET DEFAULT
+			nextval('logical_volume_property_logical_volume_property_id_seq');
+		ALTER SEQUENCE 
+			logical_volume_property_logical_volume_property_id_seq
+	 		OWNED BY 
+			logical_volume_property.logical_volume_property_id;
+	END IF;
+END;
+$$;
 
 -- slot changes
 ALTER TABLE slot ALTER slot_side drop default;
