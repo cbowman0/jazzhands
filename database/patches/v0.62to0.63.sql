@@ -29,10 +29,17 @@ Invoked:
 	netblock_manip.allocate_netblock
 	v_lv_hier
 	val_token_type
-	v_dev_col_user_prop_expanded
 	component_utils.insert_pci_component
 	validate_component_property
 	create_component_slots_by_trigger
+	val_person_status
+	account
+	v_device_col_account_cart
+	v_device_collection_account_ssh_key
+	v_unix_passwd_mappings
+	v_unix_group_mappings
+	v_dev_col_user_prop_expanded
+	v_corp_family_account
 */
 
 \set ON_ERROR_STOP
@@ -1556,66 +1563,6 @@ DROP TABLE IF EXISTS audit.val_token_type_v63;
 -- DONE DEALING WITH TABLE val_token_type [5035411]
 --------------------------------------------------------------------
 --------------------------------------------------------------------
--- DEALING WITH TABLE v_dev_col_user_prop_expanded [5080698]
--- Save grants for later reapplication
-SELECT schema_support.save_grants_for_replay('jazzhands', 'v_dev_col_user_prop_expanded', 'v_dev_col_user_prop_expanded');
-DROP VIEW IF EXISTS v_dev_col_user_prop_expanded;
-CREATE VIEW v_dev_col_user_prop_expanded AS
- SELECT dchd.device_collection_id,
-    a.account_id,
-    a.login,
-    a.account_status,
-    ar.account_realm_id,
-    ar.account_realm_name,
-        CASE
-            WHEN vps.is_disabled = 'N'::bpchar THEN 'Y'::text
-            ELSE 'N'::text
-        END AS is_enabled,
-    upo.property_type,
-    upo.property_name,
-    COALESCE(upo.property_value_password_type, upo.property_value) AS property_value,
-        CASE
-            WHEN upn.is_multivalue = 'N'::bpchar THEN 0
-            ELSE 1
-        END AS is_multivalue,
-        CASE
-            WHEN pdt.property_data_type::text = 'boolean'::text THEN 1
-            ELSE 0
-        END AS is_boolean
-   FROM v_acct_coll_acct_expanded_detail uued
-     JOIN account_collection u USING (account_collection_id)
-     JOIN v_property upo ON upo.account_collection_id = u.account_collection_id AND (upo.property_type::text = ANY (ARRAY['CCAForceCreation'::character varying, 'CCARight'::character varying, 'ConsoleACL'::character varying, 'RADIUS'::character varying, 'TokenMgmt'::character varying, 'UnixPasswdFileValue'::character varying, 'UserMgmt'::character varying, 'cca'::character varying, 'feed-attributes'::character varying, 'wwwgroup'::character varying]::text[]))
-     JOIN val_property upn ON upo.property_name::text = upn.property_name::text AND upo.property_type::text = upn.property_type::text
-     JOIN val_property_data_type pdt ON upn.property_data_type::text = pdt.property_data_type::text
-     JOIN account a ON uued.account_id = a.account_id
-     JOIN account_realm ar ON a.account_realm_id = ar.account_realm_id
-     JOIN val_person_status vps ON vps.person_status::text = a.account_status::text
-     LEFT JOIN v_device_coll_hier_detail dchd ON dchd.parent_device_collection_id = upo.device_collection_id
-  ORDER BY dchd.device_collection_level,
-        CASE
-            WHEN u.account_collection_type::text = 'per-account'::text THEN 0
-            WHEN u.account_collection_type::text = 'property'::text THEN 1
-            WHEN u.account_collection_type::text = 'systems'::text THEN 2
-            ELSE 3
-        END,
-        CASE
-            WHEN uued.assign_method = 'Account_CollectionAssignedToPerson'::text THEN 0
-            WHEN uued.assign_method = 'Account_CollectionAssignedToDept'::text THEN 1
-            WHEN uued.assign_method = 'ParentAccount_CollectionOfAccount_CollectionAssignedToPerson'::text THEN 2
-            WHEN uued.assign_method = 'ParentAccount_CollectionOfAccount_CollectionAssignedToDept'::text THEN 2
-            WHEN uued.assign_method = 'Account_CollectionAssignedToParentDept'::text THEN 3
-            WHEN uued.assign_method = 'ParentAccount_CollectionOfAccount_CollectionAssignedToParentDep'::text THEN 3
-            ELSE 6
-        END, uued.dept_level, uued.acct_coll_level, dchd.device_collection_id, u.account_collection_id;
-
-delete from __recreate where type = 'view' and object = 'v_dev_col_user_prop_expanded';
-GRANT INSERT,UPDATE,DELETE ON v_dev_col_user_prop_expanded TO iud_role;
-GRANT ALL ON v_dev_col_user_prop_expanded TO jazzhands;
-GRANT SELECT ON v_dev_col_user_prop_expanded TO ro_role;
--- DONE DEALING WITH TABLE v_dev_col_user_prop_expanded [5040944]
---------------------------------------------------------------------
-
---------------------------------------------------------------------
 -- DEALING WITH proc component_utils.insert_pci_component -> insert_pci_component 
 
 
@@ -2337,6 +2284,928 @@ CREATE TRIGGER trigger_create_component_template_slots AFTER INSERT OR UPDATE OF
 
 -- DONE WITH proc create_component_slots_by_trigger -> create_component_slots_by_trigger 
 --------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE val_person_status [6036938]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'val_person_status', 'val_person_status');
+
+-- FOREIGN KEYS FROM
+ALTER TABLE person_company DROP CONSTRAINT IF EXISTS fk_person_company_prsncmpy_sta;
+ALTER TABLE account DROP CONSTRAINT IF EXISTS fk_acct_stat_id;
+
+-- FOREIGN KEYS TO
+
+-- EXTRA-SCHEMA constraints
+SELECT schema_support.save_constraint_for_replay('jazzhands', 'val_person_status');
+
+-- PRIMARY and ALTERNATE KEYS
+ALTER TABLE jazzhands.val_person_status DROP CONSTRAINT IF EXISTS pk_val_person_status;
+-- INDEXES
+-- CHECK CONSTRAINTS, etc
+ALTER TABLE jazzhands.val_person_status DROP CONSTRAINT IF EXISTS check_yes_no_856940377;
+ALTER TABLE jazzhands.val_person_status DROP CONSTRAINT IF EXISTS check_yes_no_100412184;
+-- TRIGGERS, etc
+DROP TRIGGER IF EXISTS trig_userlog_val_person_status ON jazzhands.val_person_status;
+DROP TRIGGER IF EXISTS trigger_audit_val_person_status ON jazzhands.val_person_status;
+SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'val_person_status');
+---- BEGIN audit.val_person_status TEARDOWN
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('audit', 'val_person_status', 'audit.val_person_status');
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+
+-- EXTRA-SCHEMA constraints
+SELECT schema_support.save_constraint_for_replay('audit', 'val_person_status');
+
+-- PRIMARY and ALTERNATE KEYS
+-- INDEXES
+DROP INDEX IF EXISTS "audit"."val_person_status_aud#timestamp_idx";
+-- CHECK CONSTRAINTS, etc
+-- TRIGGERS, etc
+SELECT schema_support.save_dependant_objects_for_replay('audit', 'val_person_status');
+---- DONE audit.val_person_status TEARDOWN
+
+
+ALTER TABLE val_person_status RENAME TO val_person_status_v63;
+ALTER TABLE audit.val_person_status RENAME TO val_person_status_v63;
+
+CREATE TABLE val_person_status
+(
+	person_status	varchar(50) NOT NULL,
+	description	varchar(4000)  NULL,
+	is_disabled	character(1) NOT NULL,
+	is_enabled	character(1) NOT NULL,
+	propagate_from_person	character(1) NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'val_person_status', false);
+INSERT INTO val_person_status (
+	person_status,
+	description,
+	is_disabled,
+	is_enabled,		-- new column (is_enabled)
+	propagate_from_person,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+) SELECT
+	person_status,
+	description,
+	is_disabled,
+	CASE WHEN is_disabled = 'Y' THEN 'N' ELSE 'Y' END,	-- new column (is_enabled)
+	propagate_from_person,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+FROM val_person_status_v63;
+
+INSERT INTO audit.val_person_status (
+	person_status,
+	description,
+	is_disabled,
+	is_enabled,		-- new column (is_enabled)
+	propagate_from_person,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+) SELECT
+	person_status,
+	description,
+	is_disabled,
+	CASE WHEN is_disabled = 'Y' THEN 'N' ELSE 'Y' END,	-- new column (is_enabled)
+	propagate_from_person,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+FROM audit.val_person_status_v63;
+
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE val_person_status ADD CONSTRAINT pk_val_person_status PRIMARY KEY (person_status);
+
+-- Table/Column Comments
+COMMENT ON COLUMN val_person_status.is_disabled IS 'This column is being deprecated.  it is always set to the opposite of IS_ENABLED (enforced by trigger).';
+-- INDEXES
+
+-- CHECK CONSTRAINTS
+ALTER TABLE val_person_status ADD CONSTRAINT check_yes_no_100412184
+	CHECK (is_disabled = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+ALTER TABLE val_person_status ADD CONSTRAINT check_yes_no_856940377
+	CHECK (propagate_from_person = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+ALTER TABLE val_person_status ADD CONSTRAINT check_yes_no_vpers_stat_enable
+	CHECK (is_enabled = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+
+-- FOREIGN KEYS FROM
+-- consider FK val_person_status and account
+ALTER TABLE account
+	ADD CONSTRAINT fk_acct_stat_id
+	FOREIGN KEY (account_status) REFERENCES val_person_status(person_status);
+-- consider FK val_person_status and person_company
+ALTER TABLE person_company
+	ADD CONSTRAINT fk_person_company_prsncmpy_sta
+	FOREIGN KEY (person_company_status) REFERENCES val_person_status(person_status);
+
+-- FOREIGN KEYS TO
+
+-- TRIGGERS
+CREATE OR REPLACE FUNCTION val_person_status_enabled_migration_enforce()
+	RETURNS TRIGGER AS $$
+BEGIN
+	IF TG_OP = 'INSERT' THEN
+		IF ( NEW.is_disabled IS NOT NULL AND NEW.is_enabled IS NOT NULL ) THEN
+			RAISE EXCEPTION 'May not set both IS_ENABLED and IS_DISABLED.  Set IS_ENABLED only.'
+				USING errcode = 'integrity_constraint_violation';
+		END IF;
+
+		IF NEW.is_enabled IS NOT NULL THEN
+			IF NEW.is_enabled = 'Y' THEN
+				NEW.is_disabled := 'N';
+			ELSE
+				NEW.is_disabled := 'Y';
+			END IF;
+		ELSIF NEW.is_disabled IS NOT NULL THEN
+			IF NEW.is_disabled = 'Y' THEN
+				NEW.is_enabled := 'N';
+			ELSE
+				NEW.is_enabled := 'Y';
+			END IF;
+		END IF;
+	ELSIF TG_OP = 'UPDATE' THEN
+		IF ( OLD.is_disabled != NEW.is_disabled AND
+				OLD.is_enabled != NEW.is_enabled ) THEN
+			RAISE EXCEPTION 'May not update both IS_ENABLED and IS_DISABLED.  Update IS_ENABLED only.'
+				USING errcode = 'integrity_constraint_violation';
+		END IF;
+
+		IF OLD.is_enabled != NEW.is_enabled THEN
+			IF NEW.is_enabled = 'Y' THEN
+				NEW.is_disabled := 'N';
+			ELSE
+				NEW.is_disabled := 'Y';
+			END IF;
+		ELSIF OLD.is_disabled != NEW.is_disabled THEN
+			IF NEW.is_disabled = 'Y' THEN
+				NEW.is_enabled := 'N';
+			ELSE
+				NEW.is_enabled := 'Y';
+			END IF;
+		END IF;
+	END IF;
+
+	IF NEW.is_enabled = NEW.is_disabled THEN
+		RAISE NOTICE 'is_enabled=is_disabled.  This should never happen' 
+			USING  errcode = 'integrity_constraint_violation';
+	END IF;
+
+	RETURN NEW;
+END;
+$$ 
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trigger_val_person_status_enabled_migration_enforce 
+	ON account;
+CREATE TRIGGER trigger_val_person_status_enabled_migration_enforce 
+BEFORE INSERT OR UPDATE of is_disabled, is_enabled
+	ON val_person_status
+	FOR EACH ROW EXECUTE 
+	PROCEDURE val_person_status_enabled_migration_enforce();
+
+
+-- XXX - may need to include trigger function
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'val_person_status');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'val_person_status');
+DROP TABLE IF EXISTS val_person_status_v63;
+DROP TABLE IF EXISTS audit.val_person_status_v63;
+-- DONE DEALING WITH TABLE val_person_status [6028452]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE account [6034704]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'account', 'account');
+
+-- FOREIGN KEYS FROM
+ALTER TABLE appaal_instance DROP CONSTRAINT IF EXISTS fk_appaal_i_reference_fo_accti;
+ALTER TABLE sw_package_release DROP CONSTRAINT IF EXISTS fk_sw_pkg_rel_ref_sys_user;
+ALTER TABLE account_collection_account DROP CONSTRAINT IF EXISTS fk_acol_account_id;
+ALTER TABLE account_password DROP CONSTRAINT IF EXISTS fk_acctpwd_acct_id;
+ALTER TABLE account_ssh_key DROP CONSTRAINT IF EXISTS fk_account_ssh_key_ssh_key_id;
+ALTER TABLE account_auth_log DROP CONSTRAINT IF EXISTS fk_acctauthlog_accid;
+ALTER TABLE klogin DROP CONSTRAINT IF EXISTS fk_klgn_acct_dst_id;
+ALTER TABLE department DROP CONSTRAINT IF EXISTS fk_dept_mgr_acct_id;
+ALTER TABLE account_token DROP CONSTRAINT IF EXISTS fk_acct_ref_acct_token;
+ALTER TABLE account_unix_info DROP CONSTRAINT IF EXISTS fk_auxifo_acct_id;
+ALTER TABLE property DROP CONSTRAINT IF EXISTS fk_property_acctid;
+ALTER TABLE pseudo_klogin DROP CONSTRAINT IF EXISTS fk_pklgn_acct_dstid;
+ALTER TABLE klogin DROP CONSTRAINT IF EXISTS fk_klgn_acct_id;
+ALTER TABLE account_assignd_cert DROP CONSTRAINT IF EXISTS fk_acct_asdcrt_acctid;
+ALTER TABLE device_collection_assignd_cert DROP CONSTRAINT IF EXISTS fk_devcolascrt_flownacctid;
+
+-- FOREIGN KEYS TO
+ALTER TABLE jazzhands.account DROP CONSTRAINT IF EXISTS fk_acct_stat_id;
+ALTER TABLE jazzhands.account DROP CONSTRAINT IF EXISTS fk_account_company_person;
+ALTER TABLE jazzhands.account DROP CONSTRAINT IF EXISTS fk_account_prsn_cmpy_acct;
+ALTER TABLE jazzhands.account DROP CONSTRAINT IF EXISTS fk_acct_vacct_type;
+ALTER TABLE jazzhands.account DROP CONSTRAINT IF EXISTS fk_account_acct_rlm_id;
+ALTER TABLE jazzhands.account DROP CONSTRAINT IF EXISTS fk_account_acctrole;
+
+-- EXTRA-SCHEMA constraints
+SELECT schema_support.save_constraint_for_replay('jazzhands', 'account');
+
+-- PRIMARY and ALTERNATE KEYS
+ALTER TABLE jazzhands.account DROP CONSTRAINT IF EXISTS ak_uq_account_lgn_realm;
+ALTER TABLE jazzhands.account DROP CONSTRAINT IF EXISTS pk_account_id;
+ALTER TABLE jazzhands.account DROP CONSTRAINT IF EXISTS ak_acct_acctid_realm_id;
+-- INDEXES
+DROP INDEX IF EXISTS "jazzhands"."xif11account";
+DROP INDEX IF EXISTS "jazzhands"."xif12account";
+DROP INDEX IF EXISTS "jazzhands"."idx_account_account_status";
+DROP INDEX IF EXISTS "jazzhands"."idx_account_account_tpe";
+DROP INDEX IF EXISTS "jazzhands"."xif8account";
+DROP INDEX IF EXISTS "jazzhands"."xif9account";
+-- CHECK CONSTRAINTS, etc
+-- TRIGGERS, etc
+DROP TRIGGER IF EXISTS trigger_update_peraccount_account_collection ON jazzhands.account;
+DROP TRIGGER IF EXISTS trig_add_automated_ac_on_account ON jazzhands.account;
+DROP TRIGGER IF EXISTS trig_rm_automated_ac_on_account ON jazzhands.account;
+DROP TRIGGER IF EXISTS trigger_delete_peraccount_account_collection ON jazzhands.account;
+DROP TRIGGER IF EXISTS trigger_create_new_unix_account ON jazzhands.account;
+DROP TRIGGER IF EXISTS trigger_audit_account ON jazzhands.account;
+DROP TRIGGER IF EXISTS trig_userlog_account ON jazzhands.account;
+SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'account');
+---- BEGIN audit.account TEARDOWN
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('audit', 'account', 'audit.account');
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+
+-- EXTRA-SCHEMA constraints
+SELECT schema_support.save_constraint_for_replay('audit', 'account');
+
+-- PRIMARY and ALTERNATE KEYS
+-- INDEXES
+DROP INDEX IF EXISTS "audit"."account_aud#timestamp_idx";
+-- CHECK CONSTRAINTS, etc
+-- TRIGGERS, etc
+SELECT schema_support.save_dependant_objects_for_replay('audit', 'account');
+---- DONE audit.account TEARDOWN
+
+
+ALTER TABLE account RENAME TO account_v63;
+ALTER TABLE audit.account RENAME TO account_v63;
+
+CREATE TABLE account
+(
+	account_id	integer NOT NULL,
+	login	varchar(50) NOT NULL,
+	person_id	integer NOT NULL,
+	company_id	integer NOT NULL,
+	is_enabled	character(1) NOT NULL,
+	account_realm_id	integer NOT NULL,
+	account_status	varchar(50) NOT NULL,
+	account_role	varchar(50) NOT NULL,
+	account_type	varchar(50) NOT NULL,
+	description	varchar(255)  NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'account', false);
+ALTER TABLE account
+	ALTER account_id
+	SET DEFAULT nextval('account_account_id_seq'::regclass);
+INSERT INTO account (
+	account_id,
+	login,
+	person_id,
+	company_id,
+	is_enabled,		-- new column (is_enabled)
+	account_realm_id,
+	account_status,
+	account_role,
+	account_type,
+	description,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+) SELECT
+	a.account_id,
+	a.login,
+	a.person_id,
+	a.company_id,
+	ps.is_enabled,		-- new column (is_enabled)
+	a.account_realm_id,
+	a.account_status,
+	a.account_role,
+	a.account_type,
+	a.description,
+	a.data_ins_user,
+	a.data_ins_date,
+	a.data_upd_user,
+	a.data_upd_date
+FROM account_v63  a
+	INNER JOIN val_person_status ps ON a.account_status = ps.person_status;
+
+INSERT INTO audit.account (
+	account_id,
+	login,
+	person_id,
+	company_id,
+	is_enabled,		-- new column (is_enabled)
+	account_realm_id,
+	account_status,
+	account_role,
+	account_type,
+	description,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+) SELECT
+	a.account_id,
+	a.login,
+	a.person_id,
+	a.company_id,
+	ps.is_enabled,		-- new column (is_enabled)
+	a.account_realm_id,
+	a.account_status,
+	a.account_role,
+	a.account_type,
+	a.description,
+	a.data_ins_user,
+	a.data_ins_date,
+	a.data_upd_user,
+	a.data_upd_date,
+	a."aud#action",
+	a."aud#timestamp",
+	a."aud#user",
+	a."aud#seq"
+FROM audit.account_v63 a
+	LEFT JOIN val_person_status ps ON a.account_status = ps.person_status;
+
+ALTER TABLE account
+	ALTER account_id
+	SET DEFAULT nextval('account_account_id_seq'::regclass);
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE account ADD CONSTRAINT ak_acct_acctid_realm_id UNIQUE (account_id, account_realm_id);
+ALTER TABLE account ADD CONSTRAINT pk_account_id PRIMARY KEY (account_id);
+ALTER TABLE account ADD CONSTRAINT ak_uq_account_lgn_realm UNIQUE (account_realm_id, login);
+
+-- Table/Column Comments
+COMMENT ON COLUMN account.is_enabled IS 'This column is trigger enforced to match what val_person_status says is the correct value for account_status';
+-- INDEXES
+CREATE INDEX xif9account ON account USING btree (account_role);
+CREATE INDEX xif8account ON account USING btree (account_realm_id);
+CREATE INDEX idx_account_account_tpe ON account USING btree (account_type);
+CREATE INDEX xif11account ON account USING btree (company_id, person_id);
+CREATE INDEX xif12account ON account USING btree (person_id, company_id, account_realm_id);
+CREATE INDEX idx_account_account_status ON account USING btree (account_status);
+
+-- CHECK CONSTRAINTS
+ALTER TABLE account ADD CONSTRAINT check_yes_no_355473735
+	CHECK (is_enabled = ANY (ARRAY['Y'::bpchar, 'N'::bpchar]));
+
+-- FOREIGN KEYS FROM
+-- consider FK account and account_password
+ALTER TABLE account_password
+	ADD CONSTRAINT fk_acctpwd_acct_id
+	FOREIGN KEY (account_id, account_realm_id) REFERENCES account(account_id, account_realm_id);
+-- consider FK account and account_ssh_key
+ALTER TABLE account_ssh_key
+	ADD CONSTRAINT fk_account_ssh_key_ssh_key_id
+	FOREIGN KEY (account_id) REFERENCES account(account_id);
+-- consider FK account and appaal_instance
+ALTER TABLE appaal_instance
+	ADD CONSTRAINT fk_appaal_i_reference_fo_accti
+	FOREIGN KEY (file_owner_account_id) REFERENCES account(account_id);
+-- consider FK account and sw_package_release
+ALTER TABLE sw_package_release
+	ADD CONSTRAINT fk_sw_pkg_rel_ref_sys_user
+	FOREIGN KEY (creation_account_id) REFERENCES account(account_id);
+-- consider FK account and account_collection_account
+ALTER TABLE account_collection_account
+	ADD CONSTRAINT fk_acol_account_id
+	FOREIGN KEY (account_id) REFERENCES account(account_id);
+-- consider FK account and account_unix_info
+ALTER TABLE account_unix_info
+	ADD CONSTRAINT fk_auxifo_acct_id
+	FOREIGN KEY (account_id) REFERENCES account(account_id);
+-- consider FK account and property
+ALTER TABLE property
+	ADD CONSTRAINT fk_property_acctid
+	FOREIGN KEY (account_id) REFERENCES account(account_id);
+-- consider FK account and account_assignd_cert
+ALTER TABLE account_assignd_cert
+	ADD CONSTRAINT fk_acct_asdcrt_acctid
+	FOREIGN KEY (account_id) REFERENCES account(account_id);
+-- consider FK account and pseudo_klogin
+ALTER TABLE pseudo_klogin
+	ADD CONSTRAINT fk_pklgn_acct_dstid
+	FOREIGN KEY (dest_account_id) REFERENCES account(account_id);
+-- consider FK account and klogin
+ALTER TABLE klogin
+	ADD CONSTRAINT fk_klgn_acct_id
+	FOREIGN KEY (account_id) REFERENCES account(account_id);
+-- consider FK account and device_collection_assignd_cert
+ALTER TABLE device_collection_assignd_cert
+	ADD CONSTRAINT fk_devcolascrt_flownacctid
+	FOREIGN KEY (file_owner_account_id) REFERENCES account(account_id);
+-- consider FK account and klogin
+ALTER TABLE klogin
+	ADD CONSTRAINT fk_klgn_acct_dst_id
+	FOREIGN KEY (dest_account_id) REFERENCES account(account_id);
+-- consider FK account and department
+ALTER TABLE department
+	ADD CONSTRAINT fk_dept_mgr_acct_id
+	FOREIGN KEY (manager_account_id) REFERENCES account(account_id);
+-- consider FK account and account_auth_log
+ALTER TABLE account_auth_log
+	ADD CONSTRAINT fk_acctauthlog_accid
+	FOREIGN KEY (account_id) REFERENCES account(account_id);
+-- consider FK account and account_token
+ALTER TABLE account_token
+	ADD CONSTRAINT fk_acct_ref_acct_token
+	FOREIGN KEY (account_id) REFERENCES account(account_id);
+
+-- FOREIGN KEYS TO
+-- consider FK account and account_realm
+ALTER TABLE account
+	ADD CONSTRAINT fk_account_acct_rlm_id
+	FOREIGN KEY (account_realm_id) REFERENCES account_realm(account_realm_id);
+-- consider FK account and val_account_role
+ALTER TABLE account
+	ADD CONSTRAINT fk_account_acctrole
+	FOREIGN KEY (account_role) REFERENCES val_account_role(account_role);
+-- consider FK account and val_account_type
+ALTER TABLE account
+	ADD CONSTRAINT fk_acct_vacct_type
+	FOREIGN KEY (account_type) REFERENCES val_account_type(account_type);
+-- consider FK account and person_account_realm_company
+ALTER TABLE account
+	ADD CONSTRAINT fk_account_prsn_cmpy_acct
+	FOREIGN KEY (person_id, company_id, account_realm_id) REFERENCES person_account_realm_company(person_id, company_id, account_realm_id) DEFERRABLE;
+-- consider FK account and val_person_status
+ALTER TABLE account
+	ADD CONSTRAINT fk_acct_stat_id
+	FOREIGN KEY (account_status) REFERENCES val_person_status(person_status);
+-- consider FK account and person_company
+ALTER TABLE account
+	ADD CONSTRAINT fk_account_company_person
+	FOREIGN KEY (company_id, person_id) REFERENCES person_company(company_id, person_id) DEFERRABLE;
+
+-- TRIGGERS
+
+/*
+ * Enforce that is_enabled should match whatever val_person_status has for it.
+ *
+ * XXX - this needs to be reimplemented in oracle
+ */
+CREATE OR REPLACE FUNCTION account_enforce_is_enabled()
+	RETURNS TRIGGER AS $$
+DECLARE
+	correctval	char(1);
+BEGIN
+	SELECT is_enabled INTO correctval
+	FROM val_person_status 
+	WHERE person_status = NEW.account_status;
+
+	IF TG_OP = 'INSERT' THEN
+		IF NEW.is_enabled is NULL THEN
+			NEW.is_enabled = correctval;
+		ELSIF NEW.account_status != correctval THEN
+			RAISE EXCEPTION 'May not set IS_ENABLED to an invalid value for given account_status: %', NEW.account_status
+				USING errcode = 'integrity_constraint_violation';
+		END IF;
+	ELSIF TG_OP = 'UPDATE' THEN
+		IF NEW.account_status != OLD.account_status THEN
+			IF NEW.is_enabled != correctval THEN
+				NEW.is_enabled := correctval;
+			END IF;
+		ELSIF NEW.is_enabled != correctval THEN
+			RAISE EXCEPTION 'May not update IS_ENABLED to an invalid value for given account_status: %', NEW.account_status
+				USING errcode = 'integrity_constraint_violation';
+		END IF;
+	END IF;
+
+	RETURN NEW;
+END;
+$$ 
+SET search_path=jazzhands
+LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER trigger_account_enforce_is_enabled 
+BEFORE INSERT OR UPDATE of account_status,is_enabled
+	ON account
+	FOR EACH ROW EXECUTE PROCEDURE account_enforce_is_enabled();
+
+-- XXX - may need to include trigger function
+CREATE TRIGGER trigger_update_peraccount_account_collection AFTER INSERT OR UPDATE ON account FOR EACH ROW EXECUTE PROCEDURE update_peraccount_account_collection();
+
+-- XXX - may need to include trigger function
+-- comes later
+-- CREATE TRIGGER trig_add_account_automated_reporting_ac AFTER INSERT OR UPDATE OF login ON account FOR EACH ROW EXECUTE PROCEDURE account_automated_reporting_ac();
+
+-- XXX - may need to include trigger function
+CREATE TRIGGER trig_add_automated_ac_on_account AFTER INSERT OR UPDATE OF account_type, account_role ON account FOR EACH ROW EXECUTE PROCEDURE automated_ac_on_account();
+
+-- XXX - may need to include trigger function
+CREATE TRIGGER trigger_delete_peraccount_account_collection BEFORE DELETE ON account FOR EACH ROW EXECUTE PROCEDURE delete_peraccount_account_collection();
+
+-- XXX - may need to include trigger function
+-- comes later
+-- CREATE TRIGGER trig_rm_account_automated_reporting_ac BEFORE DELETE ON account FOR EACH ROW EXECUTE PROCEDURE account_automated_reporting_ac();
+
+-- XXX - may need to include trigger function
+CREATE TRIGGER trigger_create_new_unix_account AFTER INSERT ON account FOR EACH ROW EXECUTE PROCEDURE create_new_unix_account();
+
+-- XXX - may need to include trigger function
+CREATE TRIGGER trig_rm_automated_ac_on_account BEFORE DELETE ON account FOR EACH ROW EXECUTE PROCEDURE automated_ac_on_account();
+
+-- XXX - may need to include trigger function
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'account');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'account');
+ALTER SEQUENCE account_account_id_seq
+	 OWNED BY account.account_id;
+DROP TABLE IF EXISTS account_v63;
+DROP TABLE IF EXISTS audit.account_v63;
+-- DONE DEALING WITH TABLE account [6026209]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_device_col_account_cart [6079364]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'v_device_col_account_cart', 'v_device_col_account_cart');
+CREATE VIEW v_device_col_account_cart AS
+ WITH x AS (
+         SELECT v_device_col_acct_col_unixlogin.device_collection_id,
+            v_device_col_acct_col_unixlogin.account_id,
+            NULL::character varying[] AS setting
+           FROM v_device_col_acct_col_unixlogin
+             JOIN account USING (account_id)
+             JOIN account_unix_info USING (account_id)
+        UNION
+         SELECT v_unix_account_overrides.device_collection_id,
+            v_unix_account_overrides.account_id,
+            v_unix_account_overrides.setting
+           FROM v_unix_account_overrides
+             JOIN account USING (account_id)
+             JOIN account_unix_info USING (account_id)
+             JOIN v_device_col_acct_col_unixlogin USING (device_collection_id, account_id)
+        )
+ SELECT xx.device_collection_id,
+    xx.account_id,
+    xx.setting
+   FROM ( SELECT x.device_collection_id,
+            x.account_id,
+            x.setting,
+            row_number() OVER (PARTITION BY x.device_collection_id, x.account_id ORDER BY x.setting) AS rn
+           FROM x) xx
+  WHERE xx.rn = 1;
+
+delete from __recreate where type = 'view' and object = 'v_device_col_account_cart';
+-- DONE DEALING WITH TABLE v_device_col_account_cart [6070824]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_device_collection_account_ssh_key [6079349]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'v_device_collection_account_ssh_key', 'v_device_collection_account_ssh_key');
+CREATE VIEW v_device_collection_account_ssh_key AS
+ SELECT allkeys.device_collection_id,
+    allkeys.account_id,
+    array_agg(allkeys.ssh_public_key) AS ssh_public_key
+   FROM ( SELECT keylist.device_collection_id,
+            keylist.account_id,
+            keylist.ssh_public_key
+           FROM ( SELECT dchd.device_collection_id,
+                    ac.account_id,
+                    ssh_key.ssh_public_key
+                   FROM device_collection_ssh_key dcssh
+                     JOIN ssh_key USING (ssh_key_id)
+                     JOIN v_acct_coll_acct_expanded ac USING (account_collection_id)
+                     JOIN account a USING (account_id)
+                     JOIN v_device_coll_hier_detail dchd ON dchd.parent_device_collection_id = dcssh.device_collection_id
+                UNION
+                 SELECT NULL::integer AS device_collection_id,
+                    ask.account_id,
+                    skey.ssh_public_key
+                   FROM account_ssh_key ask
+                     JOIN ssh_key skey USING (ssh_key_id)) keylist
+          ORDER BY keylist.account_id, COALESCE(keylist.device_collection_id, 0), keylist.ssh_public_key) allkeys
+  GROUP BY allkeys.device_collection_id, allkeys.account_id;
+
+delete from __recreate where type = 'view' and object = 'v_device_collection_account_ssh_key';
+-- DONE DEALING WITH TABLE v_device_collection_account_ssh_key [6070809]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_unix_passwd_mappings [6054181]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'v_unix_passwd_mappings', 'v_unix_passwd_mappings');
+CREATE VIEW v_unix_passwd_mappings AS
+ WITH passtype AS (
+         SELECT ap.account_id,
+            ap.password,
+            ap.expire_time,
+            ap.change_time,
+            subq.device_collection_id,
+            subq.password_type,
+            subq.ord
+           FROM ( SELECT dchd.device_collection_id,
+                    p.property_value_password_type AS password_type,
+                    row_number() OVER (PARTITION BY dchd.device_collection_id) AS ord
+                   FROM v_property p
+                     JOIN v_device_coll_hier_detail dchd ON dchd.parent_device_collection_id = p.device_collection_id
+                  WHERE p.property_name::text = 'UnixPwType'::text AND p.property_type::text = 'MclassUnixProp'::text) subq
+             JOIN account_password ap USING (password_type)
+             JOIN account_unix_info a USING (account_id)
+          WHERE subq.ord = 1
+        ), accts AS (
+         SELECT a.account_id,
+            a.login,
+            a.person_id,
+            a.company_id,
+            a.is_enabled,
+            a.account_realm_id,
+            a.account_status,
+            a.account_role,
+            a.account_type,
+            a.description,
+            a.data_ins_user,
+            a.data_ins_date,
+            a.data_upd_user,
+            a.data_upd_date,
+            aui.unix_uid,
+            aui.unix_group_acct_collection_id,
+            aui.shell,
+            aui.default_home
+           FROM account a
+             JOIN account_unix_info aui USING (account_id)
+          WHERE a.is_enabled = 'Y'::bpchar
+        ), extra_groups AS (
+         SELECT p.device_collection_id,
+            acae.account_id,
+            array_agg(ac.account_collection_name) AS group_names
+           FROM v_property p
+             JOIN device_collection dc USING (device_collection_id)
+             JOIN account_collection ac USING (account_collection_id)
+             JOIN account_collection pac ON pac.account_collection_id = p.property_value_account_coll_id
+             JOIN v_acct_coll_acct_expanded acae ON pac.account_collection_id = acae.account_collection_id
+          WHERE p.property_type::text = 'MclassUnixProp'::text AND p.property_name::text = 'UnixGroupMemberOverride'::text AND dc.device_collection_type::text <> 'mclass'::text
+          GROUP BY p.device_collection_id, acae.account_id
+        )
+ SELECT s.device_collection_id,
+    s.account_id,
+    s.login,
+    s.crypt,
+    s.unix_uid,
+    s.unix_group_name,
+    regexp_replace(s.gecos, ' +'::text, ' '::text, 'g'::text) AS gecos,
+    regexp_replace(
+        CASE
+            WHEN s.forcehome IS NOT NULL AND s.forcehome::text ~ '/$'::text THEN concat(s.forcehome, s.login)
+            WHEN s.home IS NOT NULL AND s.home::text ~ '^/'::text THEN s.home::text
+            WHEN s.hometype::text = 'generic'::text THEN concat(COALESCE(s.homeplace, '/home'::character varying), '/', 'generic')
+            WHEN s.home IS NOT NULL AND s.home::text ~ '/$'::text THEN concat(s.home, '/', s.login)
+            WHEN s.homeplace IS NOT NULL AND s.homeplace::text ~ '/$'::text THEN concat(s.homeplace, '/', s.login)
+            ELSE concat(COALESCE(s.homeplace, '/home'::character varying), '/', s.login)
+        END, '/+'::text, '/'::text, 'g'::text) AS home,
+    s.shell,
+    s.ssh_public_key,
+    s.setting,
+    s.mclass_setting,
+    s.group_names AS extra_groups
+   FROM ( SELECT o.device_collection_id,
+            a.account_id,
+            a.login,
+            COALESCE(o.setting[( SELECT i.i + 1
+                   FROM generate_subscripts(o.setting, 1) i(i)
+                  WHERE o.setting[i.i]::text = 'ForceCrypt'::text)]::text,
+                CASE
+                    WHEN pwt.expire_time IS NOT NULL AND now() < pwt.expire_time OR (now() - pwt.change_time) < concat(COALESCE((( SELECT v_property.property_value
+                       FROM v_property
+                      WHERE v_property.property_type::text = 'Defaults'::text AND v_property.property_name::text = '_maxpasswdlife'::text))::text, 90::text), 'days')::interval THEN pwt.password
+                    ELSE NULL::character varying
+                END::text, '*'::text) AS crypt,
+            COALESCE(o.setting[( SELECT i.i + 1
+                   FROM generate_subscripts(o.setting, 1) i(i)
+                  WHERE o.setting[i.i]::text = 'ForceUserUID'::text)]::integer, a.unix_uid) AS unix_uid,
+            COALESCE(o.setting[( SELECT i.i + 1
+                   FROM generate_subscripts(o.setting, 1) i(i)
+                  WHERE o.setting[i.i]::text = 'ForceUserGroup'::text)]::character varying(255), ugac.account_collection_name) AS unix_group_name,
+                CASE
+                    WHEN a.description IS NOT NULL THEN a.description::text
+                    ELSE concat(COALESCE(p.preferred_first_name, p.first_name), ' ',
+                    CASE
+                        WHEN p.middle_name IS NOT NULL AND length(p.middle_name::text) = 1 THEN concat(p.middle_name, '.')::character varying
+                        ELSE p.middle_name
+                    END, ' ', COALESCE(p.preferred_last_name, p.last_name))
+                END AS gecos,
+            COALESCE(o.setting[( SELECT i.i + 1
+                   FROM generate_subscripts(o.setting, 1) i(i)
+                  WHERE o.setting[i.i]::text = 'ForceHome'::text)], a.default_home) AS home,
+            COALESCE(o.setting[( SELECT i.i + 1
+                   FROM generate_subscripts(o.setting, 1) i(i)
+                  WHERE o.setting[i.i]::text = 'ForceShell'::text)], a.shell) AS shell,
+            o.setting,
+            mcs.mclass_setting,
+            o.setting[( SELECT i.i + 1
+                   FROM generate_subscripts(o.setting, 1) i(i)
+                  WHERE o.setting[i.i]::text = 'ForceHome'::text)] AS forcehome,
+            mcs.mclass_setting[( SELECT i.i + 1
+                   FROM generate_subscripts(mcs.mclass_setting, 1) i(i)
+                  WHERE mcs.mclass_setting[i.i]::text = 'HomePlace'::text)] AS homeplace,
+            mcs.mclass_setting[( SELECT i.i + 1
+                   FROM generate_subscripts(mcs.mclass_setting, 1) i(i)
+                  WHERE mcs.mclass_setting[i.i]::text = 'UnixHomeType'::text)] AS hometype,
+            ssh.ssh_public_key,
+            extra_groups.group_names
+           FROM accts a
+             JOIN v_device_col_account_cart o USING (account_id)
+             JOIN device_collection dc USING (device_collection_id)
+             JOIN person p USING (person_id)
+             JOIN unix_group ug ON a.unix_group_acct_collection_id = ug.account_collection_id
+             JOIN account_collection ugac ON ugac.account_collection_id = ug.account_collection_id
+             LEFT JOIN extra_groups USING (device_collection_id, account_id)
+             LEFT JOIN v_device_collection_account_ssh_key ssh ON a.account_id = ssh.account_id AND (ssh.device_collection_id IS NULL OR ssh.device_collection_id = o.device_collection_id)
+             LEFT JOIN v_unix_mclass_settings mcs ON mcs.device_collection_id = dc.device_collection_id
+             LEFT JOIN passtype pwt ON o.device_collection_id = pwt.device_collection_id AND a.account_id = pwt.account_id) s
+  ORDER BY s.device_collection_id, s.account_id;
+
+delete from __recreate where type = 'view' and object = 'v_unix_passwd_mappings';
+GRANT INSERT,UPDATE,DELETE ON v_unix_passwd_mappings TO iud_role;
+GRANT ALL ON v_unix_passwd_mappings TO jazzhands;
+GRANT SELECT ON v_unix_passwd_mappings TO ro_role;
+-- DONE DEALING WITH TABLE v_unix_passwd_mappings [6070829]
+-------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_unix_group_mappings [6054186]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'v_unix_group_mappings', 'v_unix_group_mappings');
+CREATE VIEW v_unix_group_mappings AS
+ WITH accts AS (
+         SELECT a_1.account_id,
+            a_1.login,
+            a_1.person_id,
+            a_1.company_id,
+            a_1.is_enabled,
+            a_1.account_realm_id,
+            a_1.account_status,
+            a_1.account_role,
+            a_1.account_type,
+            a_1.description,
+            a_1.data_ins_user,
+            a_1.data_ins_date,
+            a_1.data_upd_user,
+            a_1.data_upd_date
+           FROM account a_1
+             JOIN account_unix_info USING (account_id)
+          WHERE a_1.is_enabled = 'Y'::bpchar
+        ), ugmap AS (
+         SELECT dch.device_collection_id,
+            vace.account_collection_id
+           FROM v_property p
+             JOIN v_device_coll_hier_detail dch ON p.device_collection_id = dch.parent_device_collection_id
+             JOIN v_account_collection_expanded vace ON vace.root_account_collection_id = p.account_collection_id
+          WHERE p.property_name::text = 'UnixGroup'::text AND p.property_type::text = 'MclassUnixProp'::text
+        UNION
+         SELECT dch.device_collection_id,
+            uag.account_collection_id
+           FROM v_property p
+             JOIN v_device_coll_hier_detail dch ON p.device_collection_id = dch.parent_device_collection_id
+             JOIN v_acct_coll_acct_expanded vace USING (account_collection_id)
+             JOIN accts a_1 ON vace.account_id = a_1.account_id
+             JOIN account_unix_info aui ON a_1.account_id = aui.account_id
+             JOIN unix_group ug ON ug.account_collection_id = aui.unix_group_acct_collection_id
+             JOIN account_collection uag ON ug.account_collection_id = uag.account_collection_id
+          WHERE p.property_name::text = 'UnixLogin'::text AND p.property_type::text = 'MclassUnixProp'::text
+        ), dcugm AS (
+         SELECT dch.device_collection_id,
+            p.account_collection_id,
+            aca.account_id
+           FROM v_property p
+             JOIN unix_group ug USING (account_collection_id)
+             JOIN v_device_coll_hier_detail dch ON p.device_collection_id = dch.parent_device_collection_id
+             JOIN v_acct_coll_acct_expanded aca ON p.property_value_account_coll_id = aca.account_collection_id
+          WHERE p.property_name::text = 'UnixGroupMemberOverride'::text AND p.property_type::text = 'MclassUnixProp'::text
+        ), grp_members AS (
+         SELECT actoa.account_id,
+            actoa.device_collection_id,
+            actoa.account_collection_id,
+            ui.unix_uid,
+            ui.unix_group_acct_collection_id,
+            ui.shell,
+            ui.default_home,
+            ui.data_ins_user,
+            ui.data_ins_date,
+            ui.data_upd_user,
+            ui.data_upd_date,
+            a_1.login,
+            a_1.person_id,
+            a_1.company_id,
+            a_1.is_enabled,
+            a_1.account_realm_id,
+            a_1.account_status,
+            a_1.account_role,
+            a_1.account_type,
+            a_1.description,
+            a_1.data_ins_user,
+            a_1.data_ins_date,
+            a_1.data_upd_user,
+            a_1.data_upd_date
+           FROM ( SELECT dc_1.device_collection_id,
+                    ae.account_collection_id,
+                    ae.account_id
+                   FROM device_collection dc_1,
+                    v_acct_coll_acct_expanded ae
+                     JOIN unix_group unix_group_1 USING (account_collection_id)
+                     JOIN account_collection inac USING (account_collection_id)
+                  WHERE dc_1.device_collection_type::text = 'mclass'::text
+                UNION
+                 SELECT dcugm.device_collection_id,
+                    dcugm.account_collection_id,
+                    dcugm.account_id
+                   FROM dcugm) actoa
+             JOIN account_unix_info ui USING (account_id)
+             JOIN accts a_1 USING (account_id)
+        ), grp_accounts AS (
+         SELECT g.account_id,
+            g.device_collection_id,
+            g.account_collection_id,
+            g.unix_uid,
+            g.unix_group_acct_collection_id,
+            g.shell,
+            g.default_home,
+            g.data_ins_user,
+            g.data_ins_date,
+            g.data_upd_user,
+            g.data_upd_date,
+            g.login,
+            g.person_id,
+            g.company_id,
+            g.is_enabled,
+            g.account_realm_id,
+            g.account_status,
+            g.account_role,
+            g.account_type,
+            g.description,
+            g.data_ins_user_1 AS data_ins_user,
+            g.data_ins_date_1 AS data_ins_date,
+            g.data_upd_user_1 AS data_upd_user,
+            g.data_upd_date_1 AS data_upd_date
+           FROM grp_members g(account_id, device_collection_id, account_collection_id, unix_uid, unix_group_acct_collection_id, shell, default_home, data_ins_user, data_ins_date, data_upd_user, data_upd_date, login, person_id, company_id, is_enabled, account_realm_id, account_status, account_role, account_type, description, data_ins_user_1, data_ins_date_1, data_upd_user_1, data_upd_date_1)
+             JOIN accts USING (account_id)
+             JOIN v_unix_passwd_mappings USING (device_collection_id, account_id)
+        )
+ SELECT dc.device_collection_id,
+    ac.account_collection_id,
+    ac.account_collection_name AS group_name,
+    COALESCE(o.setting[( SELECT i.i + 1
+           FROM generate_subscripts(o.setting, 1) i(i)
+          WHERE o.setting[i.i]::text = 'ForceGroupGID'::text)]::integer, unix_group.unix_gid) AS unix_gid,
+    unix_group.group_password,
+    o.setting,
+    mcs.mclass_setting,
+    array_agg(DISTINCT a.login ORDER BY a.login) AS members
+   FROM device_collection dc
+     JOIN ugmap USING (device_collection_id)
+     JOIN account_collection ac USING (account_collection_id)
+     JOIN unix_group USING (account_collection_id)
+     LEFT JOIN v_device_col_account_col_cart o USING (device_collection_id, account_collection_id)
+     LEFT JOIN grp_accounts a(account_id, device_collection_id, account_collection_id, unix_uid, unix_group_acct_collection_id, shell, default_home, data_ins_user, data_ins_date, data_upd_user, data_upd_date, login, person_id, company_id, is_enabled, account_realm_id, account_status, account_role, account_type, description, data_ins_user_1, data_ins_date_1, data_upd_user_1, data_upd_date_1) USING (device_collection_id, account_collection_id)
+     LEFT JOIN v_unix_mclass_settings mcs ON mcs.device_collection_id = dc.device_collection_id
+  GROUP BY dc.device_collection_id, ac.account_collection_id, ac.account_collection_name, unix_group.unix_gid, unix_group.group_password, o.setting, mcs.mclass_setting
+  ORDER BY dc.device_collection_id, ac.account_collection_id;
+
+delete from __recreate where type = 'view' and object = 'v_unix_group_mappings';
+GRANT SELECT ON v_unix_group_mappings TO ro_role;
+GRANT ALL ON v_unix_group_mappings TO jazzhands;
+GRANT INSERT,UPDATE,DELETE ON v_unix_group_mappings TO iud_role;
+-- DONE DEALING WITH TABLE v_unix_group_mappings [6070845]
+--------------------------------------------------------------------
 
 --------------------------------------------------------------------
 -- BEGIN auto_ac_manip
@@ -2368,7 +3237,6 @@ insert into val_property (
         'account_collection_id',
         'N'
 );
-
 
 /*
  * Copyright (c) 2015 Todd Kover
@@ -2990,6 +3858,7 @@ grant execute on all functions in schema auto_ac_manip to iud_role;
 
 --------------------------------------------------------------------
 -- BEGIN auto account collection triggers
+
 /*
  * Copyright (c) 2015 Todd Kover
  * All rights reserved.
@@ -3050,9 +3919,9 @@ BEGIN
 		PERFORM auto_ac_manip.rename_automated_report_acs(
 			NEW.account_id, OLD.login, NEW.login, NEW.account_realm_id);
 	ELSIF TG_OP = 'DELETE' THEN
-		PERFORM person_manip.destroy_report_account_collections(
-			account_id := NEW.account_id,
-			account_realm_id := NEW.account_realm_id
+		PERFORM auto_ac_manip.destroy_report_account_collections(
+			account_id := OLD.account_id,
+			account_realm_id := OLD.account_realm_id
 		);
 	END IF;
 
@@ -3146,93 +4015,172 @@ CREATE TRIGGER trigger_automated_ac_on_person_company
 	automated_ac_on_person_company();
 
 --------------------------------------------------------------------------
-
 -- DONE auto account collection triggers
 --------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_dev_col_user_prop_expanded [6054191]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'v_dev_col_user_prop_expanded', 'v_dev_col_user_prop_expanded');
+CREATE VIEW v_dev_col_user_prop_expanded AS
+ SELECT dchd.device_collection_id,
+    a.account_id,
+    a.login,
+    a.account_status,
+    ar.account_realm_id,
+    ar.account_realm_name,
+    a.is_enabled,
+    upo.property_type,
+    upo.property_name,
+    COALESCE(upo.property_value_password_type, upo.property_value) AS property_value,
+        CASE
+            WHEN upn.is_multivalue = 'N'::bpchar THEN 0
+            ELSE 1
+        END AS is_multivalue,
+        CASE
+            WHEN pdt.property_data_type::text = 'boolean'::text THEN 1
+            ELSE 0
+        END AS is_boolean
+   FROM v_acct_coll_acct_expanded_detail uued
+     JOIN account_collection u USING (account_collection_id)
+     JOIN v_property upo ON upo.account_collection_id = u.account_collection_id AND (upo.property_type::text = ANY (ARRAY['CCAForceCreation'::character varying, 'CCARight'::character varying, 'ConsoleACL'::character varying, 'RADIUS'::character varying, 'TokenMgmt'::character varying, 'UnixPasswdFileValue'::character varying, 'UserMgmt'::character varying, 'cca'::character varying, 'feed-attributes'::character varying, 'wwwgroup'::character varying]::text[]))
+     JOIN val_property upn ON upo.property_name::text = upn.property_name::text AND upo.property_type::text = upn.property_type::text
+     JOIN val_property_data_type pdt ON upn.property_data_type::text = pdt.property_data_type::text
+     JOIN account a ON uued.account_id = a.account_id
+     JOIN account_realm ar ON a.account_realm_id = ar.account_realm_id
+     LEFT JOIN v_device_coll_hier_detail dchd ON dchd.parent_device_collection_id = upo.device_collection_id
+  ORDER BY dchd.device_collection_level,
+        CASE
+            WHEN u.account_collection_type::text = 'per-account'::text THEN 0
+            WHEN u.account_collection_type::text = 'property'::text THEN 1
+            WHEN u.account_collection_type::text = 'systems'::text THEN 2
+            ELSE 3
+        END,
+        CASE
+            WHEN uued.assign_method = 'Account_CollectionAssignedToPerson'::text THEN 0
+            WHEN uued.assign_method = 'Account_CollectionAssignedToDept'::text THEN 1
+            WHEN uued.assign_method = 'ParentAccount_CollectionOfAccount_CollectionAssignedToPerson'::text THEN 2
+            WHEN uued.assign_method = 'ParentAccount_CollectionOfAccount_CollectionAssignedToDept'::text THEN 2
+            WHEN uued.assign_method = 'Account_CollectionAssignedToParentDept'::text THEN 3
+            WHEN uued.assign_method = 'ParentAccount_CollectionOfAccount_CollectionAssignedToParentDep'::text THEN 3
+            ELSE 6
+        END, uued.dept_level, uued.acct_coll_level, dchd.device_collection_id, u.account_collection_id;
 
+delete from __recreate where type = 'view' and object = 'v_dev_col_user_prop_expanded';
+GRANT ALL ON v_dev_col_user_prop_expanded TO jazzhands;
+GRANT INSERT,UPDATE,DELETE ON v_dev_col_user_prop_expanded TO iud_role;
+GRANT SELECT ON v_dev_col_user_prop_expanded TO ro_role;
+-- DONE DEALING WITH TABLE v_dev_col_user_prop_expanded [6062243]
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE v_corp_family_account [6082824]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'v_corp_family_account', 'v_corp_family_account');
+CREATE VIEW v_corp_family_account AS
+ SELECT a.account_id,
+    a.login,
+    a.person_id,
+    a.company_id,
+    a.account_realm_id,
+    a.account_status,
+    a.account_role,
+    a.account_type,
+    a.description,
+    a.is_enabled,
+    a.data_ins_user,
+    a.data_ins_date,
+    a.data_upd_user,
+    a.data_upd_date
+   FROM account a
+  WHERE (a.account_realm_id IN ( SELECT property.account_realm_id
+           FROM property
+          WHERE property.property_name::text = '_root_account_realm_id'::text AND property.property_type::text = 'Defaults'::text));
+
+delete from __recreate where type = 'view' and object = 'v_corp_family_account';
+GRANT INSERT,UPDATE,DELETE ON v_corp_family_account TO iud_role;
+GRANT SELECT ON v_corp_family_account TO ro_role;
+GRANT ALL ON v_corp_family_account TO jazzhands;
+-- DONE DEALING WITH TABLE v_corp_family_account [6070789]
+--------------------------------------------------------------------
 -- Dropping obsoleted sequences....
-
-
 -- Dropping obsoleted audit sequences....
-
 
 -- Processing tables with no structural changes
 -- Some of these may be redundant
 -- fk constraints
 ALTER TABLE logical_volume DROP CONSTRAINT IF EXISTS fk_logvol_device_id;
 ALTER TABLE logical_volume
-	ADD CONSTRAINT fk_logvol_device_id
-	FOREIGN KEY (device_id) REFERENCES device(device_id) DEFERRABLE;
+   ADD CONSTRAINT fk_logvol_device_id
+   FOREIGN KEY (device_id) REFERENCES device(device_id) DEFERRABLE;
 
 ALTER TABLE logical_volume DROP CONSTRAINT IF EXISTS fk_logvol_fstype;
 ALTER TABLE logical_volume
-	ADD CONSTRAINT fk_logvol_fstype
-	FOREIGN KEY (filesystem_type) REFERENCES val_filesystem_type(filesystem_type) DEFERRABLE;
+   ADD CONSTRAINT fk_logvol_fstype
+   FOREIGN KEY (filesystem_type) REFERENCES val_filesystem_type(filesystem_type) DEFERRABLE;
 
 ALTER TABLE logical_volume DROP CONSTRAINT IF EXISTS fk_logvol_vgid;
 ALTER TABLE logical_volume
-	ADD CONSTRAINT fk_logvol_vgid
-	FOREIGN KEY (volume_group_id, device_id) REFERENCES volume_group(volume_group_id, device_id) DEFERRABLE;
+   ADD CONSTRAINT fk_logvol_vgid
+   FOREIGN KEY (volume_group_id, device_id) REFERENCES volume_group(volume_group_id, device_id) DEFERRABLE;
 
 ALTER TABLE logical_volume_property DROP CONSTRAINT IF EXISTS fk_lvol_prop_lvid_fstyp;
 ALTER TABLE logical_volume_property
-	ADD CONSTRAINT fk_lvol_prop_lvid_fstyp
-	FOREIGN KEY (logical_volume_id, filesystem_type) REFERENCES logical_volume(logical_volume_id, filesystem_type) DEFERRABLE;
+   ADD CONSTRAINT fk_lvol_prop_lvid_fstyp
+   FOREIGN KEY (logical_volume_id, filesystem_type) REFERENCES logical_volume(logical_volume_id, filesystem_type) DEFERRABLE;
 
 ALTER TABLE logical_volume_property DROP CONSTRAINT IF EXISTS fk_lvol_prop_lvpn_fsty;
 ALTER TABLE logical_volume_property
-	ADD CONSTRAINT fk_lvol_prop_lvpn_fsty
-	FOREIGN KEY (logical_volume_property_name, filesystem_type) REFERENCES val_logical_volume_property(logical_volume_property_name, filesystem_type) DEFERRABLE;
+   ADD CONSTRAINT fk_lvol_prop_lvpn_fsty
+   FOREIGN KEY (logical_volume_property_name, filesystem_type) REFERENCES val_logical_volume_property(logical_volume_property_name, filesystem_type) DEFERRABLE;
 
 ALTER TABLE logical_volume_purpose DROP CONSTRAINT IF EXISTS fk_lvpurp_lvid;
 ALTER TABLE logical_volume_purpose
-	ADD CONSTRAINT fk_lvpurp_lvid
-	FOREIGN KEY (logical_volume_id) REFERENCES logical_volume(logical_volume_id) DEFERRABLE;
+   ADD CONSTRAINT fk_lvpurp_lvid
+   FOREIGN KEY (logical_volume_id) REFERENCES logical_volume(logical_volume_id) DEFERRABLE;
 
 ALTER TABLE logical_volume_purpose DROP CONSTRAINT IF EXISTS fk_lvpurp_val_lgpuprp;
 ALTER TABLE logical_volume_purpose
-	ADD CONSTRAINT fk_lvpurp_val_lgpuprp
-	FOREIGN KEY (logical_volume_purpose) REFERENCES val_logical_volume_purpose(logical_volume_purpose) DEFERRABLE;
+   ADD CONSTRAINT fk_lvpurp_val_lgpuprp
+   FOREIGN KEY (logical_volume_purpose) REFERENCES val_logical_volume_purpose(logical_volume_purpose) DEFERRABLE;
 
 ALTER TABLE physicalish_volume DROP CONSTRAINT IF EXISTS fk_physicalish_vol_pvtype;
 ALTER TABLE physicalish_volume
-	ADD CONSTRAINT fk_physicalish_vol_pvtype
-	FOREIGN KEY (physicalish_volume_type) REFERENCES val_physicalish_volume_type(physicalish_volume_type);
+   ADD CONSTRAINT fk_physicalish_vol_pvtype
+   FOREIGN KEY (physicalish_volume_type) REFERENCES val_physicalish_volume_type(physicalish_volume_type);
 
 ALTER TABLE physicalish_volume DROP CONSTRAINT IF EXISTS fk_physvol_compid;
 ALTER TABLE physicalish_volume
-	ADD CONSTRAINT fk_physvol_compid
-	FOREIGN KEY (component_id) REFERENCES component(component_id) DEFERRABLE;
+   ADD CONSTRAINT fk_physvol_compid
+   FOREIGN KEY (component_id) REFERENCES component(component_id) DEFERRABLE;
 
 ALTER TABLE physicalish_volume DROP CONSTRAINT IF EXISTS fk_physvol_device_id;
 ALTER TABLE physicalish_volume
-	ADD CONSTRAINT fk_physvol_device_id
-	FOREIGN KEY (device_id) REFERENCES device(device_id) DEFERRABLE;
+   ADD CONSTRAINT fk_physvol_device_id
+   FOREIGN KEY (device_id) REFERENCES device(device_id) DEFERRABLE;
 
 ALTER TABLE physicalish_volume DROP CONSTRAINT IF EXISTS fk_physvol_lvid;
 ALTER TABLE physicalish_volume
-	ADD CONSTRAINT fk_physvol_lvid
-	FOREIGN KEY (logical_volume_id) REFERENCES logical_volume(logical_volume_id) DEFERRABLE;
+   ADD CONSTRAINT fk_physvol_lvid
+   FOREIGN KEY (logical_volume_id) REFERENCES logical_volume(logical_volume_id) DEFERRABLE;
 
 ALTER TABLE volume_group DROP CONSTRAINT IF EXISTS fk_volgrp_devid;
 ALTER TABLE volume_group
-	ADD CONSTRAINT fk_volgrp_devid
-	FOREIGN KEY (device_id) REFERENCES device(device_id) DEFERRABLE;
+   ADD CONSTRAINT fk_volgrp_devid
+   FOREIGN KEY (device_id) REFERENCES device(device_id) DEFERRABLE;
 
 ALTER TABLE volume_group DROP CONSTRAINT IF EXISTS fk_volgrp_rd_type;
 ALTER TABLE volume_group
-	ADD CONSTRAINT fk_volgrp_rd_type
-	FOREIGN KEY (raid_type) REFERENCES val_raid_type(raid_type) DEFERRABLE;
+   ADD CONSTRAINT fk_volgrp_rd_type
+   FOREIGN KEY (raid_type) REFERENCES val_raid_type(raid_type) DEFERRABLE;
 
 ALTER TABLE volume_group DROP CONSTRAINT IF EXISTS fk_volgrp_volgrp_type;
 ALTER TABLE volume_group
-	ADD CONSTRAINT fk_volgrp_volgrp_type
-	FOREIGN KEY (volume_group_type) REFERENCES val_volume_group_type(volume_group_type) DEFERRABLE;
+   ADD CONSTRAINT fk_volgrp_volgrp_type
+   FOREIGN KEY (volume_group_type) REFERENCES val_volume_group_type(volume_group_type) DEFERRABLE;
 
 ALTER TABLE volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_physvol_vg_phsvol_dvid;
 ALTER TABLE volume_group_physicalish_vol
-	ADD CONSTRAINT fk_physvol_vg_phsvol_dvid
-	FOREIGN KEY (physicalish_volume_id, device_id) REFERENCES physicalish_volume(physicalish_volume_id, device_id) DEFERRABLE;
+   ADD CONSTRAINT fk_physvol_vg_phsvol_dvid
+   FOREIGN KEY (physicalish_volume_id, device_id) REFERENCES physicalish_volume(physicalish_volume_id, device_id) DEFERRABLE;
 
 ALTER TABLE volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_vg_physvol_vgrel;
 ALTER TABLE volume_group_physicalish_vol
@@ -3285,6 +4233,7 @@ ALTER TABLE slot ALTER slot_side drop not null;
 drop trigger IF EXISTS trig_userlog_token_sequence on token_sequence;
 drop trigger IF EXISTS trigger_audit_token_sequence on token_sequence;
 
+ALTER FUNCTION dns_utils.add_domains_from_netblock(integer) SECURITY DEFINER;
 
 -- Clean Up
 SELECT schema_support.replay_object_recreates();

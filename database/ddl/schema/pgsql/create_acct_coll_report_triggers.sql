@@ -58,9 +58,9 @@ BEGIN
 		PERFORM auto_ac_manip.rename_automated_report_acs(
 			NEW.account_id, OLD.login, NEW.login, NEW.account_realm_id);
 	ELSIF TG_OP = 'DELETE' THEN
-		PERFORM person_manip.destroy_report_account_collections(
-			account_id := NEW.account_id,
-			account_realm_id := NEW.account_realm_id
+		PERFORM auto_ac_manip.destroy_report_account_collections(
+			account_id := OLD.account_id,
+			account_realm_id := OLD.account_realm_id
 		);
 	END IF;
 
