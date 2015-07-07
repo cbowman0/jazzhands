@@ -59,3 +59,4 @@
 \i physical_address_utils.sql
 \i component_utils.sql
 \i snapshot_manip.sql
+\i lv_manip.sql

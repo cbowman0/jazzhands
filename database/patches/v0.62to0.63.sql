@@ -44,6 +44,8 @@ Invoked:
 	v_unix_group_mappings
 	v_dev_col_user_prop_expanded
 	v_corp_family_account
+	lv_manip.*
+	volume_group_physicalish_vol
 */
 
 \set ON_ERROR_STOP
@@ -2342,9 +2344,12 @@ $function$
 -- DEALING WITH proc component_utils.insert_disk_component -> insert_disk_component 
 
 
+SELECT schema_support.save_grants_for_replay('jazzhands', 'insert_disk_component');
 -- RECREATE FUNCTION
 
 -- DROP OLD FUNCTION (in case type changed)
+SELECT schema_support.retrieve_functions('component_utils', 'insert_disk_component', true);
+
 -- consider NEW oid 6189271
 CREATE OR REPLACE FUNCTION component_utils.insert_disk_component(model text, bytes bigint, vendor_name text DEFAULT NULL::text, protocol text DEFAULT 'SATA'::text, media_type text DEFAULT 'Rotational'::text, serial_number text DEFAULT NULL::text)
  RETURNS component
@@ -2707,7 +2712,7 @@ DROP TRIGGER IF EXISTS trigger_audit_val_person_status ON jazzhands.val_person_s
 SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'val_person_status');
 ---- BEGIN audit.val_person_status TEARDOWN
 -- Save grants for later reapplication
-SELECT schema_support.save_grants_for_replay('audit', 'val_person_status', 'audit.val_person_status');
+SELECT schema_support.save_grants_for_replay('audit', 'val_person_status', 'val_person_status');
 
 -- FOREIGN KEYS FROM
 
@@ -2949,7 +2954,7 @@ DROP TRIGGER IF EXISTS trig_userlog_account ON jazzhands.account;
 SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'account');
 ---- BEGIN audit.account TEARDOWN
 -- Save grants for later reapplication
-SELECT schema_support.save_grants_for_replay('audit', 'account', 'audit.account');
+SELECT schema_support.save_grants_for_replay('audit', 'account', 'account');
 
 -- FOREIGN KEYS FROM
 
@@ -4498,6 +4503,587 @@ GRANT SELECT ON v_corp_family_account TO ro_role;
 GRANT ALL ON v_corp_family_account TO jazzhands;
 -- DONE DEALING WITH TABLE v_corp_family_account [6070789]
 --------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH SCHEMA lv_manip
+
+--
+-- Copyright (c) 2015 Matthew Ragan
+-- All rights reserved.
+-- 
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+-- 
+--      http://www.apache.org/licenses/LICENSE-2.0
+-- 
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+--
+
+DO $$
+DECLARE
+        _tal INTEGER;
+BEGIN
+        select count(*)
+        from pg_catalog.pg_namespace
+        into _tal
+        where nspname = 'lv_manip';
+        IF _tal = 0 THEN
+                DROP SCHEMA IF EXISTS lv_manip;
+                CREATE SCHEMA lv_manip AUTHORIZATION jazzhands;
+		COMMENT ON SCHEMA lv_manip IS 'part of jazzhands';
+        END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION lv_manip.delete_lv_hier(
+	physicalish_volume_id	integer DEFAULT NULL,
+	volume_group_id			integer DEFAULT NULL,
+	logical_volume_id		integer DEFAULT NULL,
+	pv_list	OUT integer[],
+	vg_list	OUT integer[],
+	lv_list	OUT integer[]
+) RETURNS RECORD AS $$
+DECLARE
+	pvid ALIAS FOR physicalish_volume_id;
+	vgid ALIAS FOR volume_group_id;
+	lvid ALIAS FOR logical_volume_id;
+BEGIN
+	SET CONSTRAINTS ALL DEFERRED;
+
+	SELECT ARRAY(
+		SELECT 
+			DISTINCT child_pv_id
+		FROM
+			v_lv_hier lh
+		WHERE
+			(CASE WHEN pvid IS NULL
+				THEN false
+				ELSE lh.physicalish_volume_id = pvid
+			END OR
+			CASE WHEN vgid  IS NULL
+				THEN false
+				ELSE lh.volume_group_id = vgid
+			END OR
+			CASE WHEN lvid IS NULL
+				THEN false
+				ELSE lh.logical_volume_id = lvid
+			END)
+			AND child_pv_id IS NOT NULL
+	) INTO pv_list;
+
+	SELECT ARRAY(
+		SELECT 
+			DISTINCT child_vg_id
+		FROM
+			v_lv_hier lh
+		WHERE
+			(CASE WHEN pvid IS NULL
+				THEN false
+				ELSE lh.physicalish_volume_id = pvid
+			END OR
+			CASE WHEN vgid  IS NULL
+				THEN false
+				ELSE lh.volume_group_id = vgid
+			END OR
+			CASE WHEN lvid IS NULL
+				THEN false
+				ELSE lh.logical_volume_id = lvid
+			END)
+			AND child_vg_id IS NOT NULL
+	) INTO vg_list;
+
+	SELECT ARRAY(
+		SELECT 
+			DISTINCT child_lv_id
+		FROM
+			v_lv_hier lh
+		WHERE
+			(CASE WHEN pvid IS NULL
+				THEN false
+				ELSE lh.physicalish_volume_id = pvid
+			END OR
+			CASE WHEN vgid  IS NULL
+				THEN false
+				ELSE lh.volume_group_id = vgid
+			END OR
+			CASE WHEN lvid IS NULL
+				THEN false
+				ELSE lh.logical_volume_id = lvid
+			END)
+			AND child_lv_id IS NOT NULL
+	) INTO lv_list;
+
+	DELETE FROM logical_volume WHERE logical_volume_id = ANY(lv_list);
+	DELETE FROM volume_group WHERE volume_group_id = ANY(vg_list);
+	DELETE FROM physicalish_volume WHERE physicalish_volume_id = ANY(pv_list);
+END;
+$$
+SET search_path=jazzhands
+LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION lv_manip.delete_lv_hier(
+	INOUT physicalish_volume_list	integer[] DEFAULT NULL,
+	INOUT volume_group_list		integer[] DEFAULT NULL,
+	INOUT logical_volume_list		integer[] DEFAULT NULL
+) RETURNS RECORD AS $$
+DECLARE
+	pv_list	integer[];
+	vg_list	integer[];
+	lv_list	integer[];
+BEGIN
+	SET CONSTRAINTS ALL DEFERRED;
+
+	SELECT ARRAY(
+		SELECT 
+			DISTINCT child_pv_id
+		FROM
+			v_lv_hier lh
+		WHERE
+			(CASE WHEN pvid IS NULL
+				THEN false
+				ELSE lh.physicalish_volume_id = ANY (physical_volume_list)
+			END OR
+			CASE WHEN vgid  IS NULL
+				THEN false
+				ELSE lh.volume_group_id = ANY (volume_group_list)
+			END OR
+			CASE WHEN lvid IS NULL
+				THEN false
+				ELSE lh.logical_volume_id = ANY (logical_volume_list)
+			END)
+			AND child_pv_id IS NOT NULL
+	) INTO pv_list;
+
+	SELECT ARRAY(
+		SELECT 
+			DISTINCT child_vg_id
+		FROM
+			v_lv_hier lh
+		WHERE
+			(CASE WHEN pvid IS NULL
+				THEN false
+				ELSE lh.physicalish_volume_id = ANY (physicalish_volume_list)
+			END OR
+			CASE WHEN vgid  IS NULL
+				THEN false
+				ELSE lh.volume_group_id = ANY (volume_group_list)
+			END OR
+			CASE WHEN lvid IS NULL
+				THEN false
+				ELSE lh.logical_volume_id = ANY (logical_volume_list)
+			END)
+			AND child_vg_id IS NOT NULL
+	) INTO vg_list;
+
+	SELECT ARRAY(
+		SELECT 
+			DISTINCT child_lv_id
+		FROM
+			v_lv_hier lh
+		WHERE
+			(CASE WHEN pvid IS NULL
+				THEN false
+				ELSE lh.physicalish_volume_id = ANY (physicalish_volume_list)
+			END OR
+			CASE WHEN vgid  IS NULL
+				THEN false
+				ELSE lh.volume_group_id = ANY (volume_group_list)
+			END OR
+			CASE WHEN lvid IS NULL
+				THEN false
+				ELSE lh.logical_volume_id = ANY (logical_volume_list)
+			END)
+			AND child_lv_id IS NOT NULL
+	) INTO lv_list;
+
+	DELETE FROM logical_volume WHERE logical_volume_id = ANY(lv_list);
+	DELETE FROM volume_group WHERE volume_group_id = ANY(vg_list);
+	DELETE FROM physicalish_volume WHERE physicalish_volume_id = ANY(pv_list);
+
+	physicalish_volume_list := pv_list;
+	volume_group_list := vg_list;
+	logical_volume_list := lv_list;
+END;
+$$
+SET search_path=jazzhands
+LANGUAGE plpgsql;
+
+--
+-- This needs to be done recursively because lower level volume groups may
+-- contain physicalish volumes that are not from this hierarchy
+--
+CREATE OR REPLACE FUNCTION lv_manip.delete_pv(
+	physicalish_volume_list	integer[],
+	purge_orphans			boolean DEFAULT false
+) RETURNS VOID AS $$
+DECLARE
+	pvid integer;
+	vgid integer;
+BEGIN
+	PERFORM * FROM lv_manip.remove_pv_membership(
+		physicalish_volume_list,
+		purge_orphans
+	);
+
+	DELETE FROM physicalish_volume WHERE
+		physicalish_volume_id = ANY(physicalish_volume_list);
+END;
+$$
+SET search_path = jazzhands
+LANGUAGE plpgsql;
+
+--
+-- This needs to be done recursively because lower level volume groups may
+-- contain physicalish volumes that are not from this hierarchy
+--
+CREATE OR REPLACE FUNCTION lv_manip.remove_pv_membership(
+	physicalish_volume_list	integer[],
+	purge_orphans			boolean DEFAULT false
+) RETURNS VOID AS $$
+DECLARE
+	pvid integer;
+	vgid integer;
+BEGIN
+	SET CONSTRAINTS ALL DEFERRED;
+
+	FOREACH pvid IN ARRAY physicalish_volume_list LOOP
+		DELETE FROM 
+			volume_group_physicalish_vol vgpv
+		WHERE
+			vgpv.physicalish_volume_id = pvid
+		RETURNING
+			volume_group_id INTO vgid;
+		
+		IF FOUND AND purge_orphans THEN
+			PERFORM * FROM
+				volume_group_physicalish_vol vgpv
+			WHERE
+				volume_group_id = vgid;
+
+			IF NOT FOUND THEN
+				PERFORM lv_manip.delete_vg(
+					volume_group_id := vgid,
+					purge_orphans := purge_orphans
+				);
+			END IF;
+		END IF;
+
+	END LOOP;
+END;
+$$
+SET search_path = jazzhands
+LANGUAGE plpgsql;
+
+
+SELECT schema_support.save_grants_for_replay('lv_manip', 'delete_vg');
+SELECT schema_support.retrieve_functions('lv_manip', 'delete_vg', true);
+CREATE OR REPLACE FUNCTION lv_manip.delete_vg(
+	volume_group_id	integer,
+	purge_orphans boolean DEFAULT false
+) RETURNS VOID AS $$
+DECLARE
+	lvids	integer[];
+BEGIN
+	PERFORM lv_manip.delete_vg(
+		volume_group_list := ARRAY [ volume_group_id ],
+		purge_orphans := purge_orphans
+	);
+END;
+$$
+SET search_path = jazzhands
+LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION lv_manip.delete_vg(
+	volume_group_list	integer[],
+	purge_orphans boolean DEFAULT false
+) RETURNS VOID AS $$
+DECLARE
+	lvids	integer[];
+BEGIN
+	SET CONSTRAINTS ALL DEFERRED;
+
+	SELECT ARRAY(
+		SELECT
+			logical_volume_id
+		FROM
+			logical_volume lv
+		WHERE
+			lv.volume_group_id = ANY(volume_group_list)
+	) INTO lvids;
+
+	PERFORM lv_manip.delete_pv(
+		physicalish_volume_list := (
+			SELECT ARRAY (SELECT
+				physicalish_volume_id
+			FROM
+				physicalish_volume
+			WHERE
+				logical_volume_id = ANY(lvids)
+		)),
+		purge_orphans := purge_orphans
+	);
+
+	DELETE FROM
+		volume_group_physicalish_vol vgpv
+	WHERE
+		vgpv.volume_group_id = ANY(volume_group_list);
+	
+	DELETE FROM
+		volume_group vg
+	WHERE
+		vg.volume_group_id = ANY(volume_group_list);
+
+	DELETE FROM
+		logical_volume
+	WHERE
+		logical_volume_id = ANY(lvids);
+	
+	DELETE FROM
+		volume_group vg
+	WHERE
+		vg.volume_group_id = ANY(volume_group_list);
+END;
+$$
+SET search_path = jazzhands
+LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION lv_manip.delete_lv(
+	logical_volume_id	integer,
+	purge_orphans boolean DEFAULT false
+) RETURNS VOID AS $$
+BEGIN
+	PERFORM lv_manip.delete_lv(
+		logical_volume_list := ARRAY [ logical_volume_id ],
+		purge_orphans := purge_orphans
+	);
+END;
+$$
+SET search_path = jazzhands
+LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION lv_manip.delete_lv(
+	logical_volume_list	integer[],
+	purge_orphans boolean DEFAULT false
+) RETURNS VOID AS $$
+BEGIN
+	SET CONSTRAINTS ALL DEFERRED;
+
+	PERFORM lv_manip.delete_pv(
+		physicalish_volume_list := (
+			SELECT ARRAY (SELECT
+				physicalish_volume_id
+			FROM
+				physicalish_volume pv
+			WHERE
+				pv.logical_volume_id = ANY(logical_volume_list)
+		)),
+		purge_orphans := purge_orphans
+	);
+
+	DELETE FROM
+		logical_volume_property lvp
+	WHERE
+		lvp.logical_volume_id = ANY(logical_volume_list);
+	
+	DELETE FROM
+		logical_volume_purpose lvp
+	WHERE
+		lvp.logical_volume_id = ANY(logical_volume_list);
+	
+	DELETE FROM
+		logical_volume lv
+	WHERE
+		lv.logical_volume_id = ANY(logical_volume_list);
+END;
+$$
+SET search_path = jazzhands
+LANGUAGE plpgsql;
+
+GRANT USAGE ON SCHEMA lv_manip TO PUBLIC;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA lv_manip TO ro_role;
+
+-- DONE DEALING WITH SCHEMA lv_manip
+--------------------------------------------------------------------
+--------------------------------------------------------------------
+-- DEALING WITH TABLE volume_group_physicalish_vol [6542038]
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('jazzhands', 'volume_group_physicalish_vol', 'volume_group_physicalish_vol');
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+ALTER TABLE jazzhands.volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_vgp_phy_phyid;
+ALTER TABLE jazzhands.volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_physvol_vg_phsvol_dvid;
+ALTER TABLE jazzhands.volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_vg_physvol_vgrel;
+ALTER TABLE jazzhands.volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_vgp_phy_vgrpid_devid;
+ALTER TABLE jazzhands.volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS fk_vgp_phy_vgrpid;
+
+-- EXTRA-SCHEMA constraints
+SELECT schema_support.save_constraint_for_replay('jazzhands', 'volume_group_physicalish_vol');
+
+-- PRIMARY and ALTERNATE KEYS
+ALTER TABLE jazzhands.volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS pk_volume_group_physicalish_vo;
+ALTER TABLE jazzhands.volume_group_physicalish_vol DROP CONSTRAINT IF EXISTS ak_volgrp_pv_position;
+-- INDEXES
+DROP INDEX IF EXISTS "jazzhands"."xif_physvol_vg_phsvol_dvid";
+DROP INDEX IF EXISTS "jazzhands"."xif_vgp_phy_phyid";
+DROP INDEX IF EXISTS "jazzhands"."xif_vgp_phy_vgrpid";
+DROP INDEX IF EXISTS "jazzhands"."xif_vgp_phy_vgrpid_devid";
+DROP INDEX IF EXISTS "jazzhands"."xif_vg_physvol_vgrel";
+-- CHECK CONSTRAINTS, etc
+-- TRIGGERS, etc
+DROP TRIGGER IF EXISTS trigger_audit_volume_group_physicalish_vol ON jazzhands.volume_group_physicalish_vol;
+DROP TRIGGER IF EXISTS trig_userlog_volume_group_physicalish_vol ON jazzhands.volume_group_physicalish_vol;
+SELECT schema_support.save_dependant_objects_for_replay('jazzhands', 'volume_group_physicalish_vol');
+---- BEGIN audit.volume_group_physicalish_vol TEARDOWN
+-- Save grants for later reapplication
+SELECT schema_support.save_grants_for_replay('audit', 'volume_group_physicalish_vol', 'audit.volume_group_physicalish_vol');
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+
+-- EXTRA-SCHEMA constraints
+SELECT schema_support.save_constraint_for_replay('audit', 'volume_group_physicalish_vol');
+
+-- PRIMARY and ALTERNATE KEYS
+-- INDEXES
+DROP INDEX IF EXISTS "audit"."volume_group_physicalish_vol_aud#timestamp_idx";
+-- CHECK CONSTRAINTS, etc
+-- TRIGGERS, etc
+SELECT schema_support.save_dependant_objects_for_replay('audit', 'volume_group_physicalish_vol');
+---- DONE audit.volume_group_physicalish_vol TEARDOWN
+
+
+ALTER TABLE volume_group_physicalish_vol RENAME TO volume_group_physicalish_vol_v63;
+ALTER TABLE audit.volume_group_physicalish_vol RENAME TO volume_group_physicalish_vol_v63;
+
+CREATE TABLE volume_group_physicalish_vol
+(
+	physicalish_volume_id	integer NOT NULL,
+	volume_group_id	integer NOT NULL,
+	device_id	integer  NULL,
+	volume_group_position	integer  NULL,
+	volume_group_relation	varchar(50) NOT NULL,
+	data_ins_user	varchar(255)  NULL,
+	data_ins_date	timestamp with time zone  NULL,
+	data_upd_user	varchar(255)  NULL,
+	data_upd_date	timestamp with time zone  NULL
+);
+SELECT schema_support.build_audit_table('audit', 'jazzhands', 'volume_group_physicalish_vol', false);
+INSERT INTO volume_group_physicalish_vol (
+	physicalish_volume_id,
+	volume_group_id,
+	device_id,
+	volume_group_position,
+	volume_group_relation,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+) SELECT
+	physicalish_volume_id,
+	volume_group_id,
+	device_id,
+	volume_group_position,
+	volume_group_relation,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date
+FROM volume_group_physicalish_vol_v63;
+
+INSERT INTO audit.volume_group_physicalish_vol (
+	physicalish_volume_id,
+	volume_group_id,
+	device_id,
+	volume_group_position,
+	volume_group_relation,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+) SELECT
+	physicalish_volume_id,
+	volume_group_id,
+	device_id,
+	volume_group_position,
+	volume_group_relation,
+	data_ins_user,
+	data_ins_date,
+	data_upd_user,
+	data_upd_date,
+	"aud#action",
+	"aud#timestamp",
+	"aud#user",
+	"aud#seq"
+FROM audit.volume_group_physicalish_vol_v63;
+
+
+-- PRIMARY AND ALTERNATE KEYS
+ALTER TABLE volume_group_physicalish_vol ADD CONSTRAINT uq_volgrp_pv_position UNIQUE (volume_group_id, volume_group_position) DEFERRABLE;
+ALTER TABLE volume_group_physicalish_vol ADD CONSTRAINT pk_volume_group_physicalish_vo PRIMARY KEY (physicalish_volume_id, volume_group_id);
+
+-- Table/Column Comments
+-- INDEXES
+CREATE INDEX xif_vgp_phy_phyid ON volume_group_physicalish_vol USING btree (physicalish_volume_id);
+CREATE INDEX xif_physvol_vg_phsvol_dvid ON volume_group_physicalish_vol USING btree (physicalish_volume_id, device_id);
+CREATE INDEX xiq_volgrp_pv_position ON volume_group_physicalish_vol USING btree (volume_group_id, volume_group_position);
+CREATE INDEX xif_vgp_phy_vgrpid_devid ON volume_group_physicalish_vol USING btree (device_id, volume_group_id);
+CREATE INDEX xif_vg_physvol_vgrel ON volume_group_physicalish_vol USING btree (volume_group_relation);
+CREATE INDEX xif_vgp_phy_vgrpid ON volume_group_physicalish_vol USING btree (volume_group_id);
+
+-- CHECK CONSTRAINTS
+
+-- FOREIGN KEYS FROM
+
+-- FOREIGN KEYS TO
+-- consider FK volume_group_physicalish_vol and val_volume_group_relation
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE volume_group_physicalish_vol
+--	ADD CONSTRAINT fk_vg_physvol_vgrel
+--	FOREIGN KEY (volume_group_relation) REFERENCES val_volume_group_relation(volume_group_relation) DEFERRABLE;
+
+-- consider FK volume_group_physicalish_vol and volume_group
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE volume_group_physicalish_vol
+--	ADD CONSTRAINT fk_vgp_phy_vgrpid_devid
+--	FOREIGN KEY (volume_group_id, device_id) REFERENCES volume_group(volume_group_id, device_id) DEFERRABLE;
+
+-- consider FK volume_group_physicalish_vol and volume_group
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE volume_group_physicalish_vol
+--	ADD CONSTRAINT fk_vgp_phy_vgrpid
+--	FOREIGN KEY (volume_group_id) REFERENCES volume_group(volume_group_id) DEFERRABLE;
+
+-- consider FK volume_group_physicalish_vol and physicalish_volume
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE volume_group_physicalish_vol
+--	ADD CONSTRAINT fk_physvol_vg_phsvol_dvid
+--	FOREIGN KEY (physicalish_volume_id, device_id) REFERENCES physicalish_volume(physicalish_volume_id, device_id) DEFERRABLE;
+
+-- consider FK volume_group_physicalish_vol and physicalish_volume
+-- Skipping this FK since table does not exist yet
+--ALTER TABLE volume_group_physicalish_vol
+--	ADD CONSTRAINT fk_vgp_phy_phyid
+--	FOREIGN KEY (physicalish_volume_id) REFERENCES physicalish_volume(physicalish_volume_id) DEFERRABLE;
+
+
+-- TRIGGERS
+SELECT schema_support.rebuild_stamp_trigger('jazzhands', 'volume_group_physicalish_vol');
+SELECT schema_support.rebuild_audit_trigger('audit', 'jazzhands', 'volume_group_physicalish_vol');
+DROP TABLE IF EXISTS volume_group_physicalish_vol_v63;
+DROP TABLE IF EXISTS audit.volume_group_physicalish_vol_v63;
+-- DONE DEALING WITH TABLE volume_group_physicalish_vol [6533530]
+--------------------------------------------------------------------
 -- Dropping obsoleted sequences....
 -- Dropping obsoleted audit sequences....
 
@@ -4621,6 +5207,36 @@ ALTER TABLE ONLY physicalish_volume
 
 GRANT USAGE ON SCHEMA snapshot_manip TO iud_role;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA snapshot_manip TO iud_role;
+
+-- rename weird seuqnce names to make them right if needed
+DO $$
+DECLARE
+	_tally	integer;
+BEGIN
+	SELECT count(*) 
+	INTO _tally
+	FROM pg_class c
+		INNER JOIN pg_namespace n ON n.oid = c.relnamespace
+	WHERE c.relname = 'logical_volume_prop_logical_volume_prop_id_seq'
+	AND  c.relkind = 'S'
+	AND n.nspname = 'jazzhands';
+
+	IF _tally > 0 THEN
+		ALTER SEQUENCE logical_volume_prop_logical_volume_prop_id_seq
+			RENAME TO
+			logical_volume_property_logical_volume_property_id_seq;
+		ALTER TABLE logical_volume_property
+			ALTER logical_volume_property_id
+			SET DEFAULT
+			nextval('logical_volume_property_logical_volume_property_id_seq');
+		ALTER SEQUENCE 
+			logical_volume_property_logical_volume_property_id_seq
+	 		OWNED BY 
+			logical_volume_property.logical_volume_property_id;
+	END IF;
+END;
+$$;
+
 
 -- make logical_volume_property.logical_volume_property_id a serial if it is not
 -- already.
