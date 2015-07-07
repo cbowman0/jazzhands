@@ -53,6 +53,8 @@ Invoked:
 SELECT schema_support.begin_maintenance();
 -- Creating new sequences....
 
+SELECT timeofday();
+
 
 --------------------------------------------------------------------
 -- DEALING WITH TABLE x509_certificate [4591155]
@@ -5328,13 +5330,46 @@ drop trigger IF EXISTS trigger_audit_token_sequence on token_sequence;
 
 ALTER FUNCTION dns_utils.add_domains_from_netblock(integer) SECURITY DEFINER;
 
+SELECT timeofday();
 -- Clean Up
 SELECT schema_support.replay_object_recreates();
 SELECT schema_support.replay_saved_grants();
+
 GRANT select on all tables in schema jazzhands to ro_role;
 GRANT insert,update,delete on all tables in schema jazzhands to iud_role;
 GRANT select on all sequences in schema jazzhands to ro_role;
 GRANT usage on all sequences in schema jazzhands to iud_role;
 GRANT select on all tables in schema audit to ro_role;
 GRANT select on all sequences in schema audit to ro_role;
+
+SELECT timeofday();
+
+-- update all the auto account collections for people that already exist
+WITH dudes AS (
+	SELECT	DISTINCT level, a.login, a.person_id, a.account_id,
+		a.account_realm_id
+	from	v_person_company_hier pc
+		INNER JOIN v_corp_family_account a USING (person_id)
+	where	is_enabled = 'Y'
+	and	account_role = 'primary'
+	and	account_type = 'person'
+), sorted AS (
+	SELECT	d.*,
+		rank() OVER (partition by account_id ORDER BY level desc) as r
+	FROM dudes d
+), last AS (
+	select * from sorted where r =1
+), preped AS (
+	SELECT * from last ORDER BY level , login
+), work AS (
+select *,
+	auto_ac_manip.make_auto_report_acs_right(
+		account_id,
+		account_realm_id,
+		login) 
+from preped
+) select count(*) from work;
+SELECT timeofday();
+
 -- SELECT schema_support.end_maintenance();
+SELECT timeofday();
