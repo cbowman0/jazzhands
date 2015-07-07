@@ -117,3 +117,4 @@
 
 -- logical volumes
 \i pgsql/create_v_lv_hier.sql
+\i pgsql/create_v_component_hier.sql
