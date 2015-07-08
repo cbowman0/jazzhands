@@ -5371,5 +5371,5 @@ from preped
 ) select count(*) from work;
 SELECT timeofday();
 
--- SELECT schema_support.end_maintenance();
+SELECT schema_support.end_maintenance();
 SELECT timeofday();
